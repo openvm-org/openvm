@@ -24,26 +24,24 @@ static constexpr size_t EC_MUL_SIGN_PATTERNS = size_t(1) << EC_MUL_STEPS_PER_ROW
 static constexpr size_t EC_MUL_COMPUTE_ROWS = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
 static constexpr size_t EC_MUL_FINAL_ROW_IDX = EC_MUL_COMPUTE_ROWS - 1;
 static constexpr size_t EC_MUL_SCALAR_LIMBS = EC_MUL_SCALAR_BITS / 8;
+static constexpr size_t EC_MUL_SCALAR_MEMORY_LIMBS = EC_MUL_SCALAR_LIMBS / U16_CELL_SIZE;
 // Sized to one row's contribution, making the accumulator recurrence a shift.
 static constexpr size_t EC_MUL_SCALAR_ACC_LIMBS = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
-static constexpr size_t EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE = 8 / EC_MUL_STEPS_PER_ROW;
+static constexpr size_t EC_MUL_SCALAR_ACC_LIMBS_PER_MEMORY_LIMB = U16_BITS / EC_MUL_STEPS_PER_ROW;
 
 static_assert(EC_MUL_SCALAR_LIMBS == EC_MUL_SCALAR_BLOCKS * MEMORY_BLOCK_BYTES);
 static_assert(EC_MUL_SCALAR_BITS % EC_MUL_STEPS_PER_ROW == 0);
-static_assert(8 % EC_MUL_STEPS_PER_ROW == 0);
+static_assert(U16_BITS % EC_MUL_STEPS_PER_ROW == 0);
 
 // The expression blob does not describe this chip's ladder step.
 static constexpr uint32_t EC_MUL_BAD_PROGRAM = 0x56020003;
 // The scalar does not equal the ladder value `2B + 1`.
 static constexpr uint32_t EC_MUL_SCALAR_MISMATCH = 0x56020004;
-// Present on every row. `is_compute` doubles as the expression's `is_valid`.
+// Present on every row. The expression's `is_valid` marks compute rows.
 template <typename T> struct EcMulHeaderCols {
-    T is_compute;
     T is_final;
     T is_first_compute;
-    T is_setup;
     T is_ladder;
-    T is_real_final;
     T row_idx;
     T scalar_acc[EC_MUL_SCALAR_ACC_LIMBS];
 };
@@ -66,9 +64,9 @@ template <typename T, size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoCols {
 
     MemoryReadAuxCols<T> point_read_aux[BLOCKS];
 
-    T scalar_data[EC_MUL_SCALAR_LIMBS];
+    T scalar_data[EC_MUL_SCALAR_MEMORY_LIMBS];
     MemoryReadAuxCols<T> scalar_read_aux[EC_MUL_SCALAR_BLOCKS];
-    T scalar_carry[EC_MUL_SCALAR_LIMBS];
+    T scalar_carry[EC_MUL_SCALAR_MEMORY_LIMBS - 1];
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[BLOCKS];
 };
@@ -78,9 +76,9 @@ static constexpr size_t EC_MUL_HEADER_WIDTH = sizeof(EcMulHeaderCols<uint8_t>);
 template <size_t NUM_LIMBS, size_t BLOCKS>
 static constexpr size_t EC_MUL_IO_WIDTH = sizeof(EcMulIoCols<uint8_t, NUM_LIMBS, BLOCKS>);
 
-static_assert(EC_MUL_HEADER_WIDTH == 135);
-static_assert(EC_MUL_IO_WIDTH<32, 8> == 153);
-static_assert(EC_MUL_IO_WIDTH<48, 12> == 185);
+static_assert(EC_MUL_HEADER_WIDTH == 132);
+static_assert(EC_MUL_IO_WIDTH<32, 8> == 120);
+static_assert(EC_MUL_IO_WIDTH<48, 12> == 152);
 
 // One byte of a projected memory operand, stored by the gather as `u16` cells.
 template <size_t N>
@@ -113,17 +111,13 @@ static __device__ __forceinline__ uint32_t ec_mul_sign_pattern_for_row(
 static __device__ void fill_ec_mul_header(
     RowSlice row, const uint8_t *scalar, size_t row_idx, bool is_setup
 ) {
-    bool is_compute = row_idx < EC_MUL_COMPUTE_ROWS;
     bool is_final = row_idx == EC_MUL_FINAL_ROW_IDX;
-    bool is_first_compute = is_compute && row_idx == 0;
-    bool is_ladder = is_compute && !is_setup && row_idx != 0;
+    bool is_first_compute = row_idx == 0;
+    bool is_ladder = !is_setup && row_idx != 0;
 
-    COL_WRITE_VALUE(row, EcMulHeaderCols, is_compute, uint32_t(is_compute));
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_final, uint32_t(is_final));
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_first_compute, uint32_t(is_first_compute));
-    COL_WRITE_VALUE(row, EcMulHeaderCols, is_setup, uint32_t(is_setup));
     COL_WRITE_VALUE(row, EcMulHeaderCols, is_ladder, uint32_t(is_ladder));
-    COL_WRITE_VALUE(row, EcMulHeaderCols, is_real_final, uint32_t(is_final && !is_setup));
     COL_WRITE_VALUE(row, EcMulHeaderCols, row_idx, uint32_t(row_idx));
 
     size_t acc_base = COL_INDEX(EcMulHeaderCols, scalar_acc);
@@ -186,9 +180,9 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
         }
 
         size_t scalar_base = COL_INDEX(Cols, scalar_data);
-        for (size_t byte = 0; byte < EC_MUL_SCALAR_LIMBS; byte++) {
-            uint32_t limb = ec_mul_block_byte(input.scalar_blocks, byte);
-            row.write(scalar_base + byte, Fp(limb));
+        for (size_t limb = 0; limb < EC_MUL_SCALAR_MEMORY_LIMBS; limb++) {
+            uint16_t value = input.scalar_blocks[limb / BLOCK_FE_WIDTH][limb % BLOCK_FE_WIDTH];
+            row.write(scalar_base + limb, Fp(value));
         }
 
         if (!fill_scalar_carries(row, input, is_setup, err)) {
@@ -200,7 +194,7 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
     }
 
   private:
-    // Carries for the `2B + 1 == scalar` check; byte 0's incoming carry is the `+1`. A setup row
+    // Carries for the `2B + 1 == scalar` check; word 0's incoming carry is the `+1`. A setup row
     // leaves them zero, the check being gated off.
     __device__ bool fill_scalar_carries(
         RowSlice row, const EcMulTraceInput<BLOCKS> &input, bool is_setup, uint32_t *err
@@ -211,10 +205,10 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
         const uint8_t *scalar_bytes = reinterpret_cast<const uint8_t *>(&input.scalar_blocks[0][0]);
         size_t carry_base = COL_INDEX(Cols, scalar_carry);
         uint32_t carry = 1;
-        for (size_t byte = 0; byte < EC_MUL_SCALAR_LIMBS; byte++) {
+        for (size_t word = 0; word < EC_MUL_SCALAR_MEMORY_LIMBS; word++) {
             uint32_t accumulated = 0;
-            for (size_t limb = 0; limb < EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE; limb++) {
-                size_t index = byte * EC_MUL_SCALAR_ACC_LIMBS_PER_BYTE + limb;
+            for (size_t limb = 0; limb < EC_MUL_SCALAR_ACC_LIMBS_PER_MEMORY_LIMB; limb++) {
+                size_t index = word * EC_MUL_SCALAR_ACC_LIMBS_PER_MEMORY_LIMB + limb;
                 // Limb `j` came from compute row `EC_MUL_COMPUTE_ROWS - 1 - j`.
                 uint32_t pattern = ec_mul_sign_pattern_for_row(
                     scalar_bytes, EC_MUL_COMPUTE_ROWS - 1 - index
@@ -222,12 +216,16 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
                 accumulated += pattern << (limb * EC_MUL_STEPS_PER_ROW);
             }
             uint32_t reconstructed = accumulated * 2 + carry;
-            if ((reconstructed & 0xff) != scalar_bytes[byte]) {
+            uint32_t scalar_word =
+                input.scalar_blocks[word / BLOCK_FE_WIDTH][word % BLOCK_FE_WIDTH];
+            if ((reconstructed & 0xffff) != scalar_word) {
                 preflight_set_error(err, EC_MUL_SCALAR_MISMATCH);
                 return false;
             }
-            carry = reconstructed >> 8;
-            row.write(carry_base + byte, Fp(carry));
+            carry = reconstructed >> 16;
+            if (word + 1 < EC_MUL_SCALAR_MEMORY_LIMBS) {
+                row.write(carry_base + word, Fp(carry));
+            }
         }
         return true;
     }

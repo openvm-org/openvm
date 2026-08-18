@@ -48,7 +48,7 @@ pub use columns::*;
 pub(crate) use cuda::*;
 pub use field_expr::*;
 use num_bigint::BigUint;
-use openvm_circuit_primitives::BYTE_BITS;
+use openvm_circuit_primitives::{BYTE_BITS, U16_BITS};
 use openvm_mod_circuit_builder::FieldExpressionProgram;
 pub use trace::*;
 
@@ -130,7 +130,7 @@ pub const EC_MUL_SIGN_PATTERNS: usize = 1 << EC_MUL_STEPS_PER_ROW;
 pub const EC_MUL_COMPUTE_ROWS: usize = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
 
 const _: () = assert!(EC_MUL_SCALAR_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));
-const _: () = assert!(BYTE_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));
+const _: () = assert!(U16_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));
 
 // The rvr lifter restates these values, since it cannot depend on this crate.
 #[cfg(feature = "rvr")]
@@ -146,5 +146,9 @@ pub const SCALAR_BLOCKS: usize = SCALAR_LIMBS / openvm_circuit::arch::MEMORY_BLO
 
 /// Width of the bit accumulator, in limbs of one row's digits.
 pub const SCALAR_ACC_LIMBS: usize = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
-/// Accumulator limbs spanned by one scalar byte.
-pub const SCALAR_ACC_LIMBS_PER_BYTE: usize = BYTE_BITS / EC_MUL_STEPS_PER_ROW;
+/// Scalar limbs as stored by the memory bus.
+pub const SCALAR_MEMORY_LIMBS: usize = EC_MUL_SCALAR_BITS / U16_BITS;
+/// Accumulator limbs spanned by one scalar memory limb.
+pub const SCALAR_ACC_LIMBS_PER_MEMORY_LIMB: usize = U16_BITS / EC_MUL_STEPS_PER_ROW;
+/// Carry witnesses for `2B + 1`, excluding the final carry which must be zero.
+pub const SCALAR_CARRY_LIMBS: usize = SCALAR_MEMORY_LIMBS - 1;

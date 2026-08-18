@@ -205,7 +205,7 @@ fn scalar_order_three_mod_four_is_rejected() {
 fn ec_mul_column_widths_match_the_cuda_mirror() {
     use crate::{ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48};
 
-    assert_eq!(super::ec_mul_header_width(), 135);
-    assert_eq!(super::ec_mul_io_width::<NUM_LIMBS_32, ECC_BLOCKS_32>(), 153);
-    assert_eq!(super::ec_mul_io_width::<NUM_LIMBS_48, ECC_BLOCKS_48>(), 185);
+    assert_eq!(super::ec_mul_header_width(), 132);
+    assert_eq!(super::ec_mul_io_width::<NUM_LIMBS_32, ECC_BLOCKS_32>(), 120);
+    assert_eq!(super::ec_mul_io_width::<NUM_LIMBS_48, ECC_BLOCKS_48>(), 152);
 }

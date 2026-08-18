@@ -39,7 +39,7 @@ use super::{
     ec_mul_header_width, ec_mul_io_offset, ec_mul_width, execution::sign_pattern_for_row,
     setup_row_inputs, EcMulHeaderCols, EcMulIoCols, EC_MUL_COMPUTE_ROWS, EC_MUL_FINAL_ROW_IDX,
     EC_MUL_REGISTER_READS, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, SCALAR_ACC_LIMBS,
-    SCALAR_ACC_LIMBS_PER_BYTE, SCALAR_BLOCKS, SCALAR_LIMBS,
+    SCALAR_ACC_LIMBS_PER_MEMORY_LIMB, SCALAR_BLOCKS, SCALAR_CARRY_LIMBS, SCALAR_MEMORY_LIMBS,
 };
 
 /// Prover-side state for one curve's `EC_MUL` chip. Not a `VmChipWrapper`: the row layout is
@@ -287,23 +287,27 @@ fn byte_limbs_to_biguint<F: PrimeField32>(limbs: &[F]) -> Result<BigUint, Postfl
 fn scalar_carries(
     scalar_bytes: &[u8],
     acc_limbs: &[u8; SCALAR_ACC_LIMBS],
-) -> Result<[u8; SCALAR_LIMBS], PostflightError> {
-    let mut carries = [0u8; SCALAR_LIMBS];
+) -> Result<[u8; SCALAR_CARRY_LIMBS], PostflightError> {
+    let mut carries = [0u8; SCALAR_CARRY_LIMBS];
     let mut carry = 1u16;
-    for i in 0..SCALAR_LIMBS {
-        let b_byte: u16 = (0..SCALAR_ACC_LIMBS_PER_BYTE)
+    for i in 0..SCALAR_MEMORY_LIMBS {
+        let b_limb: u32 = (0..SCALAR_ACC_LIMBS_PER_MEMORY_LIMB)
             .map(|j| {
-                u16::from(acc_limbs[i * SCALAR_ACC_LIMBS_PER_BYTE + j])
+                u32::from(acc_limbs[i * SCALAR_ACC_LIMBS_PER_MEMORY_LIMB + j])
                     << (j * EC_MUL_STEPS_PER_ROW)
             })
             .sum();
-        let reconstructed = b_byte * 2 + carry;
-        if reconstructed & 0xff != u16::from(scalar_bytes[i]) {
+        let scalar_limb = u16::from_le_bytes([scalar_bytes[2 * i], scalar_bytes[2 * i + 1]]);
+        let reconstructed = b_limb * 2 + u32::from(carry);
+        if reconstructed & 0xffff != u32::from(scalar_limb) {
             return Err(PostflightError::new("EC_MUL scalar must be odd"));
         }
-        carry = reconstructed >> 8;
-        carries[i] = carry as u8;
+        carry = (reconstructed >> 16) as u16;
+        if let Some(out) = carries.get_mut(i) {
+            *out = carry as u8;
+        }
     }
+    debug_assert_eq!(carry, 0);
     Ok(carries)
 }
 
@@ -370,12 +374,9 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             let header: &mut EcMulHeaderCols<F> = row[..header_width].borrow_mut();
             let is_setup = input.is_setup != 0;
             let is_final = row_idx == EC_MUL_FINAL_ROW_IDX;
-            header.is_compute = F::ONE;
             header.is_final = F::from_bool(is_final);
             header.is_first_compute = if row_idx == 0 { F::ONE } else { F::ZERO };
-            header.is_setup = F::from_bool(is_setup);
             header.is_ladder = F::from_bool(!is_setup && row_idx != 0);
-            header.is_real_final = F::from_bool(is_final && !is_setup);
             header.row_idx = F::from_usize(row_idx);
 
             // Holds the value entering this row; the AIR's shift relates it to the next row's.
@@ -446,8 +447,8 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         range_checker.add_count(ptr_bound_from_ptr(ptr, ptr_max_bits), 16);
     }
 
-    for (i, byte) in scalar_bytes.iter().enumerate().take(SCALAR_LIMBS) {
-        io.scalar_data[i] = F::from_u8(*byte);
+    for (dst, bytes) in io.scalar_data.iter_mut().zip(scalar_bytes.chunks_exact(2)) {
+        *dst = F::from_u16(u16::from_le_bytes(bytes.try_into().unwrap()));
     }
 
     // Carries for the final row's `2B + 1 == scalar` check. Setup rows leave them at zero.
@@ -637,7 +638,10 @@ fn build_ec_mul_trace<
 mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-    use super::*;
+    use super::{
+        super::SCALAR_LIMBS, byte_limbs_to_biguint, scalar_carries, sign_pattern_for_row,
+        EC_MUL_COMPUTE_ROWS, SCALAR_ACC_LIMBS,
+    };
 
     fn accumulator_for_scalar(scalar: &[u8; SCALAR_LIMBS]) -> [u8; SCALAR_ACC_LIMBS] {
         let mut acc = [0u8; SCALAR_ACC_LIMBS];
@@ -654,6 +658,9 @@ mod tests {
         odd[0] = 5;
         let acc = accumulator_for_scalar(&odd);
         scalar_carries(&odd, &acc).unwrap();
+
+        let max = [u8::MAX; SCALAR_LIMBS];
+        scalar_carries(&max, &accumulator_for_scalar(&max)).unwrap();
 
         let mut even = odd;
         even[0] = 4;

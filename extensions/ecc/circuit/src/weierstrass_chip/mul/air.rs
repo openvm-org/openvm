@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
         offline_checker::{pack_u8_block, MemoryBridge},
         MemoryAddress,
@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 use super::{
     ec_mul_header_width, ec_mul_io_offset, ec_mul_width, sign_of, EcMulHeaderCols, EcMulIoCols,
     EC_MUL_FINAL_ROW_IDX, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, IN_ACC_X, IN_ACC_Y, IN_PX,
-    IN_PY, SCALAR_ACC_LIMBS, SCALAR_ACC_LIMBS_PER_BYTE, SCALAR_LIMBS,
+    IN_PY, SCALAR_ACC_LIMBS, SCALAR_ACC_LIMBS_PER_MEMORY_LIMB, SCALAR_MEMORY_LIMBS,
 };
 
 /// `NUM_LIMBS` is the coordinate width in 8-bit limbs; `BLOCKS` is the memory blocks per point.
@@ -110,18 +110,15 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 
         let local_io: &EcMulIoCols<AB::Var, NUM_LIMBS, BLOCKS> = local_row[io_offset..].borrow();
 
+        let local_is_valid: AB::Expr = local_expr[0].into();
+        let next_is_valid: AB::Expr = next_expr[0].into();
+
         // ==== Row typing ====================================================================
-        builder.assert_bool(local.is_compute);
         builder.assert_bool(local.is_final);
         builder.assert_bool(local.is_first_compute);
-        builder.assert_bool(local.is_setup);
-        // `is_final` and `is_first_compute` imply `is_compute`.
-        builder.assert_zero(local.is_final * (AB::Expr::ONE - local.is_compute));
-        builder.assert_zero(local.is_first_compute * (AB::Expr::ONE - local.is_compute));
-
-        // `FieldExpr` reads `is_valid` from its first column; padding rows still hold a
-        // consistent witness since several expression constraints are ungated.
-        builder.assert_eq(local_expr[0], local.is_compute);
+        // `is_final` and `is_first_compute` imply `FieldExpr::is_valid`.
+        builder.assert_zero(local.is_final * (AB::Expr::ONE - local_is_valid.clone()));
+        builder.assert_zero(local.is_first_compute * (AB::Expr::ONE - local_is_valid.clone()));
 
         SubAir::eval(&self.expr, builder, local_expr);
 
@@ -144,32 +141,37 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
             })
             .sum();
 
-        // `is_setup` mirrors the value `FieldExpr` derives internally, `is_valid - Σflags`.
-        let flag_sum: AB::Expr = flags.iter().map(|&f| f.into()).sum();
-        builder
-            .when(local.is_compute)
-            .assert_eq(local.is_setup, local.is_compute - flag_sum);
+        // `FieldExpr` constrains these expressions to be Boolean. A valid row with no flag is a
+        // setup row; a normal row selects exactly one sign pattern.
+        let local_is_setup =
+            local_is_valid.clone() - flags.iter().map(|&flag| flag.into()).sum::<AB::Expr>();
+        let next_is_setup = next_is_valid.clone()
+            - next_cols
+                .flags
+                .iter()
+                .map(|&flag| flag.into())
+                .sum::<AB::Expr>();
 
         // ==== Sequencing =====================================================================
         // A compute chain must begin at `is_first_compute`.
         builder
             .when_first_row()
-            .when(local.is_compute)
+            .when(local_is_valid.clone())
             .assert_one(local.is_first_compute);
         // A continuation row extends a compute predecessor.
         builder
             .when_transition()
-            .when(next.is_compute - next.is_first_compute)
-            .assert_one(local.is_compute);
+            .when(next_is_valid.clone() - next.is_first_compute)
+            .assert_one(local_is_valid.clone());
         // A fresh start may follow only padding or a completed chain.
         builder
             .when_transition()
             .when(next.is_first_compute)
-            .assert_zero(local.is_compute - local.is_final);
+            .assert_zero(local_is_valid.clone() - local.is_final);
         // The final row terminates its chain.
         builder
             .when_transition()
-            .assert_zero(local.is_final * (next.is_compute - next.is_first_compute));
+            .assert_zero(local.is_final * (next_is_valid.clone() - next.is_first_compute));
 
         // ==== Row index =====================================================================
         builder.assert_zero(
@@ -180,7 +182,7 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         // ==== First compute row ==============================================================
         // The accumulator seeds at `P`: the most significant digit of every odd in-range scalar
         // is `+1`. Gated on `!is_setup`, whose leading inputs `FieldExpr` pins to the modulus.
-        let first_real_compute = local.is_first_compute * (AB::Expr::ONE - local.is_setup);
+        let first_real_compute = local.is_first_compute * (AB::Expr::ONE - local_is_setup.clone());
         for (acc, p) in inputs[IN_ACC_X].iter().zip(&inputs[IN_PX]) {
             builder.when(first_real_compute.clone()).assert_eq(*acc, *p);
         }
@@ -193,24 +195,20 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
 
         // ==== Transitions ===================================================================
         // 1 exactly when `next` continues `local`'s ladder.
-        let continuation: AB::Expr = next.is_compute - next.is_first_compute;
+        let continuation: AB::Expr = next_is_valid.clone() - next.is_first_compute;
         // Stored so the data links below can be gated at degree 1.
         builder.assert_eq(
             local.is_ladder,
-            local.is_compute
-                * (AB::Expr::ONE - local.is_setup)
+            local_is_valid.clone()
+                * (AB::Expr::ONE - local_is_setup.clone())
                 * (AB::Expr::ONE - local.is_first_compute),
-        );
-        builder.assert_eq(
-            local.is_real_final,
-            local.is_final * (AB::Expr::ONE - local.is_setup),
         );
         let mut when_in_instruction = builder.when_transition();
         let mut when_in_instruction = when_in_instruction.when(continuation);
 
         when_in_instruction.assert_eq(next.row_idx, local.row_idx + AB::Expr::ONE);
         // `is_setup` is constant across the instruction.
-        when_in_instruction.assert_eq(next.is_setup, local.is_setup);
+        when_in_instruction.assert_eq(next_is_setup, local_is_setup.clone());
         when_in_instruction.assert_zero(next.is_first_compute);
 
         // B' = 2^EC_MUL_STEPS_PER_ROW * B + digits: a pure shift, nothing to carry or range check.
@@ -248,28 +246,33 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         for &carry in local_io.scalar_carry.iter() {
             builder.assert_bool(carry);
         }
+        let is_real_final = local.is_final * (AB::Expr::ONE - local_is_setup.clone());
         let mut carry_in = AB::Expr::ONE;
-        for i in 0..SCALAR_LIMBS {
-            let b_byte: AB::Expr = (0..SCALAR_ACC_LIMBS_PER_BYTE)
+        for i in 0..SCALAR_MEMORY_LIMBS {
+            let b_limb: AB::Expr = (0..SCALAR_ACC_LIMBS_PER_MEMORY_LIMB)
                 .map(|j| {
-                    completed_acc(i * SCALAR_ACC_LIMBS_PER_BYTE + j)
+                    completed_acc(i * SCALAR_ACC_LIMBS_PER_MEMORY_LIMB + j)
                         * AB::Expr::from_u32(1 << (j * EC_MUL_STEPS_PER_ROW))
                 })
                 .sum();
-            builder.when(local.is_real_final).assert_eq(
-                b_byte * AB::Expr::TWO + carry_in,
-                local_io.scalar_data[i] + local_io.scalar_carry[i] * AB::Expr::from_u32(1 << 8),
+            let carry_out = local_io
+                .scalar_carry
+                .get(i)
+                .map(|&carry| AB::Expr::from(carry));
+            builder.when(is_real_final.clone()).assert_eq(
+                b_limb * AB::Expr::TWO + carry_in.clone(),
+                local_io.scalar_data[i]
+                    + carry_out.clone().unwrap_or(AB::Expr::ZERO) * AB::Expr::from_u32(1 << 16),
             );
-            carry_in = local_io.scalar_carry[i].into();
+            if let Some(carry_out) = carry_out {
+                carry_in = carry_out;
+            }
         }
-        // No carry may leave the top byte, pinning `2B + 1 < 2^256`.
-        builder
-            .when(local.is_real_final)
-            .assert_zero(local_io.scalar_carry[SCALAR_LIMBS - 1]);
 
         self.eval_io(
             builder,
             local,
+            local_is_setup,
             local_io,
             [&inputs[IN_PX], &inputs[IN_PY]],
             [out_x, out_y],
@@ -285,6 +288,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
         &self,
         builder: &mut AB,
         header: &EcMulHeaderCols<AB::Var>,
+        is_setup: AB::Expr,
         io: &EcMulIoCols<AB::Var, NUM_LIMBS, BLOCKS>,
         point: [&[AB::Var]; 2],
         result: [&[AB::Var]; 2],
@@ -371,8 +375,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
 
         // ==== Read the scalar ===============================================================
         for (blk, aux) in io.scalar_read_aux.iter().enumerate() {
-            let bytes: [AB::Expr; MEMORY_BLOCK_BYTES] =
-                std::array::from_fn(|i| io.scalar_data[blk * MEMORY_BLOCK_BYTES + i].into());
+            let data = std::array::from_fn(|i| io.scalar_data[blk * BLOCK_FE_WIDTH + i].into());
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
@@ -381,7 +384,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
                             scalar_addr.clone() + AB::Expr::from_usize(blk * MEMORY_BLOCK_BYTES),
                         ),
                     ),
-                    pack_u8_block::<AB>(&bytes),
+                    data,
                     timestamp_pp(),
                     aux,
                 )
@@ -411,7 +414,7 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> EcMulAir<NUM_LIMBS, BLOCKS> {
         let ec_mul = AB::Expr::from_usize(WeierstrassOpcode::EC_MUL.local_usize() + self.offset);
         let setup =
             AB::Expr::from_usize(WeierstrassOpcode::SETUP_EC_MUL.local_usize() + self.offset);
-        let opcode = (AB::Expr::ONE - header.is_setup) * ec_mul + header.is_setup * setup;
+        let opcode = (AB::Expr::ONE - is_setup.clone()) * ec_mul + is_setup * setup;
 
         self.execution_bridge
             .execute_and_increment_pc(
