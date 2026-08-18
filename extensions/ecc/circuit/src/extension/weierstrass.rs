@@ -49,7 +49,7 @@ pub struct CurveConfig {
     /// The coordinate modulus of the curve.
     #[serde_as(as = "DisplayFromStr")]
     pub modulus: BigUint,
-    /// The prime-subgroup order. EC_MUL requires an order equal to 1 modulo 4.
+    /// The actual prime-subgroup order. EC_MUL requires an order equal to 1 modulo 4.
     #[serde_as(as = "DisplayFromStr")]
     pub scalar: BigUint,
     /// The coefficient a of y^2 = x^3 + ax + b.

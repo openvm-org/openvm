@@ -28,6 +28,7 @@ pub enum WeierstrassOpcode {
     /// - The x-coordinates must be different.
     ///   - The formula divides by `x2 - x1`.
     EC_ADD_NE,
+    /// Initializes EC_ADD_NE. The output has no defined value and must not be used.
     SETUP_EC_ADD_NE,
     /// Doubles an affine point.
     ///
@@ -39,6 +40,7 @@ pub enum WeierstrassOpcode {
     /// - The result must not be the identity.
     ///   - The formula divides by `2 * y`, which is zero when the result is the identity.
     EC_DOUBLE,
+    /// Initializes EC_DOUBLE. The output has no defined value and must not be used.
     SETUP_EC_DOUBLE,
     /// Multiplies an affine point by a scalar.
     ///
@@ -54,6 +56,7 @@ pub enum WeierstrassOpcode {
     /// - The subgroup order `n` must equal 1 modulo 4.
     ///   - This prevents an addition of points with equal x-coordinates during the ladder.
     EC_MUL,
+    /// Initializes EC_MUL parameters.
     SETUP_EC_MUL,
 }
 

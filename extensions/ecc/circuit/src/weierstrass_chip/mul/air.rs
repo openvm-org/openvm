@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 use super::{
     ec_mul_header_width, ec_mul_io_offset, ec_mul_width, sign_of, EcMulHeaderCols, EcMulIoCols,
     EC_MUL_FINAL_ROW_IDX, EC_MUL_SIGN_PATTERNS, EC_MUL_STEPS_PER_ROW, IN_ACC_X, IN_ACC_Y, IN_PX,
-    IN_PY, SCALAR_ACC_LIMBS, SCALAR_ACC_LIMBS_PER_MEMORY_LIMB, SCALAR_MEMORY_LIMBS,
+    IN_PY, SCALAR_ACC_LIMBS, SCALAR_ACC_LIMBS_PER_MEMORY_LIMB, SCALAR_MEMORY_LIMBS, SETUP_ACC,
 };
 
 /// `NUM_LIMBS` is the coordinate width in 8-bit limbs; `BLOCKS` is the memory blocks per point.
@@ -188,6 +188,17 @@ impl<AB: InteractionBuilder, const NUM_LIMBS: usize, const BLOCKS: usize> Air<AB
         }
         for (acc, p) in inputs[IN_ACC_Y].iter().zip(&inputs[IN_PY]) {
             builder.when(first_real_compute.clone()).assert_eq(*acc, *p);
+        }
+        for (acc, value) in [
+            (&inputs[IN_ACC_X], SETUP_ACC.0),
+            (&inputs[IN_ACC_Y], SETUP_ACC.1),
+        ] {
+            for (i, &limb) in acc.iter().enumerate() {
+                let expected = if i == 0 { value as usize } else { 0 };
+                builder
+                    .when(local_is_setup.clone())
+                    .assert_eq(limb, AB::F::from_usize(expected));
+            }
         }
         for &limb in local.scalar_acc.iter() {
             builder.when(local.is_first_compute).assert_zero(limb);
