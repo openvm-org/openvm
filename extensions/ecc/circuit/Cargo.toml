@@ -85,4 +85,4 @@ touchemall = [
 
 [package.metadata.cargo-shear]
 # derive_more is referenced by the VmConfig derive expansion
-ignored = ["derive_more"]
+ignored = ["rand", "derive_more"]

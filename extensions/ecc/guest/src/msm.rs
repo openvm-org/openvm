@@ -5,7 +5,7 @@ use openvm_algebra_guest::IntMod;
 
 use super::{weierstrass::ScalarMul, Group};
 
-/// Multi-scalar multiplication via Pippenger's algorithm.
+/// Multi-scalar multiplication via Pippenger's algorithm
 // Reference: https://github.com/privacy-scaling-explorations/halo2curves/blob/8771fe5a5d54fc03e74dbc8915db5dad3ab46a83/src/msm.rs#L335
 pub fn msm<EcPoint: Group, Scalar: IntMod>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where

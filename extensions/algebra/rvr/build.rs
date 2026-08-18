@@ -15,6 +15,7 @@ fn main() {
     generate_secp256k1_file_list(&manifest_dir, &out_dir);
 
     let blst_staticlib = build_blst_staticlib(&manifest_dir, &out_dir);
+
     let modular_staticlib = build_rust_ffi_staticlib(
         &manifest_dir.join("ffi/modular"),
         &out_dir.join("modular-ffi-target"),
