@@ -272,6 +272,41 @@ pub(super) fn blocks_to_bytes<const N: usize>(blocks: &[[u16; BLOCK_FE_WIDTH]; N
     out
 }
 
+fn byte_limbs_to_biguint<F: PrimeField32>(limbs: &[F]) -> Result<BigUint, PostflightError> {
+    let bytes = limbs
+        .iter()
+        .map(|limb| {
+            u8::try_from(limb.as_canonical_u32()).map_err(|_| {
+                PostflightError::new("EC_MUL expression output limb is not an 8-bit value")
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(BigUint::from_bytes_le(&bytes))
+}
+
+fn scalar_carries(
+    scalar_bytes: &[u8],
+    acc_limbs: &[u8; SCALAR_ACC_LIMBS],
+) -> Result<[u8; SCALAR_LIMBS], PostflightError> {
+    let mut carries = [0u8; SCALAR_LIMBS];
+    let mut carry = 1u16;
+    for i in 0..SCALAR_LIMBS {
+        let b_byte: u16 = (0..SCALAR_ACC_LIMBS_PER_BYTE)
+            .map(|j| {
+                u16::from(acc_limbs[i * SCALAR_ACC_LIMBS_PER_BYTE + j])
+                    << (j * EC_MUL_STEPS_PER_ROW)
+            })
+            .sum();
+        let reconstructed = b_byte * 2 + carry;
+        if reconstructed & 0xff != u16::from(scalar_bytes[i]) {
+            return Err(PostflightError::new("EC_MUL scalar must be odd"));
+        }
+        carry = reconstructed >> 8;
+        carries[i] = carry as u8;
+    }
+    Ok(carries)
+}
+
 /// Fills one instruction's rows.
 #[allow(clippy::too_many_arguments)]
 fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize>(
@@ -364,15 +399,8 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
             // Carry the accumulator to the next row.
             let sub = &row[header_width..io_offset];
             let cols = expr.load_vars(sub);
-            let read_limbs = |limbs: &[F]| {
-                let bytes: Vec<u8> = limbs
-                    .iter()
-                    .map(|f| u8::try_from(f.as_canonical_u32()).unwrap_or(0))
-                    .collect();
-                BigUint::from_bytes_le(&bytes)
-            };
-            rx = read_limbs(&cols.vars[outs[0]]);
-            ry = read_limbs(&cols.vars[outs[1]]);
+            rx = byte_limbs_to_biguint(&cols.vars[outs[0]])?;
+            ry = byte_limbs_to_biguint(&cols.vars[outs[1]])?;
         }
 
         if input.is_setup == 0 {
@@ -422,24 +450,14 @@ fn fill_instruction<F: PrimeField32, const NUM_LIMBS: usize, const BLOCKS: usize
         io.scalar_data[i] = F::from_u8(*byte);
     }
 
-    // Carries for the final row's `2B + 1 == scalar` check; the incoming carry of byte 0 is the
-    // `+1`. On a setup row the check is gated off, so these are left zero.
+    // Carries for the final row's `2B + 1 == scalar` check. Setup rows leave them at zero.
     if input.is_setup == 0 {
-        let mut carry = 1u16;
-        for i in 0..SCALAR_LIMBS {
-            let b_byte: u16 = (0..SCALAR_ACC_LIMBS_PER_BYTE)
-                .map(|j| {
-                    u16::from(acc_limbs[i * SCALAR_ACC_LIMBS_PER_BYTE + j])
-                        << (j * EC_MUL_STEPS_PER_ROW)
-                })
-                .sum();
-            carry = (b_byte * 2 + carry) >> 8;
-            io.scalar_carry[i] = F::from_u16(carry);
-        }
-        if carry != 0 {
-            return Err(PostflightError::new(
-                "EC_MUL scalar exceeds 256 bits; the operand must be below the curve order",
-            ));
+        for (dst, carry) in io
+            .scalar_carry
+            .iter_mut()
+            .zip(scalar_carries(&scalar_bytes, &acc_limbs)?)
+        {
+            *dst = F::from_u8(carry);
         }
     }
 
@@ -613,4 +631,38 @@ fn build_ec_mul_trace<
     }
 
     Ok(trace)
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+
+    fn accumulator_for_scalar(scalar: &[u8; SCALAR_LIMBS]) -> [u8; SCALAR_ACC_LIMBS] {
+        let mut acc = [0u8; SCALAR_ACC_LIMBS];
+        for row in 0..EC_MUL_COMPUTE_ROWS {
+            acc.copy_within(0..SCALAR_ACC_LIMBS - 1, 1);
+            acc[0] = sign_pattern_for_row(scalar, row) as u8;
+        }
+        acc
+    }
+
+    #[test]
+    fn rejects_even_scalar() {
+        let mut odd = [0u8; SCALAR_LIMBS];
+        odd[0] = 5;
+        let acc = accumulator_for_scalar(&odd);
+        scalar_carries(&odd, &acc).unwrap();
+
+        let mut even = odd;
+        even[0] = 4;
+        let error = scalar_carries(&even, &accumulator_for_scalar(&even)).unwrap_err();
+        assert!(error.to_string().contains("scalar must be odd"));
+    }
+
+    #[test]
+    fn rejects_non_byte_expression_limb() {
+        assert!(byte_limbs_to_biguint(&[BabyBear::new(256)]).is_err());
+    }
 }

@@ -14,14 +14,51 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[opcode_offset = 0x600]
 #[allow(non_camel_case_types)]
 #[repr(usize)]
+/// Short Weierstrass curve operations.
+///
+/// These operations use partial affine formulas. The caller must meet each requirement below.
 pub enum WeierstrassOpcode {
+    /// Adds two affine points.
+    ///
+    /// Requirements:
+    /// - Each point must be on the curve.
+    ///   - The operation uses the curve addition formula.
+    /// - Each point must not be the identity.
+    ///   - The identity has no affine coordinates.
+    /// - The x-coordinates must be different.
+    ///   - The formula divides by `x2 - x1`.
     EC_ADD_NE,
     SETUP_EC_ADD_NE,
+    /// Doubles an affine point.
+    ///
+    /// Requirements:
+    /// - The input point must be on the curve.
+    ///   - The operation uses the curve doubling formula.
+    /// - The input point must not be the identity.
+    ///   - The identity has no affine coordinates.
+    /// - The result must not be the identity.
+    ///   - The formula divides by `2 * y`, which is zero when the result is the identity.
     EC_DOUBLE,
     SETUP_EC_DOUBLE,
+    /// Multiplies an affine point by a scalar.
+    ///
+    /// Requirements:
+    /// - The point must be on the curve.
+    ///   - The ladder uses the curve addition and doubling formulas.
+    /// - The point must not be the identity.
+    ///   - The ladder starts with the point and uses affine coordinates.
+    /// - The point must be in a subgroup of prime order `n`.
+    ///   - A nonzero multiple less than `n` is not the identity.
+    /// - The scalar `k` must be odd and less than `n`.
+    ///   - The ladder writes `k` as `2 * B + 1`. Each step adds `P` or `-P`.
+    /// - The subgroup order `n` must equal 1 modulo 4.
+    ///   - This prevents an addition of points with equal x-coordinates during the ladder.
     EC_MUL,
     SETUP_EC_MUL,
 }
+
+const _: () =
+    assert!(WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize);
 
 #[derive(Default)]
 pub struct EccTranspilerExtension;
@@ -44,7 +81,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
 
         let instruction = {
             // short weierstrass ec
-            assert!(WeierstrassOpcode::COUNT <= SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize);
             let dec_insn = RType::new(instruction_u32);
             let base_funct7 = (dec_insn.funct7 as u8) % SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS;
             let curve_idx =

@@ -29,9 +29,26 @@ pub const SW_FUNCT3: u8 = 0b001;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u8)]
 pub enum SwBaseFunct7 {
+    /// Adds two affine points.
+    ///
+    /// Requirements:
+    /// - Both points are not the identity.
+    /// - The x-coordinates are different.
     SwAddNe = 0,
+    /// Doubles an affine point.
+    ///
+    /// Requirements:
+    /// - The point is not the identity.
+    /// - The result is not the identity.
     SwDouble,
     SwSetup,
+    /// Multiplies an affine point by a scalar.
+    ///
+    /// Requirements:
+    /// - The point is not the identity.
+    /// - The point is in the configured prime-order subgroup.
+    /// - The scalar is odd and less than the subgroup order.
+    /// - The subgroup order is equal to 1 modulo 4.
     SwMul,
     SwSetupMul,
 }

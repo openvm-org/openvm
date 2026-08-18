@@ -66,14 +66,9 @@ impl<const BLOCKS: usize> EcMulExecutor<BLOCKS> {
     }
 }
 
-/// Asserts that the ladder's totality argument covers a curve with the given scalar order; see
-/// the module documentation.
-pub fn assert_supported_scalar_order(scalar_order: &BigUint) {
-    assert_eq!(
-        scalar_order % 4u32,
-        BigUint::from(1u32),
-        "EC_MUL requires a scalar order congruent to 1 mod 4; this curve's is {scalar_order}"
-    );
+/// Returns true if the partial ladder supports the given prime-subgroup order.
+pub(crate) fn is_supported_scalar_order(scalar_order: &BigUint) -> bool {
+    scalar_order % 4u32 == BigUint::from(1u32)
 }
 
 /// Constructors mirroring `get_ec_addne_*` / `get_ec_double_*`.

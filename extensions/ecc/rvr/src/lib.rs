@@ -310,6 +310,7 @@ impl ExtInstr for EcMulInstr {
 #[derive(Debug, Clone)]
 pub struct CurveInfo {
     curve: Option<KnownCurve>,
+    supports_ec_mul: bool,
     /// AIR index of this curve's `EC_MUL` chip, resolved once at lift time. `None` for curves
     /// whose `EC_MUL` this extension does not lift, and in pure mode.
     mul_chip_idx: Option<AirIndex>,
@@ -321,28 +322,29 @@ pub struct EccExtension {
 }
 
 impl EccExtension {
-    fn has_bn254(&self) -> bool {
+    fn has_bn254_mul(&self) -> bool {
         self.curves
             .iter()
-            .any(|info| matches!(info.curve, Some(KnownCurve::Bn254)))
+            .any(|info| info.supports_ec_mul && matches!(info.curve, Some(KnownCurve::Bn254)))
     }
 
     /// Record the curves in configuration order and resolve the `EC_MUL` chip index for each one
     /// whose scalar multiplication this extension lifts.
     fn build(
         ctx: Option<&RvrExtensionCtx>,
-        curves: Vec<Option<KnownCurve>>,
+        curves: Vec<(Option<KnownCurve>, bool)>,
     ) -> Result<Self, ExtensionError> {
         let curves = curves
             .into_iter()
             .enumerate()
-            .map(|(curve_idx, curve)| {
-                let mul_chip_idx = match curve {
-                    Some(_) => ec_mul_air_idx(ctx, curve_idx)?,
-                    None => None,
+            .map(|(curve_idx, (curve, supports_ec_mul))| {
+                let mul_chip_idx = match (curve, supports_ec_mul) {
+                    (Some(_), true) => ec_mul_air_idx(ctx, curve_idx)?,
+                    _ => None,
                 };
                 Ok(CurveInfo {
                     curve,
+                    supports_ec_mul,
                     mul_chip_idx,
                 })
             })
@@ -356,19 +358,24 @@ impl EccExtension {
     ) -> Result<Self, ExtensionError> {
         Self::build(
             ctx,
-            curves_info.into_iter().map(KnownCurve::from_id).collect(),
+            curves_info
+                .into_iter()
+                .map(|id| (KnownCurve::from_id(id), true))
+                .collect(),
         )
     }
 
     pub fn new_from_struct_names(
         ctx: Option<&RvrExtensionCtx>,
-        struct_names: Vec<String>,
+        curves: Vec<(String, bool)>,
     ) -> Result<Self, ExtensionError> {
         Self::build(
             ctx,
-            struct_names
-                .iter()
-                .map(|name| KnownCurve::from_struct_name(name))
+            curves
+                .into_iter()
+                .map(|(name, supports_ec_mul)| {
+                    (KnownCurve::from_struct_name(&name), supports_ec_mul)
+                })
                 .collect(),
         )
     }
@@ -412,7 +419,7 @@ impl RvrExtension for EccExtension {
                 curve,
                 is_setup: local_opcode == SETUP_EC_DOUBLE,
             }),
-            EC_MUL | SETUP_EC_MUL => {
+            EC_MUL | SETUP_EC_MUL if info.supports_ec_mul => {
                 let rs2_reg = decode_reg(insn.c);
                 Box::new(EcMulInstr {
                     rd_reg,
@@ -423,6 +430,7 @@ impl RvrExtension for EccExtension {
                     mul_chip_idx: info.mul_chip_idx,
                 })
             }
+            EC_MUL | SETUP_EC_MUL => return None,
         };
 
         Some(LiftedInstr::Body(InstrAt {
@@ -439,7 +447,7 @@ impl RvrExtension for EccExtension {
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
-        if self.has_bn254() {
+        if self.has_bn254_mul() {
             vec![(
                 "rvr_ext_bn254.c",
                 include_str!("../ffi/native/c/rvr_ext_bn254.c"),
@@ -454,7 +462,7 @@ impl RvrExtension for EccExtension {
             "librvr_openvm_ext_ecc_ffi.a",
             include_bytes!(env!("RVR_ECC_FFI_STATICLIB")).as_slice(),
         )];
-        if self.has_bn254() {
+        if self.has_bn254_mul() {
             files.push((
                 "libmcl.a",
                 include_bytes!(env!("RVR_ECC_MCL_STATICLIB")).as_slice(),
@@ -464,7 +472,7 @@ impl RvrExtension for EccExtension {
     }
 
     fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
-        if self.has_bn254() {
+        if self.has_bn254_mul() {
             vec![
                 (
                     "mcl/include/mcl/bn.h",
@@ -485,7 +493,7 @@ impl RvrExtension for EccExtension {
     }
 
     fn extra_cflags(&self) -> Vec<String> {
-        if self.has_bn254() {
+        if self.has_bn254_mul() {
             vec![
                 "-isystem".to_string(),
                 "mcl/include".to_string(),
@@ -497,7 +505,7 @@ impl RvrExtension for EccExtension {
     }
 
     fn requires_cxx_linker(&self) -> bool {
-        self.has_bn254()
+        self.has_bn254_mul()
     }
 
     fn uses_memory_wrappers(&self) -> bool {
@@ -662,6 +670,38 @@ mod tests {
     }
 
     #[test]
+    fn ignores_mul_when_curve_capability_is_disabled() {
+        let ctx = RvrExtensionCtx::default();
+        let extension = EccExtension::new_from_struct_names(
+            Some(&ctx),
+            vec![("Secp256k1Point".to_string(), false)],
+        )
+        .unwrap();
+
+        for local in [EC_MUL, SETUP_EC_MUL] {
+            let opcode = VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + local as usize);
+            let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
+            assert!(extension.try_lift(&insn, 0x100).is_none());
+        }
+
+        let add_opcode = VmOpcode::from_usize(WeierstrassOpcode::CLASS_OFFSET + EC_ADD_NE as usize);
+        let add = RvrInstruction::from_canonical(add_opcode, [0; 7], u32::MAX);
+        assert!(extension.try_lift(&add, 0x100).is_some());
+
+        let bn254 =
+            EccExtension::new_from_struct_names(None, vec![("Bn254G1Affine".to_string(), false)])
+                .unwrap();
+        assert!(bn254.c_sources().is_empty());
+        assert!(bn254
+            .staticlib_files()
+            .iter()
+            .all(|(name, _)| *name != "libmcl.a"));
+        assert!(bn254.extra_c_include_files().is_empty());
+        assert!(bn254.extra_cflags().is_empty());
+        assert!(!bn254.requires_cxx_linker());
+    }
+
+    #[test]
     fn add_preflight_matches_schedule_and_minimal_replay_values() {
         for (curve, point_dwords) in [(KnownCurve::K256, 8), (KnownCurve::Bls12381, 12)] {
             for is_setup in [false, true] {
@@ -817,8 +857,6 @@ mod tests {
 
     #[test]
     fn mul_lifts_for_every_configured_curve() {
-        // `set_up_once` emits `SETUP_EC_MUL` for every declared curve, including those with a
-        // cofactor whose scalar multiplication no guest library exposes, so all of them must lift.
         for curve_id in 0..4 {
             let extension = EccExtension::new(None, vec![curve_id]).unwrap();
             for local in [EC_MUL, SETUP_EC_MUL] {

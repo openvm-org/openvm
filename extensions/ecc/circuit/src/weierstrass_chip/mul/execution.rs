@@ -19,12 +19,12 @@ use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{MEMORY_AS, REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_mod_circuit_builder::FieldExpressionProgram;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
+use openvm_riscv_circuit::adapters::{try_bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -42,6 +42,34 @@ struct EcMulPreCompute<'a> {
     rs_addrs: [u8; 2],
     /// `rd`: destination pointer register.
     a: u8,
+}
+
+fn checked_register_pointer(pc: u32, pointer: u32) -> Result<u8, StaticProgramError> {
+    let pointer = u8::try_from(pointer).map_err(|_| StaticProgramError::InvalidInstruction(pc))?;
+    if !pointer.is_multiple_of(REGISTER_NUM_LIMBS as u8) {
+        return Err(StaticProgramError::InvalidInstruction(pc));
+    }
+    Ok(pointer)
+}
+
+fn pointer_from_register(pc: u32, value: [u8; REGISTER_NUM_LIMBS]) -> Result<u32, ExecutionError> {
+    try_bytes_to_u32(value).ok_or(ExecutionError::Fail {
+        pc,
+        msg: "EC_MUL pointer register has nonzero upper 32 bits",
+    })
+}
+
+fn validate_memory_span(pc: u32, address: u32, bytes: usize) -> Result<(), ExecutionError> {
+    let in_bounds = (address as usize)
+        .checked_add(bytes)
+        .is_some_and(|end| end <= MEM_SIZE);
+    if !in_bounds {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "EC_MUL memory access is out of bounds",
+        });
+    }
+    Ok(())
 }
 
 impl<'a, const BLOCKS: usize> EcMulExecutor<BLOCKS> {
@@ -70,8 +98,11 @@ impl<'a, const BLOCKS: usize> EcMulExecutor<BLOCKS> {
 
         *data = EcMulPreCompute {
             program: &self.program,
-            rs_addrs: [b as u8, c as u8],
-            a: a as u8,
+            rs_addrs: [
+                checked_register_pointer(pc, b)?,
+                checked_register_pointer(pc, c)?,
+            ],
+            a: checked_register_pointer(pc, a)?,
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
@@ -213,23 +244,35 @@ unsafe fn execute_e12_impl<
     let pc = exec_state.pc();
 
     // rs1 holds the base point pointer, rs2 the scalar pointer, rd the destination.
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, addr as u32)));
+    let rs_vals = [
+        pointer_from_register(
+            pc,
+            exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rs_addrs[0] as u32),
+        )?,
+        pointer_from_register(
+            pc,
+            exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rs_addrs[1] as u32),
+        )?,
+    ];
     for &address in &rs_vals {
         validate_memory_block_byte_ptr(pc, address)?;
     }
     let rd_val = validate_memory_block_byte_ptr(
         pc,
-        bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32)),
+        pointer_from_register(
+            pc,
+            exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32),
+        )?,
     )?;
 
-    debug_assert!(rs_vals[0] as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
+    validate_memory_span(pc, rs_vals[0], MEMORY_BLOCK_BYTES * BLOCKS)?;
+    validate_memory_span(pc, rs_vals[1], MEMORY_BLOCK_BYTES * SCALAR_BLOCKS)?;
+    validate_memory_span(pc, rd_val, MEMORY_BLOCK_BYTES * BLOCKS)?;
+
     let point_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = std::array::from_fn(|i| {
         exec_state.vm_read_bytes(MEMORY_AS, rs_vals[0] + (i * MEMORY_BLOCK_BYTES) as u32)
     });
 
-    debug_assert!(rs_vals[1] as usize + MEMORY_BLOCK_BYTES * SCALAR_BLOCKS - 1 < MEM_SIZE);
     let scalar_blocks: [[u8; MEMORY_BLOCK_BYTES]; SCALAR_BLOCKS] = std::array::from_fn(|i| {
         exec_state.vm_read_bytes(MEMORY_AS, rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32)
     });
@@ -238,15 +281,15 @@ unsafe fn execute_e12_impl<
     if IS_SETUP {
         // The point operand carries (modulus, a), as for the other setup opcodes; a mismatch
         // reports a clear error rather than an unsatisfiable trace. The scalar operand is unused.
-        let coord_bytes = BLOCKS / 2;
-        let input_prime = BigUint::from_bytes_le(point_data[..coord_bytes].as_flattened());
+        let coord_blocks = BLOCKS / 2;
+        let input_prime = BigUint::from_bytes_le(point_data[..coord_blocks].as_flattened());
         if &input_prime != pre_compute.program.prime() {
             return Err(ExecutionError::Fail {
                 pc,
                 msg: "EcMul: mismatched prime",
             });
         }
-        let input_a = BigUint::from_bytes_le(point_data[coord_bytes..].as_flattened());
+        let input_a = BigUint::from_bytes_le(point_data[coord_blocks..].as_flattened());
         if input_a != pre_compute.program.setup_values()[0] {
             return Err(ExecutionError::Fail {
                 pc,
@@ -262,7 +305,6 @@ unsafe fn execute_e12_impl<
         ec_mul::<CURVE_TYPE, BLOCKS>(point_data, scalar)
     };
 
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
     for (i, block) in output_data.into_iter().enumerate() {
         exec_state.vm_write_bytes(MEMORY_AS, rd_val + (i * MEMORY_BLOCK_BYTES) as u32, &block);
     }
@@ -285,23 +327,24 @@ fn run_ladder_via_expr<const BLOCKS: usize>(
     let py = BigUint::from_bytes_le(&flat[coord_bytes..]);
     let outs = program.output_indices();
 
-    // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
-    let mut rx = px.clone();
-    let mut ry = py.clone();
-
-    for row in 0..EC_MUL_COMPUTE_ROWS {
-        let (inputs, flags) = if is_setup {
-            (setup_row_inputs(program), vec![false; EC_MUL_SIGN_PATTERNS])
-        } else {
+    let (rx, ry) = if is_setup {
+        // All setup rows are equal. Evaluate the row once.
+        let vars = program.execute(&setup_row_inputs(program), &[false; EC_MUL_SIGN_PATTERNS]);
+        (vars[outs[0]].clone(), vars[outs[1]].clone())
+    } else {
+        // The most significant digit is `+1`, so the accumulator seeds itself from `P`.
+        let mut rx = px.clone();
+        let mut ry = py.clone();
+        for row in 0..EC_MUL_COMPUTE_ROWS {
             let mut flags = vec![false; EC_MUL_SIGN_PATTERNS];
             flags[sign_pattern_for_row(scalar, row)] = true;
-            (vec![px.clone(), py.clone(), rx.clone(), ry.clone()], flags)
-        };
-
-        let vars = program.execute(&inputs, &flags);
-        rx = vars[outs[0]].clone();
-        ry = vars[outs[1]].clone();
-    }
+            let inputs = vec![px.clone(), py.clone(), rx, ry];
+            let vars = program.execute(&inputs, &flags);
+            rx = vars[outs[0]].clone();
+            ry = vars[outs[1]].clone();
+        }
+        (rx, ry)
+    };
 
     let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     let flat = output.as_flattened_mut();
@@ -325,6 +368,32 @@ pub(super) fn sign_pattern_for_row(scalar: &[u8], row: usize) -> usize {
         pattern |= (bit as usize) << (EC_MUL_STEPS_PER_ROW - 1 - step);
     }
     pattern
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    #[test]
+    fn validates_register_pointers() {
+        assert!(checked_register_pointer(0, 256).is_err());
+        assert!(checked_register_pointer(0, 1).is_err());
+        assert_eq!(checked_register_pointer(0, 248).unwrap(), 248);
+    }
+
+    #[test]
+    fn rejects_wide_pointer_registers() {
+        let mut bytes = [0u8; REGISTER_NUM_LIMBS];
+        bytes[4] = 1;
+        assert!(pointer_from_register(0, bytes).is_err());
+    }
+
+    #[test]
+    fn validates_the_complete_memory_span() {
+        let last_block = (MEM_SIZE - MEMORY_BLOCK_BYTES) as u32;
+        assert!(validate_memory_span(0, last_block, MEMORY_BLOCK_BYTES).is_ok());
+        assert!(validate_memory_span(0, last_block, 2 * MEMORY_BLOCK_BYTES).is_err());
+    }
 }
 
 #[create_handler]

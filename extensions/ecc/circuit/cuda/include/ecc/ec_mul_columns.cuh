@@ -32,10 +32,10 @@ static_assert(EC_MUL_SCALAR_LIMBS == EC_MUL_SCALAR_BLOCKS * MEMORY_BLOCK_BYTES);
 static_assert(EC_MUL_SCALAR_BITS % EC_MUL_STEPS_PER_ROW == 0);
 static_assert(8 % EC_MUL_STEPS_PER_ROW == 0);
 
-// `2B + 1` overflowed 256 bits, so the scalar was not below the curve order.
-static constexpr uint32_t EC_MUL_SCALAR_OVERFLOW = 0x56020002;
 // The expression blob does not describe this chip's ladder step.
 static constexpr uint32_t EC_MUL_BAD_PROGRAM = 0x56020003;
+// The scalar does not equal the ladder value `2B + 1`.
+static constexpr uint32_t EC_MUL_SCALAR_MISMATCH = 0x56020004;
 // Present on every row. `is_compute` doubles as the expression's `is_valid`.
 template <typename T> struct EcMulHeaderCols {
     T is_compute;
@@ -154,8 +154,7 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
 
     static_assert(2 * NUM_LIMBS == BLOCKS * MEMORY_BLOCK_BYTES);
 
-    // `row` points at the first I/O column. Returns false, setting `err`, if the scalar does
-    // not fit; the gather has already validated every other input.
+    // `row` points at the first I/O column. Returns false and sets `err` for an invalid scalar.
     __device__ __noinline__ bool fill(
         RowSlice row, const EcMulTraceInput<BLOCKS> &input, uint32_t *err
     ) {
@@ -222,12 +221,13 @@ template <size_t NUM_LIMBS, size_t BLOCKS> struct EcMulIoFiller {
                 );
                 accumulated += pattern << (limb * EC_MUL_STEPS_PER_ROW);
             }
-            carry = (accumulated * 2 + carry) >> 8;
+            uint32_t reconstructed = accumulated * 2 + carry;
+            if ((reconstructed & 0xff) != scalar_bytes[byte]) {
+                preflight_set_error(err, EC_MUL_SCALAR_MISMATCH);
+                return false;
+            }
+            carry = reconstructed >> 8;
             row.write(carry_base + byte, Fp(carry));
-        }
-        if (carry != 0) {
-            preflight_set_error(err, EC_MUL_SCALAR_OVERFLOW);
-            return false;
         }
         return true;
     }

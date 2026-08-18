@@ -42,7 +42,7 @@ use openvm_riscv_circuit::Rv64ImPreflightGpuTracegen;
 #[cfg(all(feature = "rvr", any(test, feature = "test-utils")))]
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
-use strum::EnumCount;
+use strum::{EnumCount, IntoEnumIterator};
 
 use crate::{
     generate_ec_mul_trace_from_postflight, get_ec_addne_chip, get_ec_double_chip, get_ec_mul_chip,
@@ -173,13 +173,6 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
     }
 }
 
-/// GPU-side wrapper for the `EC_MUL` chip.
-///
-/// Unlike the add-ne and double chips, this one has no [`FieldExprReplayChip`]. That replay path is
-/// typed for a [`WeierstrassChip`], and its projection kernel accepts only a fixed set of
-/// (reads, blocks) shapes, none of which describe `EC_MUL`'s point + 256-bit scalar + point access
-/// pattern or its multirow trace. It has its own gather and tracegen kernels instead, in
-/// `weierstrass_chip::mul::cuda`.
 pub struct HybridEcMulChip<F, const NUM_LIMBS: usize, const BLOCKS: usize> {
     cpu: EcMulChip<F, NUM_LIMBS, BLOCKS>,
     device_ctx: GpuDeviceCtx,
@@ -210,8 +203,6 @@ impl<const NUM_LIMBS: usize, const BLOCKS: usize> HybridEcMulChip<F, NUM_LIMBS, 
         ]
     }
 
-    /// Device trace generation from the GPU postflight transcript, mirroring
-    /// [`HybridWeierstrassChip::generate_proving_ctx_from_postflight`].
     pub fn generate_proving_ctx_from_postflight(
         &self,
         program: &GpuPostflightProgram,
@@ -357,37 +348,35 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
                 },
             )?;
 
-            // `EC_MUL` reads a point and a fixed-width scalar and writes a point. Setup uses the
-            // same schedule: it reads the scalar too, and `EcMulInstr` appends the result words as
-            // replay values on every instruction, setup included, so the write must consume them.
-            // Registering a static write here instead would leave those words unconsumed and drift
-            // the replay-value cursor for every later instruction.
-            let mul_spans = [
-                PostflightAccessSpan::read_fixed(
-                    openvm_instructions::riscv::MEMORY_AS,
-                    0,
-                    blocks as u32,
-                ),
-                PostflightAccessSpan::read_fixed(
-                    openvm_instructions::riscv::MEMORY_AS,
-                    1,
-                    SCALAR_BLOCKS as u32,
-                ),
-                PostflightAccessSpan::write_fixed_from_replay_values(
-                    openvm_instructions::riscv::MEMORY_AS,
-                    2,
-                    blocks as u32,
-                ),
-            ];
-            let mul_schedule = PostflightAccessSchedule {
-                register_operands: &[2, 3, 1],
-                zero_operand_mask: (1 << 6) | (1 << 7),
-                register_as_operand: 4,
-                memory_as_operand: 5,
-                spans: &mul_spans,
-            };
-            for local in [WeierstrassOpcode::EC_MUL, WeierstrassOpcode::SETUP_EC_MUL] {
-                registry.register(opcode(local)?, mul_schedule)?;
+            if curve.supports_ec_mul() {
+                // Setup consumes the scalar and recorded result to keep replay aligned.
+                let mul_spans = [
+                    PostflightAccessSpan::read_fixed(
+                        openvm_instructions::riscv::MEMORY_AS,
+                        0,
+                        blocks as u32,
+                    ),
+                    PostflightAccessSpan::read_fixed(
+                        openvm_instructions::riscv::MEMORY_AS,
+                        1,
+                        SCALAR_BLOCKS as u32,
+                    ),
+                    PostflightAccessSpan::write_fixed_from_replay_values(
+                        openvm_instructions::riscv::MEMORY_AS,
+                        2,
+                        blocks as u32,
+                    ),
+                ];
+                let mul_schedule = PostflightAccessSchedule {
+                    register_operands: &[2, 3, 1],
+                    zero_operand_mask: (1 << 6) | (1 << 7),
+                    register_as_operand: 4,
+                    memory_as_operand: 5,
+                    spans: &mul_spans,
+                };
+                for local in [WeierstrassOpcode::EC_MUL, WeierstrassOpcode::SETUP_EC_MUL] {
+                    registry.register(opcode(local)?, mul_schedule)?;
+                }
             }
         }
         Ok(())
@@ -437,12 +426,20 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         transcript: &'a GpuPostflightTranscript,
         replay_plan: &'a GpuPostflightPlan,
     ) -> Self {
-        let claimed_opcodes = (0..extension.supported_curves.len())
-            .flat_map(|curve_idx| {
-                let base = WeierstrassOpcode::CLASS_OFFSET + curve_idx * WeierstrassOpcode::COUNT;
-                (0..WeierstrassOpcode::COUNT).map(move |local| (base + local) as u32)
-            })
-            .collect::<Vec<_>>();
+        let mut claimed_opcodes = Vec::new();
+        for (curve_idx, curve) in extension.supported_curves.iter().enumerate() {
+            let base = WeierstrassOpcode::CLASS_OFFSET + curve_idx * WeierstrassOpcode::COUNT;
+            let supports_ec_mul = curve.supports_ec_mul();
+            for local in WeierstrassOpcode::iter().filter(|local| {
+                supports_ec_mul
+                    || !matches!(
+                        local,
+                        WeierstrassOpcode::EC_MUL | WeierstrassOpcode::SETUP_EC_MUL
+                    )
+            }) {
+                claimed_opcodes.push((base + local as usize) as u32);
+            }
+        }
         let pending_opcodes = claimed_opcodes
             .iter()
             .copied()
@@ -482,12 +479,6 @@ impl<'a> WeierstrassPreflightGpuTracegen<'a> {
         chip.generate_proving_ctx_from_postflight(self.program, self.transcript, self.replay_plan)
     }
 
-    /// `EC_MUL`'s trace is generated on the device by its dedicated gather and fill kernels.
-    ///
-    /// The shared vec-heap replay path cannot describe this chip: its point + 256-bit scalar +
-    /// point access pattern and its multirow trace fit none of the fixed (reads, blocks) shapes.
-    /// The host builder stays reachable through the executor-chip tracegen closure, and
-    /// `ec_mul_tests` asserts the two backends produce identical traces.
     fn generate_for_ec_mul_chip<const NUM_LIMBS: usize, const BLOCKS: usize>(
         &mut self,
         chip: &HybridEcMulChip<F, NUM_LIMBS, BLOCKS>,
@@ -685,31 +676,36 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     ))
                 });
 
-                inventory.next_air::<EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>>()?;
-                let mul = get_ec_mul_chip::<F, NUM_LIMBS_32, ECC_BLOCKS_32>(
-                    config,
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    byte_ptr_max_bits,
-                    curve.a.clone(),
-                );
-                let mul = HybridEcMulChip::new(
-                    mul,
-                    device_ctx.clone(),
-                    opcode_base,
-                    range_checker_gpu.clone(),
-                )
-                .map_err(|source| {
-                    ChipInventoryError::prover_chip_initialization("EC_MUL tracegen", source)
-                })?;
-                inventory.add_executor_chip_with_tracegen(mul, move |chip, postflight| {
-                    let trace =
-                        generate_ec_mul_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
-                    Ok(cpu_proving_ctx_to_gpu(
-                        AirProvingContext::simple_no_pis(trace),
-                        &chip.device_ctx,
-                    ))
-                });
+                if curve.supports_ec_mul() {
+                    inventory.next_air::<EcMulAir<NUM_LIMBS_32, ECC_BLOCKS_32>>()?;
+                    let mul = get_ec_mul_chip::<F, NUM_LIMBS_32, ECC_BLOCKS_32>(
+                        config,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                        curve.a.clone(),
+                    );
+                    let mul = HybridEcMulChip::new(
+                        mul,
+                        device_ctx.clone(),
+                        opcode_base,
+                        range_checker_gpu.clone(),
+                    )
+                    .map_err(|source| {
+                        ChipInventoryError::prover_chip_initialization("EC_MUL tracegen", source)
+                    })?;
+                    inventory.add_executor_chip_with_tracegen(mul, move |chip, postflight| {
+                        let trace = generate_ec_mul_trace_from_postflight(
+                            &chip.cpu,
+                            postflight,
+                            opcode_base,
+                        )?;
+                        Ok(cpu_proving_ctx_to_gpu(
+                            AirProvingContext::simple_no_pis(trace),
+                            &chip.device_ctx,
+                        ))
+                    });
+                }
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -774,31 +770,36 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, WeierstrassExtension> for Ecc
                     ))
                 });
 
-                inventory.next_air::<EcMulAir<NUM_LIMBS_48, ECC_BLOCKS_48>>()?;
-                let mul = get_ec_mul_chip::<F, NUM_LIMBS_48, ECC_BLOCKS_48>(
-                    config,
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    byte_ptr_max_bits,
-                    curve.a.clone(),
-                );
-                let mul = HybridEcMulChip::new(
-                    mul,
-                    device_ctx.clone(),
-                    opcode_base,
-                    range_checker_gpu.clone(),
-                )
-                .map_err(|source| {
-                    ChipInventoryError::prover_chip_initialization("EC_MUL tracegen", source)
-                })?;
-                inventory.add_executor_chip_with_tracegen(mul, move |chip, postflight| {
-                    let trace =
-                        generate_ec_mul_trace_from_postflight(&chip.cpu, postflight, opcode_base)?;
-                    Ok(cpu_proving_ctx_to_gpu(
-                        AirProvingContext::simple_no_pis(trace),
-                        &chip.device_ctx,
-                    ))
-                });
+                if curve.supports_ec_mul() {
+                    inventory.next_air::<EcMulAir<NUM_LIMBS_48, ECC_BLOCKS_48>>()?;
+                    let mul = get_ec_mul_chip::<F, NUM_LIMBS_48, ECC_BLOCKS_48>(
+                        config,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                        curve.a.clone(),
+                    );
+                    let mul = HybridEcMulChip::new(
+                        mul,
+                        device_ctx.clone(),
+                        opcode_base,
+                        range_checker_gpu.clone(),
+                    )
+                    .map_err(|source| {
+                        ChipInventoryError::prover_chip_initialization("EC_MUL tracegen", source)
+                    })?;
+                    inventory.add_executor_chip_with_tracegen(mul, move |chip, postflight| {
+                        let trace = generate_ec_mul_trace_from_postflight(
+                            &chip.cpu,
+                            postflight,
+                            opcode_base,
+                        )?;
+                        Ok(cpu_proving_ctx_to_gpu(
+                            AirProvingContext::simple_no_pis(trace),
+                            &chip.device_ctx,
+                        ))
+                    });
+                }
             } else {
                 panic!("Modulus too large");
             }

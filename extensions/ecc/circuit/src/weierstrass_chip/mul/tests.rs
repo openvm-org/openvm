@@ -185,17 +185,18 @@ fn supported_scalar_orders_are_accepted() {
         "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
     ] {
         let order = BigUint::parse_bytes(hex.as_bytes(), 16).unwrap();
-        assert_eq!(&order % 4u32, BigUint::from(1u32), "{hex} is not 1 mod 4");
-        super::assert_supported_scalar_order(&order);
+        assert!(
+            super::is_supported_scalar_order(&order),
+            "{hex} is not supported"
+        );
     }
 }
 
 #[test]
-#[should_panic(expected = "scalar order congruent to 1 mod 4")]
 fn scalar_order_three_mod_four_is_rejected() {
     // 23 = 3 (mod 4): scalar 21 reaches prefix 11, where 2*11 = -1 makes the addend and the
     // doubled accumulator share an x-coordinate.
-    super::assert_supported_scalar_order(&BigUint::from(23u32));
+    assert!(!super::is_supported_scalar_order(&BigUint::from(23u32)));
 }
 
 /// Pins the row layout the CUDA mirror restates by offsetof; a reordered field there would write

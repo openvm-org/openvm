@@ -6,11 +6,9 @@
 #include <cstddef>
 #include <cstdint>
 
-// Trace generation for the `EC_MUL` chip: the passes driving the field-expression interpreter. The
-// row layout they write around is in `ec_mul_columns.cuh`.
+// Fills the `EC_MUL` trace around the field-expression columns.
 
-// The accumulator a setup row carries, mirroring `SETUP_ACC` in `mul/field_expr.rs`; both
-// backends must choose the same value.
+// The setup row uses the same accumulator as `SETUP_ACC` in `mul/field_expr.rs`.
 static constexpr uint32_t EC_MUL_SETUP_ACC_X = 2;
 static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 
@@ -18,18 +16,14 @@ static constexpr uint32_t EC_MUL_SETUP_ACC_Y = 1;
 static constexpr uint32_t EC_MUL_EXPR_NUM_INPUTS = 4;
 static constexpr uint32_t EC_MUL_EXPR_NUM_OUTPUTS = 2;
 
-// The generic path uploads host-computed saved variables; supported device shapes prepare them in
-// projective coordinates and batch-normalize. The fill consumes either layout one thread per row
-// and performs no modular inversions.
-
-// Checks that a blob describes this chip's ladder step before any row relies on its shape.
+// The host path stores variables by row. The projective device path stores variables by variable.
 static __device__ bool ec_mul_program_matches(const FieldExprProg &s, uint32_t num_limbs) {
     return s.num_input == EC_MUL_EXPR_NUM_INPUTS && s.n_outputs == EC_MUL_EXPR_NUM_OUTPUTS &&
            s.num_flags == EC_MUL_SIGN_PATTERNS && s.num_limbs == num_limbs && s.needs_setup == 1 &&
-           s.should_finalize == 0;
+           s.n_setup_values == 1 && s.should_finalize == 0;
 }
 
-// An evaluation's two outputs, as the little-endian bytes the next row reads as input.
+// Reads the two outputs from a row-major buffer.
 static __device__ void ec_mul_output_bytes(
     uint8_t *out, const FieldExprProg &s, const uint32_t *var_canon, uint32_t k
 ) {
@@ -42,7 +36,7 @@ static __device__ void ec_mul_output_bytes(
     }
 }
 
-// An evaluation's two outputs from the row-major or variable-major saved-variable buffer.
+// Reads the two outputs from either saved-variable layout.
 static __device__ void ec_mul_output_bytes_from_layout(
     uint8_t *out,
     const FieldExprProg &s,
@@ -66,32 +60,20 @@ static __device__ void ec_mul_output_bytes_from_layout(
     }
 }
 
-// A setup row's inputs, mirroring `setup_row_inputs`: the modulus, the setup values, then
-// `EC_MUL_SETUP_ACC`.
+// Builds the same inputs as `setup_row_inputs`.
 static __device__ void ec_mul_setup_inputs(uint8_t *in_limbs, const FieldExprProg &s) {
     uint32_t nl = s.num_limbs;
     for (uint32_t byte = 0; byte < nl; byte++) {
         in_limbs[byte] = static_cast<uint8_t>(s.p[byte / 4] >> (8 * (byte % 4)));
+        in_limbs[nl + byte] = static_cast<uint8_t>(s.setup_values[byte]);
+        in_limbs[2 * nl + byte] = 0;
+        in_limbs[3 * nl + byte] = 0;
     }
-    for (uint32_t value = 0; value < s.n_setup_values; value++) {
-        for (uint32_t byte = 0; byte < nl; byte++) {
-            in_limbs[(value + 1) * nl + byte] =
-                static_cast<uint8_t>(s.setup_values[value * nl + byte]);
-        }
-    }
-    // Inputs the setup values do not cover stay zero.
-    for (uint32_t byte = (s.n_setup_values + 1) * nl; byte < (s.num_input - 2) * nl; byte++) {
-        in_limbs[byte] = 0;
-    }
-    uint8_t *acc = in_limbs + (s.num_input - 2) * nl;
-    for (uint32_t byte = 0; byte < 2 * nl; byte++) {
-        acc[byte] = 0;
-    }
-    acc[0] = static_cast<uint8_t>(EC_MUL_SETUP_ACC_X);
-    acc[nl] = static_cast<uint8_t>(EC_MUL_SETUP_ACC_Y);
+    in_limbs[2 * nl] = static_cast<uint8_t>(EC_MUL_SETUP_ACC_X);
+    in_limbs[3 * nl] = static_cast<uint8_t>(EC_MUL_SETUP_ACC_Y);
 }
 
-// A compute row's inputs: the base point, then the accumulator entering the row.
+// Builds the inputs for one compute row.
 static __device__ void ec_mul_compute_inputs(
     uint8_t *in_limbs, uint32_t num_limbs, const uint8_t *point_bytes, const uint8_t *acc_bytes
 ) {
@@ -101,7 +83,7 @@ static __device__ void ec_mul_compute_inputs(
     }
 }
 
-// The row mode for compute row `row_idx`.
+// Selects the expression mode for one row.
 static __device__ FieldExprRowMode ec_mul_row_mode(
     const uint8_t *scalar_bytes, size_t row_idx, bool is_setup
 ) {
@@ -112,8 +94,7 @@ static __device__ FieldExprRowMode ec_mul_row_mode(
                             false, false};
 }
 
-// Writes one row of the trace. `dummy_expr` is the inactive witness padding rows carry; an
-// all-zero region is unsatisfiable whenever the curve's `a` is nonzero.
+// Writes one trace row. Padding rows use `dummy_expr` as their inactive witness.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
 static __device__ __noinline__ bool ec_mul_fill_row(
     const FieldExprProg &s,
@@ -151,8 +132,7 @@ static __device__ __noinline__ bool ec_mul_fill_row(
 
     fill_ec_mul_header(row, scalar_bytes, local_row, is_setup);
 
-    // The witness reads saved variables in place. Projective generation stores them variable-major,
-    // so adjacent row threads load each word coalesced; the host fallback remains row-major.
+    // Projective generation stores variables by variable for coalesced reads.
     const size_t vars_index = instruction * EC_MUL_COMPUTE_ROWS + local_row;
     const size_t vars_rows = used_rows;
     FieldExprSavedVarsView<K> saved_vars = vars_transposed
@@ -186,6 +166,15 @@ static __device__ __noinline__ bool ec_mul_fill_row(
 
     // The final compute row also carries the instruction's memory I/O.
     if (local_row == EC_MUL_FINAL_ROW_IDX) {
+        ec_mul_output_bytes_from_layout(
+            acc_bytes, s, vars, vars_index, vars_rows, K, vars_transposed
+        );
+        for (uint32_t byte = 0; byte < 2 * s.num_limbs; byte++) {
+            if (acc_bytes[byte] != ec_mul_block_byte(input.write_blocks, byte)) {
+                preflight_set_error(err, FIELD_EXPR_OUTPUT_MISMATCH);
+                return false;
+            }
+        }
         EcMulIoFiller<NUM_LIMBS, BLOCKS> filler(
             range_checker, timestamp_max_bits, pointer_max_bits
         );
@@ -194,8 +183,7 @@ static __device__ __noinline__ bool ec_mul_fill_row(
     return true;
 }
 
-// Checks the host's trace shape and buffer sizing against the blob before any row is written; a
-// mismatch would otherwise be an out-of-bounds write rather than a failure.
+// Checks the trace shape and the saved-variable buffer size.
 template <uint32_t K, size_t NUM_LIMBS, size_t BLOCKS>
 static __device__ bool ec_mul_validate_trace_shape(
     const FieldExprProg &s,
@@ -204,8 +192,12 @@ static __device__ bool ec_mul_validate_trace_shape(
     size_t num_instructions,
     size_t vars_words
 ) {
-    return ec_mul_program_matches(s, static_cast<uint32_t>(NUM_LIMBS)) && s.k == K &&
-           width == EC_MUL_HEADER_WIDTH + s.width + EC_MUL_IO_WIDTH<NUM_LIMBS, BLOCKS> &&
-           num_instructions * EC_MUL_COMPUTE_ROWS <= height &&
-           vars_words >= num_instructions * EC_MUL_COMPUTE_ROWS * s.num_vars * K;
+    if (!ec_mul_program_matches(s, static_cast<uint32_t>(NUM_LIMBS)) || s.k != K ||
+        width != EC_MUL_HEADER_WIDTH + s.width + EC_MUL_IO_WIDTH<NUM_LIMBS, BLOCKS> ||
+        num_instructions > height / EC_MUL_COMPUTE_ROWS) {
+        return false;
+    }
+    const size_t rows = num_instructions * EC_MUL_COMPUTE_ROWS;
+    const size_t words_per_row = static_cast<size_t>(s.num_vars) * K;
+    return words_per_row != 0 && rows <= vars_words / words_per_row;
 }

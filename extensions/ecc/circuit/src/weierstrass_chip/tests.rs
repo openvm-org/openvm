@@ -2481,14 +2481,16 @@ mod ec_mul_tests {
             .expect("multi-instruction EC_MUL postflight proof failed");
     }
 
-    /// Replaces the point's `y` coordinate with zero after producing an otherwise valid history.
-    /// The first projective doubling then has `Z_D = 2*Y*Z = 0`. The device must report the active
-    /// zero divisor through the normal error channel in optimized builds, before batch inversion
-    /// or row materialization can consume the invalid projective state.
-    fn run_exceptional_denominator_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+    fn run_invalid_history_cuda_ec_mul<
+        const NUM_LIMBS: usize,
+        const BLOCKS: usize,
+        M: FnOnce(&mut PreflightHistory),
+    >(
         modulus: BigUint,
         a: BigUint,
         point: (BigUint, BigUint),
+        mutate: M,
+        expected_error: &str,
     ) {
         let offset = WeierstrassOpcode::CLASS_OFFSET;
         let mut rng = create_seeded_rng();
@@ -2514,12 +2516,7 @@ mod ec_mul_tests {
         );
         let execution = harness.preflight.executions.pop().unwrap();
         let mut history = execution.history;
-
-        // Three register reads precede the point blocks. Its second half is the y coordinate.
-        let point_y_start = 3 + BLOCKS / 2;
-        for event in &mut history.memory.accesses[point_y_start..3 + BLOCKS] {
-            event.value = [0; 4];
-        }
+        mutate(&mut history);
 
         let device_ctx = tester.range_checker().device_ctx.clone();
         let gpu_program =
@@ -2532,10 +2529,67 @@ mod ec_mul_tests {
             .gpu_chip
             .generate_proving_ctx_from_postflight(&gpu_program, &transcript, &replay_plan)
             .err()
-            .expect("zero projective denominator must be rejected");
-        assert!(error
-            .to_string()
-            .contains("projective variable generation failed"));
+            .expect("invalid EC_MUL history must be rejected");
+        let error = error.to_string();
+        assert!(
+            error.contains(expected_error),
+            "unexpected EC_MUL error: {error}"
+        );
+    }
+
+    /// Sets the point's `y` coordinate to zero. This makes the first projective denominator zero.
+    fn run_exceptional_denominator_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        modulus: BigUint,
+        a: BigUint,
+        point: (BigUint, BigUint),
+    ) {
+        run_invalid_history_cuda_ec_mul::<NUM_LIMBS, BLOCKS, _>(
+            modulus,
+            a,
+            point,
+            |history| {
+                // Three register reads come before the point blocks. The second half of the point
+                // is its y-coordinate.
+                let point_y_start = 3 + BLOCKS / 2;
+                for event in &mut history.memory.accesses[point_y_start..3 + BLOCKS] {
+                    event.value = [0; 4];
+                }
+            },
+            "projective variable generation failed",
+        );
+    }
+
+    /// Changes the recorded result. The CUDA row filler must reject it before proving.
+    fn run_corrupt_write_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        modulus: BigUint,
+        a: BigUint,
+        point: (BigUint, BigUint),
+    ) {
+        run_invalid_history_cuda_ec_mul::<NUM_LIMBS, BLOCKS, _>(
+            modulus,
+            a,
+            point,
+            |history| history.memory.accesses.last_mut().unwrap().value[0] ^= 1,
+            "trace generation rejected transcript",
+        );
+    }
+
+    /// Changes scalar 5 to scalar 4 without changing the recorded result.
+    fn run_even_scalar_cuda_ec_mul<const NUM_LIMBS: usize, const BLOCKS: usize>(
+        modulus: BigUint,
+        a: BigUint,
+        point: (BigUint, BigUint),
+    ) {
+        run_invalid_history_cuda_ec_mul::<NUM_LIMBS, BLOCKS, _>(
+            modulus,
+            a,
+            point,
+            |history| {
+                // The scalar blocks follow three register reads and the point blocks.
+                history.memory.accesses[3 + BLOCKS].value[0] &= !1;
+            },
+            "0x56020004",
+        );
     }
 
     /// Odd, nonzero, below both the secp256k1 and P-256 group orders.
@@ -2549,6 +2603,20 @@ mod ec_mul_tests {
             BigUint::from(0x1234_5679u32),
             (BigUint::from(1u32) << 255usize) - BigUint::from(1u32),
         ]
+    }
+
+    fn bls12_381_g1_generator() -> (BigUint, BigUint) {
+        let x = BigUint::from_str_radix(
+            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
+            16,
+        )
+        .unwrap();
+        let y = BigUint::from_str_radix(
+            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
+            16,
+        )
+        .unwrap();
+        (x, y)
     }
 
     #[test]
@@ -2658,21 +2726,11 @@ mod ec_mul_tests {
     #[test]
     fn test_ec_mul_cuda_bls12_381() {
         // The standard BLS12-381 G1 generator on y^2 = x^3 + 4.
-        let gx = BigUint::from_str_radix(
-            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
-            16,
-        )
-        .unwrap();
-        let gy = BigUint::from_str_radix(
-            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
-            16,
-        )
-        .unwrap();
         run_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
             WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             BigUint::zero(),
-            &[(gx, gy)],
+            &[bls12_381_g1_generator()],
             &[
                 BigUint::from(1u32),
                 BigUint::from(5u32),
@@ -2689,20 +2747,10 @@ mod ec_mul_tests {
             SampleEcPoints[0].clone(),
         );
 
-        let gx = BigUint::from_str_radix(
-            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
-            16,
-        )
-        .unwrap();
-        let gy = BigUint::from_str_radix(
-            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
-            16,
-        )
-        .unwrap();
         run_multi_instruction_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
             BLS12_381_MODULUS.clone(),
             BigUint::zero(),
-            (gx, gy),
+            bls12_381_g1_generator(),
         );
     }
 
@@ -2714,20 +2762,34 @@ mod ec_mul_tests {
             SampleEcPoints[0].clone(),
         );
 
-        let gx = BigUint::from_str_radix(
-            "17F1D3A73197D7942695638C4FA9AC0FC3688C4F9774B905A14E3A3F171BAC586C55E83FF97A1AEFFB3AF00ADB22C6BB",
-            16,
-        )
-        .unwrap();
-        let gy = BigUint::from_str_radix(
-            "08B3F481E3AAA0F1A09E30ED741D8AE4FCF5E095D5D00AF600DB18CB2C04B3EDD03CC744A2888AE40CAA232946C5E7E1",
-            16,
-        )
-        .unwrap();
         run_exceptional_denominator_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
             BLS12_381_MODULUS.clone(),
             BigUint::zero(),
-            (gx, gy),
+            bls12_381_g1_generator(),
+        );
+    }
+
+    #[test]
+    fn test_ec_mul_cuda_rejects_corrupt_write_k8_k12() {
+        run_corrupt_write_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            SampleEcPoints[0].clone(),
+        );
+
+        run_corrupt_write_cuda_ec_mul::<NUM_LIMBS_48, ECC_BLOCKS_48>(
+            BLS12_381_MODULUS.clone(),
+            BigUint::zero(),
+            bls12_381_g1_generator(),
+        );
+    }
+
+    #[test]
+    fn test_ec_mul_cuda_rejects_even_scalar() {
+        run_even_scalar_cuda_ec_mul::<NUM_LIMBS_32, ECC_BLOCKS_32>(
+            secp256k1_coord_prime(),
+            BigUint::zero(),
+            SampleEcPoints[0].clone(),
         );
     }
 }
