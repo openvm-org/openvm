@@ -382,7 +382,8 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bls12_381(
     blst_p1 jacobian;
     blst_p1_from_affine(&jacobian, &base);
     blst_p1 product;
-    blst_p1_unchecked_mult(&product, &jacobian, scalar, BLS12_381_FR_BYTES * 8);
+    /* The EC_MUL contract permits BLST's faster prime-subgroup GLV path. */
+    blst_p1_mult(&product, &jacobian, scalar, BLS12_381_FR_BYTES * 8);
 
     blst_p1_affine affine;
     blst_p1_to_affine(&affine, &product);
