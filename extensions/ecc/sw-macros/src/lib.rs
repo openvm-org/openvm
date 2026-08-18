@@ -123,10 +123,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 pub unsafe fn mul_scalar_le_unchecked<const CHECK_SETUP: bool>(&self, scalar: &[u8; 32]) -> Self {
                     #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
-                        // Execution backends read an even input as scalar | 1. Even inputs remain
-                        // outside the EC_MUL proof contract.
-                        let mut scalar = *scalar;
-                        scalar[0] |= 1;
+                        debug_assert_eq!(scalar[0] & 1, 1, "EC_MUL scalar must be odd");
                         // Use complete MSB-first double-and-add. For valid inputs, the chip's
                         // signed-digit ladder computes the same product.
                         let mut acc = Self::identity();

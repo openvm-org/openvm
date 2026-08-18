@@ -313,10 +313,10 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_k256(RvState* state,
     return;
   }
 
-  /* EC_MUL uses scalar | 1. Valid inputs are already odd and below the group order. */
   uint64_t scalar_words[SECP256K1_ELEM_WORDS];
   read_mem_u64_range(state, rs2_ptr, scalar_words, SECP256K1_ELEM_WORDS);
-  ((uint8_t*)scalar_words)[0] |= 1;
+  /* The AIR requires an odd scalar. */
+  assert((scalar_words[0] & 1) != 0);
   secp256k1_scalar q = scalar_from_le_bytes((const uint8_t*)scalar_words);
 
   secp256k1_ge base;

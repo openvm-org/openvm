@@ -5,6 +5,7 @@
 
 #include <mcl/bn_c384_256.h>
 
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -68,8 +69,8 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
         }
     }
 
-    /* EC_MUL uses scalar | 1. Valid inputs are already odd and below the group order. */
-    scalar_words[0] |= 1;
+    /* The AIR requires an odd scalar. */
+    assert((scalar_words[0] & 1) != 0);
     mclBnFr scalar;
     int scalar_ok = mclBnFr_setLittleEndianMod(&scalar, scalar_words, BN254_SCALAR_BYTES);
     /* The decoder accepts inputs of up to 64 bytes. */

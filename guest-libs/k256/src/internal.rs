@@ -133,18 +133,6 @@ mod tests {
     }
 
     #[test]
-    fn raw_mul_sets_the_low_scalar_bit() {
-        let scalar = Secp256k1Scalar::from_u64(2);
-        let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
-
-        // Even raw inputs are outside the proof contract. All execution backends still read this
-        // input as 3.
-        let product = unsafe { Secp256k1Point::GENERATOR.mul_scalar_le_unchecked::<true>(&bytes) };
-
-        assert_eq!(product, windowed_reference(Secp256k1Scalar::from_u64(3)));
-    }
-
-    #[test]
     fn mul_scalar_reduces_the_scalar() {
         // n + 5
         let unreduced = Secp256k1Scalar::from_be_bytes_unchecked(&hex!(

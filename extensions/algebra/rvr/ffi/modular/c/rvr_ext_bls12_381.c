@@ -3,6 +3,7 @@
 #include "openvm.h"
 #include "rvr_ext_bls12_381.h"
 #include <blst.h>
+#include <assert.h>
 #include <string.h>
 
 #if !defined(__BYTE_ORDER__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
@@ -374,8 +375,8 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bls12_381(
 
     uint64_t words[BLS12_381_FR_WORDS];
     read_mem_u64_range(state, rs2_ptr, words, BLS12_381_FR_WORDS);
-    /* EC_MUL uses scalar | 1. Valid inputs are already odd. */
-    ((byte *)words)[0] |= 1;
+    /* The AIR requires an odd scalar. */
+    assert((words[0] & 1) != 0);
     const byte *scalar = (const byte *)words;
 
     blst_p1 jacobian;

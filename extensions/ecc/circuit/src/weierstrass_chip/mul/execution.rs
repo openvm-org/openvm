@@ -277,6 +277,9 @@ unsafe fn execute_e12_impl<
         exec_state.vm_read_bytes(MEMORY_AS, rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32)
     });
     let scalar: &[u8; SCALAR_LIMBS] = scalar_blocks.as_flattened().try_into().unwrap();
+    if !IS_SETUP {
+        debug_assert_eq!(scalar[0] & 1, 1, "EC_MUL scalar must be odd");
+    }
 
     if IS_SETUP {
         // The point operand carries (modulus, a), as for the other setup opcodes; a mismatch

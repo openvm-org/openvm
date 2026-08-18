@@ -112,17 +112,15 @@ const SCALAR_BITS: usize = 256;
 /// Scalar operand width in bytes.
 const SCALAR_BYTES: u32 = (SCALAR_BITS / 8) as u32;
 
-/// Computes `(scalar | 1) * base` from the most significant bit.
+/// Computes `scalar * base` from the most significant bit.
 ///
-/// EC_MUL requires an odd scalar below the group order. Setting bit zero also keeps execution
-/// defined for an even scalar. The EC_MUL contract excludes that input.
+/// EC_MUL requires an odd scalar below the group order.
 ///
 /// The projective accumulator uses one inversion when it converts back to affine coordinates.
 fn ec_mul_ladder<C: CurveAffine>(base: C, scalar_le: &[u8]) -> C {
+    debug_assert_eq!(scalar_le[0] & 1, 1, "EC_MUL scalar must be odd");
     let mut acc = C::Curve::identity();
-    for (i, byte) in scalar_le.iter().enumerate().rev() {
-        // The scalar's low bit is not a digit; it is the `+1` in `2B + 1`, so it is always set.
-        let byte = if i == 0 { byte | 1 } else { *byte };
+    for byte in scalar_le.iter().rev().copied() {
         for shift in (0..8).rev() {
             acc = acc.double();
             if (byte >> shift) & 1 == 1 {
@@ -591,9 +589,6 @@ mod tests {
         let generator = C::generator();
         let (px, py) = coordinates(generator);
 
-        // Odd scalars only: `ec_mul_ladder` computes `(k | 1) * P` to match the circuit, so an
-        // even `k` would be compared against the wrong reference. The `| 1` itself is covered by
-        // `ladder_forces_the_low_bit`.
         for k in [1u64, 3, 5, 255, 257, 0x1234_5679, u64::MAX] {
             let bytes = scalar_le(k);
             let expected = affine_ladder::<C>(px, py, &bytes);
@@ -609,23 +604,12 @@ mod tests {
         check_ladder_against_affine::<halo2curves_axiom::bn256::G1Affine>();
     }
 
-    /// An even scalar is multiplied as `k | 1`, matching the circuit.
-    ///
-    /// The circuit's digits are all `+-1`, so it can only represent odd multipliers; its final row
-    /// rejects an even operand. This path has no such check and must not diverge, so it rounds the
-    /// same way rather than computing the mathematically correct `k * P`.
     #[test]
-    fn ladder_forces_the_low_bit() {
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "EC_MUL scalar must be odd")]
+    fn ladder_rejects_an_even_scalar_in_debug_builds() {
         type C = halo2curves_axiom::bn256::G1Affine;
-        let g = C::generator();
-
-        for even in [0u64, 2, 4, 256, 0x1234_5678] {
-            assert_eq!(
-                coordinates(ec_mul_ladder(g, &scalar_le(even))),
-                coordinates(ec_mul_ladder(g, &scalar_le(even | 1))),
-                "k = {even}"
-            );
-        }
+        ec_mul_ladder(C::generator(), &scalar_le(2));
     }
 
     #[test]
@@ -635,7 +619,7 @@ mod tests {
 
         // An identity base stays at the identity for every scalar. The circuit cannot prove this
         // case, but execution must still terminate with the mathematically correct value.
-        for k in [0u64, 1, 9] {
+        for k in [1u64, 9] {
             let product = ec_mul_ladder(<C as PrimeCurveAffine>::identity(), &scalar_le(k));
             assert_eq!(coordinates(product), (zero, zero), "k = {k}");
         }
