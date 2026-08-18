@@ -25,10 +25,11 @@
 //!
 //! # Preconditions
 //!
-//! The scalar operand must be odd and below the curve order, and the base point must lie on the
-//! curve in the prime-order subgroup. None of these are checked here, as `EC_ADD_NE` does not
-//! check its distinct-x precondition; the guest wrappers discharge them by reducing mod `n` and
-//! substituting `n - k` (with a negated product) for even results.
+//! The base point must not be the identity. It must be on the curve and in the prime-order
+//! subgroup. The scalar must be odd and less than the subgroup order `n`.
+//!
+//! The caller must meet these requirements. Guest wrappers reduce the scalar modulo `n`, handle
+//! zero and identity inputs, and use `n - k` with a negated result when the reduced scalar is even.
 
 mod air;
 mod columns;
@@ -47,6 +48,7 @@ pub use columns::*;
 pub(crate) use cuda::*;
 pub use field_expr::*;
 use num_bigint::BigUint;
+use openvm_circuit_primitives::BYTE_BITS;
 use openvm_mod_circuit_builder::FieldExpressionProgram;
 pub use trace::*;
 
@@ -128,7 +130,7 @@ pub const EC_MUL_SIGN_PATTERNS: usize = 1 << EC_MUL_STEPS_PER_ROW;
 pub const EC_MUL_COMPUTE_ROWS: usize = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
 
 const _: () = assert!(EC_MUL_SCALAR_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));
-const _: () = assert!(8usize.is_multiple_of(EC_MUL_STEPS_PER_ROW));
+const _: () = assert!(BYTE_BITS.is_multiple_of(EC_MUL_STEPS_PER_ROW));
 
 // The rvr lifter restates these values, since it cannot depend on this crate.
 #[cfg(feature = "rvr")]
@@ -138,11 +140,11 @@ const _: () = {
 };
 
 /// Scalar width in 8-bit limbs, matching the coordinate `limb_bits` used by the ECC chips.
-pub const SCALAR_LIMBS: usize = EC_MUL_SCALAR_BITS / 8;
+pub const SCALAR_LIMBS: usize = EC_MUL_SCALAR_BITS / BYTE_BITS;
 /// Memory blocks spanned by the scalar.
 pub const SCALAR_BLOCKS: usize = SCALAR_LIMBS / openvm_circuit::arch::MEMORY_BLOCK_BYTES;
 
 /// Width of the bit accumulator, in limbs of one row's digits.
 pub const SCALAR_ACC_LIMBS: usize = EC_MUL_SCALAR_BITS / EC_MUL_STEPS_PER_ROW;
 /// Accumulator limbs spanned by one scalar byte.
-pub const SCALAR_ACC_LIMBS_PER_BYTE: usize = 8 / EC_MUL_STEPS_PER_ROW;
+pub const SCALAR_ACC_LIMBS_PER_BYTE: usize = BYTE_BITS / EC_MUL_STEPS_PER_ROW;
