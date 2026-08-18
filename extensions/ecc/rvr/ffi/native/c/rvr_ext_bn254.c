@@ -20,11 +20,17 @@ static constexpr uint32_t BN254_SCALAR_WORDS = BN254_SCALAR_BYTES / WORD_SIZE;
 
 static bool mcl_bn254_ready;
 
+static bool is_mcl_bn254_ready(void) {
+    return mclBn_getCurveType() == MCL_BN_SNARK1 && mclBn_getFpByteSize() == BN254_FIELD_BYTES &&
+           mclBn_getFrByteSize() == BN254_SCALAR_BYTES;
+}
+
 /* MCL initialization is process-global and not thread-safe; run it at load, before the compiled
  * RVR instance can be shared across threads. */
 __attribute__((constructor)) static void initialize_mcl_bn254_at_load(void) {
-    mcl_bn254_ready = mclBn_init(MCL_BN_SNARK1, MCLBN_COMPILED_TIME_VAR) == 0 &&
-                      mclBn_getFpByteSize() == 32 && mclBn_getFrByteSize() == 32;
+    mcl_bn254_ready =
+        is_mcl_bn254_ready() ||
+        (mclBn_init(MCL_BN_SNARK1, MCLBN_COMPILED_TIME_VAR) == 0 && is_mcl_bn254_ready());
 }
 
 __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
@@ -33,7 +39,8 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
     uint64_t rs1_ptr,
     uint64_t rs2_ptr
 ) {
-    if (unlikely(!mcl_bn254_ready)) {
+    /* MCL curve selection is global. Trap if it changed after initialization. */
+    if (unlikely(!mcl_bn254_ready || !is_mcl_bn254_ready())) {
         __builtin_trap();
     }
 
@@ -47,20 +54,25 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
     mclBnG1 base;
     static constexpr uint64_t ZERO[BN254_FIELD_WORDS] = {};
     if (memcmp(x, ZERO, sizeof(x)) == 0 && memcmp(y, ZERO, sizeof(y)) == 0) {
+        /* Keep execution defined for the VM identity value. The EC_MUL contract excludes it. */
         mclBnG1_clear(&base);
     } else {
         int x_ok = mclBnFp_setLittleEndianMod(&base.x, x, BN254_FIELD_BYTES);
         int y_ok = mclBnFp_setLittleEndianMod(&base.y, y, BN254_FIELD_BYTES);
+        /* The decoder accepts inputs of up to 64 bytes. */
         assert_assume(x_ok == 0 && y_ok == 0);
         mclBnFp_setInt32(&base.z, 1);
         if (!mclBnG1_isValid(&base)) {
+            /* Keep execution defined for an invalid point. The EC_MUL contract excludes it. */
             mclBnG1_clear(&base);
         }
     }
 
+    /* EC_MUL uses scalar | 1. Valid inputs are already odd and below the group order. */
     scalar_words[0] |= 1;
     mclBnFr scalar;
     int scalar_ok = mclBnFr_setLittleEndianMod(&scalar, scalar_words, BN254_SCALAR_BYTES);
+    /* The decoder accepts inputs of up to 64 bytes. */
     assert_assume(scalar_ok == 0);
 
     mclBnG1 product;
@@ -71,9 +83,12 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bn254(
     if (!mclBnG1_isZero(&product)) {
         mclBnG1 normalized;
         mclBnG1_normalize(&normalized, &product);
-        mclSize x_size = mclBnFp_serialize(output_x, BN254_FIELD_BYTES, &normalized.x);
-        mclSize y_size = mclBnFp_serialize(output_y, BN254_FIELD_BYTES, &normalized.y);
-        assert_assume(x_size == BN254_FIELD_BYTES && y_size == BN254_FIELD_BYTES);
+        mclSize x_size = mclBnFp_getLittleEndian(output_x, BN254_FIELD_BYTES, &normalized.x);
+        mclSize y_size = mclBnFp_getLittleEndian(output_y, BN254_FIELD_BYTES, &normalized.y);
+        /* Each field value fits in 32 bytes. The zero-filled buffers add any required padding. */
+        assert_assume(
+            x_size > 0 && x_size <= BN254_FIELD_BYTES && y_size > 0 && y_size <= BN254_FIELD_BYTES
+        );
     }
     write_mem_u64_range(state, rd_ptr, output_x, BN254_FIELD_WORDS);
     write_mem_u64_range(state, rd_ptr + BN254_FIELD_BYTES, output_y, BN254_FIELD_WORDS);

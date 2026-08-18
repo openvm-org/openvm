@@ -158,6 +158,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_bls12_381_fq(
 ) {
     blst_fp a = fp_read(state, rs1_ptr);
     blst_fp b = fp_read(state, rs2_ptr);
+    /* DIV requires a nonzero divisor. */
     assert_assume(!fp_is_zero(&b));
     blst_fp b_inv = fp_inv(&b);
     blst_fp r = fp_mul(&a, &b_inv);
@@ -220,6 +221,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_bls12_381_fr(
 ) {
     blst_fr a = fr_read(state, rs1_ptr);
     blst_fr b = fr_read(state, rs2_ptr);
+    /* DIV requires a nonzero divisor. */
     assert_assume(!fr_is_zero(&b));
     blst_fr b_inv;
     blst_fr_inverse(&b_inv, &b);
@@ -284,6 +286,7 @@ __attribute__((preserve_most)) void rvr_ext_fp2_div_bls12_381(
 ) {
     blst_fp2 a = fp2_read(state, rs1_ptr);
     blst_fp2 b = fp2_read(state, rs2_ptr);
+    /* DIV requires a nonzero divisor. */
     assert_assume(!fp2_is_zero(&b));
     blst_fp2 b_inv;
     blst_fp2_inverse(&b_inv, &b);
@@ -308,6 +311,7 @@ __attribute__((preserve_most)) void rvr_ext_ec_add_ne_bls12_381(
     /* lambda = (y2 - y1) / (x2 - x1) */
     blst_fp dy = fp_sub(&y2, &y1);
     blst_fp dx = fp_sub(&x2, &x1);
+    /* EC_ADD_NE requires distinct x-coordinates. */
     assert_assume(!fp_is_zero(&dx));
     blst_fp dx_inv = fp_inv(&dx);
     blst_fp lambda = fp_mul(&dy, &dx_inv);
@@ -339,6 +343,7 @@ __attribute__((preserve_most)) void rvr_ext_ec_double_bls12_381(
     blst_fp two_x1sq = fp_add(&x1sq, &x1sq);
     blst_fp three_x1sq = fp_add(&two_x1sq, &x1sq);
     blst_fp two_y1 = fp_add(&y1, &y1);
+    /* EC_DOUBLE requires a nonzero y-coordinate. */
     assert_assume(!fp_is_zero(&two_y1));
     blst_fp two_y1_inv = fp_inv(&two_y1);
     blst_fp lambda = fp_mul(&three_x1sq, &two_y1_inv);
@@ -367,11 +372,11 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_bls12_381(
     base.x = fp_read(state, rs1_ptr);
     base.y = fp_read(state, rs1_ptr + BLS12_381_FP_BYTES);
 
-    /* EC_MUL requires an odd scalar: the chip's digits are all +-1, whose sum is never even. */
     uint64_t words[BLS12_381_FR_WORDS];
     read_mem_u64_range(state, rs2_ptr, words, BLS12_381_FR_WORDS);
+    /* EC_MUL uses scalar | 1. Valid inputs are already odd. */
+    ((byte *)words)[0] |= 1;
     const byte *scalar = (const byte *)words;
-    assert_assume(scalar[0] & 1);
 
     blst_p1 jacobian;
     blst_p1_from_affine(&jacobian, &base);

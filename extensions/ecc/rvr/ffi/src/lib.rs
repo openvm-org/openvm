@@ -112,18 +112,12 @@ const SCALAR_BITS: usize = 256;
 /// Scalar operand width in bytes.
 const SCALAR_BYTES: u32 = (SCALAR_BITS / 8) as u32;
 
-/// MSB-first double-and-add computing `(scalar | 1) * base`.
+/// Computes `(scalar | 1) * base` from the most significant bit.
 ///
-/// The circuit expands the scalar into digits drawn from `{+1, -1}`, whose sum is `2B + 1` for
-/// `B = scalar >> 1` — equivalently, `scalar | 1`. Forcing the low bit here makes this path agree
-/// with the circuit byte for byte on every input, rather than only on the odd scalars a caller is
-/// obliged to supply. Given an even one the two agree on a value neither can prove, which is
-/// preferable to the backends diverging.
+/// EC_MUL requires an odd scalar below the group order. Setting bit zero also keeps execution
+/// defined for an even scalar. The EC_MUL contract excludes that input.
 ///
-/// The accumulator remains projective, so the multiplication costs a single inversion in
-/// `to_affine` rather than one per step. No case analysis is required: halo2curves' projective
-/// formulas are exception-free and its affine identity is `(0, 0)`, the same sentinel the circuit
-/// uses, so an identity base falls out of the general case.
+/// The projective accumulator uses one inversion when it converts back to affine coordinates.
 fn ec_mul_ladder<C: CurveAffine>(base: C, scalar_le: &[u8]) -> C {
     let mut acc = C::Curve::identity();
     for (i, byte) in scalar_le.iter().enumerate().rev() {
@@ -148,7 +142,8 @@ where
 {
     let x: C::Base = read_field_256(state, rs1_ptr);
     let y: C::Base = read_field_256(state, rs1_ptr + BN254_FQ_BYTES);
-    // `is_on_curve` admits `(0, 0)`, so this also accepts the identity.
+    // Map an invalid point to the identity so execution stays defined. The EC_MUL contract requires
+    // an on-curve point in the prime subgroup.
     let base = Option::<C>::from(C::from_xy(x, y)).unwrap_or_else(C::identity);
 
     let scalar = trace_read_bytes(state, rs2_ptr, SCALAR_BYTES);
@@ -340,10 +335,14 @@ unsafe fn ec_double_256_entry<
 
 macro_rules! ecc_add_ne_entry {
     ($name:ident, $curve:ty) => {
+        /// Executes partial affine addition for two nonidentity points with distinct
+        /// x-coordinates.
+        ///
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
-        /// Pointer parameters must point to valid affine point coordinates.
+        /// `rd_ptr` must address writable point memory. `rs1_ptr` and `rs2_ptr` must address valid
+        /// points that meet the requirements above.
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
@@ -358,10 +357,13 @@ macro_rules! ecc_add_ne_entry {
 
 macro_rules! ecc_double_entry {
     ($name:ident, $curve:ty, $a:expr) => {
+        /// Executes partial affine doubling for a nonidentity point whose double is nonidentity.
+        ///
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
-        /// Pointer parameters must point to valid affine point coordinates.
+        /// `rd_ptr` must address writable point memory. `rs1_ptr` must address a valid point that
+        /// meets the requirements above.
         #[no_mangle]
         pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
             ec_double_256_entry::<$curve>(state, rd_ptr, rs1_ptr, $a);
@@ -406,10 +408,20 @@ macro_rules! ecc_double_setup_entry {
 
 macro_rules! ecc_mul_entry {
     ($name:ident, $curve:ty) => {
+        /// Executes partial scalar multiplication for a nonidentity prime-subgroup point.
+        ///
+        /// Requirements:
+        ///
+        /// - The point is not the identity.
+        /// - The point is in the prime subgroup.
+        /// - The scalar is odd and below the subgroup order.
+        /// - The subgroup order is congruent to 1 modulo 4.
+        ///
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
-        /// Pointer parameters must point to valid affine point coordinates.
+        /// `rd_ptr` must address writable point memory. `rs1_ptr` must address a valid point that
+        /// meets the requirements above. `rs2_ptr` must address a 256-bit scalar.
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,

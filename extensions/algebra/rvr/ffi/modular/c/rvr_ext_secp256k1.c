@@ -101,16 +101,19 @@ static inline int fe_is_zero(const secp256k1_fe* a) {
 
 /* ── k256 scalar (mod n) helpers ─────────────────────────────────────── */
 
-static inline secp256k1_scalar scalar_read(RvState* state, uint64_t ptr) {
-  uint64_t words[SECP256K1_ELEM_WORDS];
-  read_mem_u64_range(state, ptr, words, SECP256K1_ELEM_WORDS);
-  uint8_t le[SECP256K1_ELEM_BYTES];
-  memcpy(le, words, SECP256K1_ELEM_BYTES);
+static inline secp256k1_scalar scalar_from_le_bytes(
+    const uint8_t le[static const SECP256K1_ELEM_BYTES]) {
   uint8_t be[SECP256K1_ELEM_BYTES];
   bytes_reverse_32(be, le);
   secp256k1_scalar r;
   secp256k1_scalar_set_b32(&r, be, NULL);
   return r;
+}
+
+static inline secp256k1_scalar scalar_read(RvState* state, uint64_t ptr) {
+  uint64_t words[SECP256K1_ELEM_WORDS];
+  read_mem_u64_range(state, ptr, words, SECP256K1_ELEM_WORDS);
+  return scalar_from_le_bytes((const uint8_t*)words);
 }
 
 static inline void scalar_write(RvState* state, uint64_t ptr,
@@ -154,6 +157,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_coord(
     RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
+  /* DIV requires a nonzero divisor. */
   assert_assume(!fe_is_zero(&b));
   secp256k1_fe b_inv = fe_inv(&b);
   secp256k1_fe r = fe_mul(&a, &b_inv);
@@ -202,6 +206,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_scalar(
     RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
+  /* DIV requires a nonzero divisor. */
   assert_assume(!secp256k1_scalar_is_zero(&b));
   secp256k1_scalar b_inv;
   secp256k1_scalar_inverse_var(&b_inv, &b);
@@ -244,6 +249,7 @@ __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
   /* lambda = (y2 - y1) / (x2 - x1) */
   secp256k1_fe dy = fe_sub(&y2, &y1);
   secp256k1_fe dx = fe_sub(&x2, &x1);
+  /* EC_ADD_NE requires distinct x-coordinates. */
   assert_assume(!fe_is_zero(&dx));
   secp256k1_fe dx_inv = fe_inv(&dx);
   secp256k1_fe lambda = fe_mul(&dy, &dx_inv);
@@ -272,6 +278,7 @@ __attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
   secp256k1_fe x1sq = fe_mul(&x1, &x1);
   secp256k1_fe three_x1sq = fe_add(fe_add(x1sq, &x1sq), &x1sq);
   secp256k1_fe two_y1 = fe_add(y1, &y1);
+  /* EC_DOUBLE requires a nonzero y-coordinate. */
   assert_assume(!fe_is_zero(&two_y1));
   secp256k1_fe two_y1_inv = fe_inv(&two_y1);
   secp256k1_fe lambda = fe_mul(&three_x1sq, &two_y1_inv);
@@ -306,9 +313,11 @@ __attribute__((preserve_most)) void rvr_ext_ec_mul_k256(RvState* state,
     return;
   }
 
-  /* EC_MUL requires an odd scalar: the chip's digits are all +-1, whose sum is never even. */
-  secp256k1_scalar q = scalar_read(state, rs2_ptr);
-  assert_assume(!secp256k1_scalar_is_even(&q));
+  /* EC_MUL uses scalar | 1. Valid inputs are already odd and below the group order. */
+  uint64_t scalar_words[SECP256K1_ELEM_WORDS];
+  read_mem_u64_range(state, rs2_ptr, scalar_words, SECP256K1_ELEM_WORDS);
+  ((uint8_t*)scalar_words)[0] |= 1;
+  secp256k1_scalar q = scalar_from_le_bytes((const uint8_t*)scalar_words);
 
   secp256k1_ge base;
   secp256k1_ge_set_xy(&base, &x, &y);
