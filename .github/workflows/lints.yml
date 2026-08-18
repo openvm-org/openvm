@@ -33,6 +33,7 @@ jobs:
               - 'rust-toolchain.toml'
               - '.cargo/config.toml'
               - 'scripts/gpu_driver_setup.sh'
+              - 'scripts/ubuntu_apt.sh'
               - '.github/workflows/lints.yml'
               - '.github/actions/sccache/**'
               - '.github/actions/rust-cache-cuda/**'

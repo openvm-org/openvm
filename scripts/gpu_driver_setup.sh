@@ -5,6 +5,8 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+source "$(dirname "${BASH_SOURCE[0]}")/ubuntu_apt.sh"
+
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     nvidia-smi
     exit 0
@@ -66,7 +68,7 @@ remove_closed_kernel_modules() {
     )
 
     if ((${#closed_pkgs[@]})); then
-        sudo apt-get remove -y "${closed_pkgs[@]}"
+        apt_get remove -y "${closed_pkgs[@]}"
     fi
 }
 
@@ -79,23 +81,23 @@ has_apt_candidate() {
 
 echo "nvidia-smi not functional; switching to open kernel module driver flavor..."
 set -ex
-sudo apt-get update -qq
+apt_get update -qq
 remove_closed_kernel_modules
 
 # Prefer the prebuilt open modules for the running kernel. Installing the
 # nvidia-driver-*-open meta package here pulls DKMS, which conflicts with the
 # same .ko files shipped by the prebuilt linux-modules package.
 if has_apt_candidate "$OPEN_MODULE_PKG"; then
-    sudo apt-get install -y --no-install-recommends "$OPEN_MODULE_PKG"
+    apt_get install -y --no-install-recommends "$OPEN_MODULE_PKG"
 else
-    sudo apt-get install -y --no-install-recommends \
+    apt_get install -y --no-install-recommends \
         "nvidia-driver-${DRIVER_SERIES}-open" \
         "nvidia-dkms-${DRIVER_SERIES}-open" \
         "linux-headers-${KERNEL_RELEASE}"
 fi
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
-    sudo apt-get install -y --no-install-recommends "nvidia-utils-${DRIVER_SERIES}"
+    apt_get install -y --no-install-recommends "nvidia-utils-${DRIVER_SERIES}"
 fi
 
 sudo rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia 2>/dev/null || true

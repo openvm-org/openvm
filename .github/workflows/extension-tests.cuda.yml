@@ -23,6 +23,7 @@ on:
       - ".github/workflows/extension-tests.cuda.yml"
       - "ci/install-openvm-toolchain.sh"
       - "scripts/gpu_driver_setup.sh"
+      - "scripts/ubuntu_apt.sh"
   pull_request:
     branches: ["**"]
     paths: *extension_cuda_test_paths

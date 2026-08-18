@@ -34,6 +34,7 @@ on:
       - "crates/sdk/guest/fib/**"
       - "ci/install-openvm-toolchain.sh"
       - "scripts/gpu_driver_setup.sh"
+      - "scripts/ubuntu_apt.sh"
   pull_request:
     branches: ["**"]
     paths: *guest_lib_cuda_test_paths

@@ -18,6 +18,7 @@ cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/extension-tests.cuda.yml"
   - "scripts/gpu_driver_setup.sh"
+  - "scripts/ubuntu_apt.sh"
 riscv: &riscv
   - *shared
   - "extensions/riscv/**"
