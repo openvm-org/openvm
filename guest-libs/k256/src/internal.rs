@@ -109,7 +109,10 @@ impl ScalarMul<Secp256k1Scalar> for Secp256k1Point {
 mod tests {
     use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{weierstrass::CachedMulTable, CyclicGroup, Group};
+    use openvm_ecc_guest::{
+        weierstrass::{CachedMulTable, IntrinsicCurve},
+        CyclicGroup, Group,
+    };
 
     use super::{Secp256k1, Secp256k1Point, Secp256k1Scalar};
 
@@ -142,6 +145,10 @@ mod tests {
 
         let expected = windowed_reference(Secp256k1Scalar::from_u64(5));
         assert_eq!(Secp256k1Point::GENERATOR.mul_scalar(&unreduced), expected);
+        assert_eq!(
+            Secp256k1::msm(&[unreduced], &[Secp256k1Point::GENERATOR]),
+            expected
+        );
     }
 
     #[test]

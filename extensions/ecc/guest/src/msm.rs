@@ -1,7 +1,7 @@
 use alloc::{vec, vec::Vec};
 use core::ops::{Add, Neg};
 
-use openvm_algebra_guest::IntMod;
+use openvm_algebra_guest::{IntMod, Reduce};
 
 use super::{weierstrass::ScalarMul, Group};
 
@@ -122,22 +122,38 @@ where
     acc
 }
 
-/// Multi-scalar multiplication using one `EC_MUL` scalar product per base.
+/// Multi-scalar multiplication for prime-subgroup points.
+///
+/// OpenVM uses one `EC_MUL` operation per base. Host builds use Pippenger.
 pub fn msm_via_ec_mul<EcPoint, Scalar>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where
     EcPoint: Group + ScalarMul<Scalar>,
+    Scalar: IntMod + Reduce,
+    for<'a> &'a EcPoint: Add<&'a EcPoint, Output = EcPoint>,
 {
-    assert_eq!(
-        coeffs.len(),
-        bases.len(),
-        "msm requires matching scalar/base lengths"
-    );
-
-    let mut acc = EcPoint::IDENTITY;
-    for (coeff, base) in coeffs.iter().zip(bases.iter()) {
-        acc += base.mul_scalar(coeff);
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
+    {
+        let coeffs: Vec<_> = coeffs
+            .iter()
+            .map(|coeff| Scalar::reduce_le_bytes(coeff.as_le_bytes()))
+            .collect();
+        msm(&coeffs, bases)
     }
-    acc
+
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+    {
+        assert_eq!(
+            coeffs.len(),
+            bases.len(),
+            "msm requires matching scalar/base lengths"
+        );
+
+        let mut acc = EcPoint::IDENTITY;
+        for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+            acc += base.mul_scalar(coeff);
+        }
+        acc
+    }
 }
 
 fn get_booth_index(window_index: usize, window_size: usize, el: &[u8]) -> i32 {
