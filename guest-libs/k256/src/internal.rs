@@ -88,7 +88,8 @@ impl Secp256k1Point {
             reduced.neg_assign();
         }
         let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
-        // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
+        // SAFETY: Every valid point is in this prime-order group. Its order is 1 modulo 4.
+        // `reduced` is odd, nonzero, and less than the order. EC_MUL setup runs on first use.
         let product = unsafe { self.mul_scalar_le_unchecked::<true>(&bytes) };
         if odd {
             product
@@ -129,6 +130,18 @@ mod tests {
 
             assert_eq!(via_ladder, windowed_reference(scalar), "k = {k}");
         }
+    }
+
+    #[test]
+    fn raw_mul_sets_the_low_scalar_bit() {
+        let scalar = Secp256k1Scalar::from_u64(2);
+        let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
+
+        // Even raw inputs are outside the proof contract. All execution backends still read this
+        // input as 3.
+        let product = unsafe { Secp256k1Point::GENERATOR.mul_scalar_le_unchecked::<true>(&bytes) };
+
+        assert_eq!(product, windowed_reference(Secp256k1Scalar::from_u64(3)));
     }
 
     #[test]

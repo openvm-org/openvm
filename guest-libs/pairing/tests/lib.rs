@@ -698,9 +698,6 @@ mod bls12_381 {
         Ok(())
     }
 
-    /// `G1Affine::mul_scalar` stays exact for an on-curve point outside the prime-order
-    /// subgroup. Execute-only: the chip's totality argument assumes prime order, so proving an
-    /// off-subgroup trace is a separate concern.
     #[test]
     fn test_bls_offsubgroup_mul() -> Result<()> {
         let curve = CurveConfig {
@@ -726,8 +723,7 @@ mod bls12_381 {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        let executor = openvm_circuit::arch::VmExecutor::new(config)?;
-        let _ = executor.instance(&openvm_exe)?.execute(vec![])?;
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 

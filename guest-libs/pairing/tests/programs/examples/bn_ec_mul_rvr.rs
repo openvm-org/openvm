@@ -12,28 +12,24 @@ openvm::init!("openvm_init_bn_ec_mul_rvr_bn254.rs");
 
 openvm::entry!(main);
 
-fn raw_mul(base: &Bn254G1Affine, scalar: u64) -> Bn254G1Affine {
-    let scalar = Bn254Scalar::from_u64(scalar);
-    let bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
-    // SAFETY: This fixture intentionally exercises the RVR handler's raw EC_MUL contract,
-    // including its defined behavior for an even scalar and the identity base.
-    unsafe { base.mul_scalar_le_unchecked::<true>(&bytes) }
+fn mul(base: &Bn254G1Affine, scalar: u64) -> Bn254G1Affine {
+    base.mul_scalar(&Bn254Scalar::from_u64(scalar))
 }
 
 pub fn main() {
     let g = Bn254G1Affine::GENERATOR;
     let two_g = g.double();
     let three_g = &two_g + &g;
-    let six_g = three_g.double();
+    let four_g = two_g.double();
 
-    assert_eq!(raw_mul(&g, 1), g);
-    assert_eq!(raw_mul(&g, 2), three_g);
-    assert_eq!(raw_mul(&g, 3), three_g);
+    assert_eq!(mul(&g, 1), g);
+    assert_eq!(mul(&g, 2), two_g);
+    assert_eq!(mul(&g, 3), three_g);
 
-    assert_eq!(raw_mul(&two_g, 1), two_g);
-    assert_eq!(raw_mul(&two_g, 2), six_g);
-    assert_eq!(raw_mul(&two_g, 3), six_g);
+    assert_eq!(mul(&two_g, 1), two_g);
+    assert_eq!(mul(&two_g, 2), four_g);
+    assert_eq!(mul(&two_g, 3), &four_g + &two_g);
 
     let identity = <Bn254G1Affine as Group>::IDENTITY;
-    assert!(raw_mul(&identity, 7).is_identity());
+    assert!(mul(&identity, 7).is_identity());
 }

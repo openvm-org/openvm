@@ -80,7 +80,8 @@ impl G1Affine {
             reduced.neg_assign();
         }
         let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
-        // SAFETY: `self` is not the identity, and `reduced` is odd and below the group order.
+        // SAFETY: Every valid point is in this prime-order group. Its order is 1 modulo 4.
+        // `reduced` is odd, nonzero, and less than the order. EC_MUL setup runs on first use.
         let product = unsafe { self.mul_scalar_le_unchecked::<true>(&bytes) };
         if odd {
             product

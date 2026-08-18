@@ -1,11 +1,12 @@
 extern crate alloc;
 
-use core::ops::Neg;
+use alloc::vec::Vec;
+use core::ops::{MulAssign, Neg};
 
-use openvm_algebra_guest::{IntMod, Reduce};
+use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
-    weierstrass::{IntrinsicCurve, ScalarMul},
+    weierstrass::{IntrinsicCurve, ScalarMul, WeierstrassPoint},
     CyclicGroup, Group,
 };
 
@@ -51,6 +52,29 @@ pub type Scalar = Bls12_381Scalar;
 pub type G1Affine = Bls12_381G1Affine;
 pub use g2::G2Affine;
 
+const G1_X: [u64; 1] = [0xd201000000010000];
+const G1_BETA: Fp = Fp::from_const_bytes(hex!(
+    "fefffeffffff012e02000a6213d817de8896f8e63ba9b3ddea770f6a07c669ba51ce76df2f67195f0000000000000000"
+));
+const G1_H_EFF: [u64; 1] = [G1_X[0] + 1];
+const G1_H_EFF_INV: Scalar = Scalar::from_const_bytes(hex!(
+    "010000000000ffff0000fd890148001435d39e93390be8a5477d9d2953a7ed73"
+));
+
+fn g1_small_scalar_mul<const CHECK_SETUP: bool>(base: &G1Affine, scalar: &[u64]) -> G1Affine {
+    let mut result = <G1Affine as Group>::IDENTITY;
+    let mut temp = base.clone();
+    for limb in scalar {
+        for bit_idx in 0..64 {
+            if (limb >> bit_idx) & 1 == 1 {
+                result.add_assign_impl::<CHECK_SETUP>(&temp);
+            }
+            temp.double_assign_impl::<CHECK_SETUP>();
+        }
+    }
+    result
+}
+
 // https://hackmd.io/@benjaminion/bls12-381#Cofactor
 // BLS12-381: The from_xy function will allow constructing elements that lie on the curve
 // but aren't actually in the cyclic subgroup of prime order that is usually called G1.
@@ -74,29 +98,113 @@ impl CyclicGroup for G1Affine {
     };
 }
 
+/// Reduces a 256-bit scalar without using the scalar arithmetic extension.
+fn reduced_scalar_bytes(scalar: &Scalar) -> [u8; 32] {
+    let mut bytes: [u8; 32] = scalar.as_le_bytes().try_into().unwrap();
+    let modulus = Scalar::MODULUS;
+
+    // Every 256-bit value is less than 3q. Two subtractions are enough.
+    for _ in 0..2 {
+        if bytes.iter().rev().cmp(modulus.iter().rev()).is_ge() {
+            sub_assign_bytes(&mut bytes, &modulus);
+        }
+    }
+    bytes
+}
+
+fn reduced_scalar(scalar: &Scalar) -> Scalar {
+    Scalar::from_le_bytes_unchecked(&reduced_scalar_bytes(scalar))
+}
+
+/// Subtracts `rhs` from `lhs` as little-endian integers. Requires `lhs >= rhs`.
+fn sub_assign_bytes(lhs: &mut [u8; 32], rhs: &[u8; 32]) {
+    let mut borrow = 0u16;
+    for (lhs_byte, &rhs_byte) in lhs.iter_mut().zip(rhs) {
+        let lhs_word = *lhs_byte as u16;
+        let rhs_word = rhs_byte as u16 + borrow;
+        if lhs_word >= rhs_word {
+            *lhs_byte = (lhs_word - rhs_word) as u8;
+            borrow = 0;
+        } else {
+            *lhs_byte = (lhs_word + 256 - rhs_word) as u8;
+            borrow = 1;
+        }
+    }
+    debug_assert_eq!(borrow, 0);
+}
+
 impl G1Affine {
+    /// Multiplies an on-curve BLS12-381 G1 point by a scalar.
+    ///
+    /// This function also supports the identity and points outside the prime-order subgroup.
     pub fn mul_scalar(&self, scalar: &Scalar) -> Self {
+        let reduced = reduced_scalar(scalar);
+        openvm_ecc_guest::msm(core::slice::from_ref(&reduced), core::slice::from_ref(self))
+    }
+
+    /// Checks prime-subgroup membership with the BLS12-381 G1 endomorphism.
+    pub fn is_in_prime_subgroup_via_endomorphism(&self) -> bool {
+        if self.is_identity() {
+            return true;
+        }
+
+        let x_times_point = g1_small_scalar_mul::<true>(self, &G1_X);
+        if self == &x_times_point {
+            return false;
+        }
+
+        // The first multiplication performed curve setup.
+        let minus_x_squared = -g1_small_scalar_mul::<false>(&x_times_point, &G1_X);
+        let mut endomorphism = self.clone();
+        endomorphism.x_mut().mul_assign(&G1_BETA);
+        minus_x_squared == endomorphism
+    }
+
+    /// Checks prime-subgroup membership by projecting onto the prime-order subgroup.
+    pub fn is_in_prime_subgroup_via_projection(&self) -> bool {
+        if self.is_identity() {
+            return true;
+        }
+
+        let cleared = g1_small_scalar_mul::<true>(self, &G1_H_EFF);
+        // SAFETY: Multiplication by the effective cofactor puts `cleared` in the prime-order
+        // subgroup.
+        let projected = unsafe { cleared.mul_scalar_prime_subgroup_unchecked(&G1_H_EFF_INV) };
+        projected == *self
+    }
+
+    /// Multiplies a prime-subgroup point using the `EC_MUL` intrinsic.
+    ///
+    /// This function reduces the scalar and handles zero, even scalars, and the identity point.
+    ///
+    /// # Safety
+    ///
+    /// `self` must be on the BLS12-381 G1 curve and in its prime-order subgroup. This function
+    /// does not check these requirements.
+    pub unsafe fn mul_scalar_prime_subgroup_unchecked(&self, scalar: &Scalar) -> Self {
         if self.is_identity() {
             return <Self as Group>::IDENTITY;
         }
-        let mut reduced = Scalar::reduce_le_bytes(scalar.as_le_bytes());
-        if reduced == Scalar::ZERO {
+        let mut reduced = reduced_scalar_bytes(scalar);
+        if reduced.iter().all(|&byte| byte == 0) {
             return <Self as Group>::IDENTITY;
         }
 
-        let odd = reduced.as_le_bytes()[0] & 1 == 1;
+        // EC_MUL needs an odd scalar below the subgroup order. For even k, q - k is odd and
+        // (q - k) * P = -(k * P) because P is in the order-q subgroup.
+        let odd = reduced[0] & 1 == 1;
         if !odd {
-            reduced -= Scalar::from_u8(1);
+            let mut negated = Scalar::MODULUS;
+            sub_assign_bytes(&mut negated, &reduced);
+            reduced = negated;
         }
-        let bytes: [u8; 32] = reduced.as_le_bytes().try_into().unwrap();
-        // SAFETY: `self` is not the identity, and the scalar is odd and below the group order.
-        // For a point outside the prime-order subgroup the result is still exact; only the
-        // trace's provability is the caller's concern (see the note on `G1Affine`).
-        let product = unsafe { self.mul_scalar_le_unchecked::<true>(&bytes) };
+        // SAFETY: The caller guarantees subgroup membership. `reduced` is odd, nonzero, and less
+        // than the subgroup order. The order is 1 modulo 4. EC_MUL setup runs on first use.
+        let product = unsafe { self.mul_scalar_le_unchecked::<true>(&reduced) };
         if odd {
             product
         } else {
-            product + self
+            -product
         }
     }
 }
@@ -109,12 +217,46 @@ impl ScalarMul<Scalar> for G1Affine {
 
 pub struct Bls12_381;
 
+impl Bls12_381 {
+    /// Multiplies the standard G1 generator using the `EC_MUL` intrinsic.
+    pub fn mul_generator(scalar: &Scalar) -> G1Affine {
+        // SAFETY: `GENERATOR` is in the BLS12-381 G1 prime-order subgroup.
+        unsafe { G1Affine::GENERATOR.mul_scalar_prime_subgroup_unchecked(scalar) }
+    }
+
+    /// Computes an MSM of points that have already passed a subgroup check using `EC_MUL`.
+    ///
+    /// # Safety
+    ///
+    /// Every base must be an on-curve point in the BLS12-381 G1 prime-order subgroup. This
+    /// function does not check subgroup membership.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `coeffs` and `bases` have different lengths.
+    pub unsafe fn msm_prime_subgroup_unchecked(coeffs: &[Scalar], bases: &[G1Affine]) -> G1Affine {
+        assert_eq!(
+            coeffs.len(),
+            bases.len(),
+            "msm requires matching scalar/base lengths"
+        );
+
+        let mut acc = <G1Affine as Group>::IDENTITY;
+        for (coeff, base) in coeffs.iter().zip(bases) {
+            // SAFETY: The caller guarantees subgroup membership for every base.
+            acc += unsafe { base.mul_scalar_prime_subgroup_unchecked(coeff) };
+        }
+        acc
+    }
+}
+
 impl IntrinsicCurve for Bls12_381 {
     type Scalar = Scalar;
     type Point = G1Affine;
 
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        openvm_ecc_guest::msm_via_ec_mul(coeffs, bases)
+        let coeffs: Vec<_> = coeffs.iter().map(reduced_scalar).collect();
+        openvm_ecc_guest::msm(&coeffs, bases)
     }
 }
 

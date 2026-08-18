@@ -4,7 +4,6 @@
 )]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::{
     weierstrass::{IntrinsicCurve, WeierstrassPoint},
@@ -16,46 +15,41 @@ openvm::init!("openvm_init_bls_offsubgroup_mul_bls12_381.rs");
 
 openvm::entry!(main);
 
-/// `P = (4, y)` satisfies `y^2 = x^3 + 4` but lies outside the prime-order subgroup: `r * P != O`.
-/// A value the public API admits, e.g. a point deserialized without a subgroup check.
-const P_X_LE: [u8; 48] = hex!(
-    "040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-);
-const P_Y_LE: [u8; 48] = hex!(
-    "6C70BE4A353EA95E5DDEE100EDB84663448384925ED89DDA266B92C988F960C79B3E76F3C3FF3CB312620DD4AD9B980A"
-);
-
-fn point(x_le: &[u8; 48], y_le: &[u8; 48]) -> Bls12_381G1Affine {
-    let x = Fp::from_le_bytes(x_le).unwrap();
-    let y = Fp::from_le_bytes(y_le).unwrap();
-    // SAFETY: (x, y) is on the curve. No subgroup membership is claimed, which is exactly the
-    // case `from_xy` is documented to allow.
-    unsafe { Bls12_381G1Affine::from_xy(x, y) }.unwrap()
-}
-
 pub fn main() {
+    let zero = Scalar::ZERO;
+    let one = Scalar::from_u64(1);
     let two = Scalar::from_u64(2);
     let three = Scalar::from_u64(3);
 
-    // Control: inside the prime-order subgroup.
+    // The generator is in the prime-order subgroup.
     let g = Bls12_381G1Affine::GENERATOR;
-    assert_eq!(g.mul_scalar(&two), g.double(), "control: generator");
+    assert!(Bls12_381::mul_generator(&zero).is_identity());
+    assert_eq!(Bls12_381::mul_generator(&two), g.double());
 
-    let p = point(&P_X_LE, &P_Y_LE);
+    let mut q_minus_one = Scalar::MODULUS;
+    q_minus_one[0] -= 1;
+    let q_minus_one = Scalar::from_le_bytes_unchecked(&q_minus_one);
+    let q = Scalar::from_le_bytes_unchecked(&Scalar::MODULUS);
+    let mut q_plus_one = Scalar::MODULUS;
+    q_plus_one[0] += 1;
+    let q_plus_one = Scalar::from_le_bytes_unchecked(&q_plus_one);
+    assert_eq!(Bls12_381::mul_generator(&q_minus_one), -g.clone());
+    assert!(Bls12_381::mul_generator(&q).is_identity());
+    assert_eq!(Bls12_381::mul_generator(&q_plus_one), g);
 
-    // `2 * P` by plain doubling: exact, and it assumes nothing about the point's order. The
-    // even-scalar branch computes `(k - 1) * P + P`, which must agree; the cofactor-1 curves'
-    // `-((n - k) * P)` substitution would not, since `r * P` is not the identity here.
-    let expected = p.double();
-    assert_eq!(p.mul_scalar(&two), expected, "mul_scalar(2) == 2*P");
+    // SAFETY: Both bases are the standard prime-subgroup generator.
+    let msm = unsafe {
+        Bls12_381::msm_prime_subgroup_unchecked(&[one.clone(), two.clone()], &[g.clone(), g])
+    };
+    assert_eq!(msm, Bls12_381G1Affine::GENERATOR.mul_scalar(&three));
 
-    // Odd scalars take the ladder directly; `3 * P = 2 * P + P` for any point.
-    assert_eq!(
-        p.mul_scalar(&three),
-        expected.clone() + &p,
-        "mul_scalar(3) == 3*P"
-    );
+    // P = (0, 2) is on y^2 = x^3 + 4 and has order 3.
+    // SAFETY: `from_xy` accepts any on-curve point. It does not require subgroup membership.
+    let p = unsafe { Bls12_381G1Affine::from_xy(Fp::ZERO, Fp::from_u8(2)) }.unwrap();
+    let two_p = p.double();
 
-    // `Bls12_381::msm` routes every base through the same `mul_scalar`.
-    assert_eq!(Bls12_381::msm(&[two], &[p]), expected, "msm(2, P) == 2*P");
+    assert_eq!(p.mul_scalar(&one), p);
+    assert_eq!(p.mul_scalar(&two), two_p);
+    assert!(p.mul_scalar(&three).is_identity());
+    assert_eq!(Bls12_381::msm(&[two], &[p]), two_p);
 }

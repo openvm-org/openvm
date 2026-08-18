@@ -6,14 +6,17 @@ use halo2curves_axiom::bls12_381::{
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
+use openvm_ecc_guest::{
+    weierstrass::{IntrinsicCurve, WeierstrassPoint},
+    AffinePoint, CyclicGroup,
+};
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
 };
 use rand08::{rngs::StdRng, SeedableRng};
 
-use super::{Fp, Fp12, Fp2};
+use super::{reduced_scalar_bytes, Fp, Fp12, Fp2};
 use crate::{
     bls12_381::{
         utils::{
@@ -21,10 +24,70 @@ use crate::{
             convert_bls12381_halo2_fq2_to_fp2, convert_bls12381_halo2_fq_to_fp,
             convert_g2_affine_halo2_to_openvm,
         },
-        Bls12_381, G2Affine as OpenVmG2Affine, Scalar,
+        Bls12_381, G1Affine as OpenVmG1Affine, G2Affine as OpenVmG2Affine, Scalar,
     },
     operations::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign},
 };
+
+fn scalar_test_bytes(value: BigUint) -> [u8; 32] {
+    let bytes = value.to_bytes_le();
+    assert!(bytes.len() <= 32);
+    let mut result = [0u8; 32];
+    result[..bytes.len()].copy_from_slice(&bytes);
+    result
+}
+
+#[test]
+fn test_bls12381_scalar_byte_reduction() {
+    let q = BLS12_381_ORDER.clone();
+    let max = (BigUint::one() << 256) - BigUint::one();
+    let cases = [
+        BigUint::from(0u8),
+        &q - BigUint::one(),
+        q.clone(),
+        &q + BigUint::one(),
+        max,
+    ];
+
+    for value in cases {
+        let raw = scalar_test_bytes(value.clone());
+        let scalar = Scalar::from_le_bytes_unchecked(&raw);
+        assert_eq!(reduced_scalar_bytes(&scalar), scalar_test_bytes(value % &q));
+    }
+}
+
+#[test]
+fn test_bls12381_msm_reduces_scalars_for_torsion_points() {
+    let q_plus_one = scalar_test_bytes(BLS12_381_ORDER.clone() + BigUint::one());
+    let scalar = Scalar::from_le_bytes_unchecked(&q_plus_one);
+    let point = unsafe { OpenVmG1Affine::from_xy(Fp::ZERO, Fp::from_u8(2)) }.unwrap();
+
+    assert_eq!(
+        Bls12_381::msm(
+            core::slice::from_ref(&scalar),
+            core::slice::from_ref(&point)
+        ),
+        point
+    );
+}
+
+#[test]
+fn test_bls12381_g1_subgroup_checks() {
+    fn check(point: &OpenVmG1Affine, expected: bool) {
+        assert_eq!(point.is_in_prime_subgroup_via_endomorphism(), expected);
+        assert_eq!(point.is_in_prime_subgroup_via_projection(), expected);
+    }
+
+    let identity = OpenVmG1Affine::IDENTITY;
+    let generator = OpenVmG1Affine::GENERATOR;
+    let torsion = unsafe { OpenVmG1Affine::from_xy(Fp::ZERO, Fp::from_u8(2)) }.unwrap();
+    let mixed = &generator + &torsion;
+
+    check(&identity, true);
+    check(&generator, true);
+    check(&torsion, false);
+    check(&mixed, false);
+}
 
 #[test]
 fn test_bls12381_frobenius_coeffs() {

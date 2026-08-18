@@ -64,6 +64,7 @@ Similar to `moduli_declare!`, this macro also creates extern functions for arith
 extern "C" {
     fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
     fn sw_double_extern_func_Secp256k1Point(rd: usize, rs1: usize);
+    fn sw_mul_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
     fn sw_setup_extern_func_Secp256k1Point(
         uninit: *mut core::ffi::c_void,
         p1: *const u8,
@@ -71,6 +72,16 @@ extern "C" {
     );
 }
 ```
+
+The arithmetic intrinsics have these requirements:
+
+- `add_ne`: Both points are not the identity. Their x-coordinates are different.
+- `double`: The point and its double are not the identity.
+- `mul`: The point is not the identity and is in the configured prime-order subgroup. The scalar
+  is odd and less than the subgroup order. The subgroup order is equal to 1 modulo 4.
+
+The generated low-level functions are `unsafe`. Safe curve APIs must check these requirements or
+use complete group operations.
 
 2. Again, `sw_init!` macro implements these extern functions and defines the setup functions for the sw struct.
 
