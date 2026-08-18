@@ -28,10 +28,8 @@ use crate::fields::get_field_type;
 
 const MAX_FIELD_EXPR_SCRATCH_BYTES: usize = 128 << 20;
 const MAX_FIELD_EXPR_LOCAL_BYTES: usize = 32 << 20;
-// This is a compiler-spill regression guard, not a CUDA architectural limit. CUDA's reported
-// local frame is toolchain-dependent; leave headroom above the currently observed 528-byte frame
-// while the aggregate limit below controls the actual launch footprint.
-const MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD: usize = 1 << 10;
+// The replay kernel reports 528 bytes. Keep the limit close enough to catch spill regressions.
+const MAX_FIELD_EXPR_LOCAL_BYTES_PER_THREAD: usize = 576;
 
 fn supports_device_modulus(modulus: &BigUint) -> bool {
     get_field_type(modulus).is_some()
