@@ -3,7 +3,7 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{
         execution_mode::ExecutionCtxTrait, ExecutionError, PostflightError, VmStateMut,
-        BLOCK_FE_WIDTH, DEFAULT_RV64_MEMORY_BYTE_CAPACITY, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
+        BLOCK_FE_WIDTH, DEFAULT_MEMORY_BYTE_CAPACITY, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
     },
     system::memory::online::GuestMemory,
 };
@@ -132,7 +132,7 @@ pub fn validate_memory_byte_span(
     let end = u64::try_from(num_bytes)
         .ok()
         .and_then(|bytes| u64::from(byte_ptr).checked_add(bytes));
-    if end.is_none_or(|end| end > DEFAULT_RV64_MEMORY_BYTE_CAPACITY as u64) {
+    if end.is_none_or(|end| end > DEFAULT_MEMORY_BYTE_CAPACITY as u64) {
         return Err(ExecutionError::Fail {
             pc,
             msg: "memory block span exceeds implemented memory address space",
@@ -384,9 +384,9 @@ pub(crate) fn checked_memory_address(
     // Bound by the *circuit* memory capacity (2^32 bytes), not the guest platform's
     // `MEM_SIZE`: the RV64 memory address space supports the full 2^32-byte range.
     // TODO: use `MemoryConfig::pointer_max_bits` once execution state carries the memory config.
-    debug_assert!(access_width <= DEFAULT_RV64_MEMORY_BYTE_CAPACITY);
+    debug_assert!(access_width <= DEFAULT_MEMORY_BYTE_CAPACITY);
     let address = address_add_imm(base, imm_extended);
-    if address > (DEFAULT_RV64_MEMORY_BYTE_CAPACITY - access_width) as u64 {
+    if address > (DEFAULT_MEMORY_BYTE_CAPACITY - access_width) as u64 {
         return Err(ExecutionError::Fail {
             pc,
             msg: "effective address exceeds implemented memory address space",

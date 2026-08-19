@@ -95,7 +95,7 @@ pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(DEFAULT_POINTER_MAX_BI
 /// (`openvm_platform::memory::MEM_SIZE`) may be smaller.
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
-pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1usize << BYTE_POINTER_MAX_BITS;
+pub const DEFAULT_MEMORY_BYTE_CAPACITY: usize = 1usize << BYTE_POINTER_MAX_BITS;
 
 /// Number of registers in the RV64 register file.
 pub const NUM_REGISTERS: usize = 32;
@@ -244,8 +244,7 @@ impl Default for MemoryConfig {
         // RV64 register and memory address spaces use u16 storage cells. Public values are bytes.
         addr_spaces[REGISTER_AS as usize].num_cells =
             NUM_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[MEMORY_AS as usize].num_cells =
-            DEFAULT_RV64_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE;
+        addr_spaces[MEMORY_AS as usize].num_cells = DEFAULT_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, DEFAULT_POINTER_MAX_BITS, 29, 17)
