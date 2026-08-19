@@ -27,6 +27,7 @@ rvr-openvm-lift = { workspace = true, optional = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 openvm-cpu-backend = { workspace = true }
+openvm-scheduler = { workspace = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 

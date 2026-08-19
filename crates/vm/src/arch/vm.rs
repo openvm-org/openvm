@@ -11,7 +11,7 @@
 use std::any::Any;
 #[cfg(feature = "metrics")]
 use std::collections::BTreeMap;
-use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
+use std::{any::TypeId, borrow::Borrow, collections::VecDeque, panic::resume_unwind, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::Itertools;
@@ -32,6 +32,7 @@ use openvm_instructions::{
 };
 #[cfg(feature = "metrics")]
 use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_scheduler::Admission;
 #[cfg(feature = "cuda")]
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
@@ -87,6 +88,7 @@ use super::{
     hint_stream::HintStream,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
+    segment_scheduler::{segment_graph, SegmentNode, SegmentSchedulerConfig},
     AirInventoryError, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
     ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
@@ -791,6 +793,8 @@ pub enum VirtualMachineError {
     Generation(#[from] GenerationError),
     #[error("program committed trade data not loaded")]
     ProgramIsNotCommitted,
+    #[error("segment scheduling error: {0}")]
+    Scheduling(String),
 }
 
 fn begin_preflight_tracegen_session(poisoned: &mut bool) -> Result<(), GenerationError> {
@@ -1146,7 +1150,11 @@ where
         Ok((proof, final_memory))
     }
 
-    fn prove_segment_inner(
+    /// The EXECUTE half of one segment: preflight from `state`, then trace generation.
+    ///
+    /// The returned context owns its traces, which is what lets the PROVE half run
+    /// independently of when the next segment executes.
+    fn execute_segment_inner(
         &mut self,
         interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
         program: &Program<Val<E::SC>>,
@@ -1154,7 +1162,7 @@ where
         state: VmState<GuestMemory>,
         num_insns: u64,
         modify_ctx: impl FnOnce(&mut ProvingContext<E::PB>),
-    ) -> Result<(Proof<E::SC>, PreflightOutput), VirtualMachineError>
+    ) -> Result<(ProvingContext<E::PB>, PreflightOutput), VirtualMachineError>
     where
         Val<E::SC>: VmField,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
@@ -1181,10 +1189,43 @@ where
             .extend_touched_pages_from_touched(postflight.touched_memory());
         let mut ctx = self.generate_proving_ctx(prepared, &output, &postflight)?;
         modify_ctx(&mut ctx);
-        let proof = self
-            .engine
+        Ok((ctx, output))
+    }
+
+    /// The PROVE half of one segment. Depends on nothing but the proving key and
+    /// `ctx`, so segment proofs may be produced in any order.
+    fn prove_segment_ctx(
+        &self,
+        ctx: ProvingContext<E::PB>,
+    ) -> Result<Proof<E::SC>, VirtualMachineError> {
+        self.engine
             .prove(self.pk(), ctx)
-            .map_err(|error| GenerationError::Proving(error.to_string()))?;
+            .map_err(|error| GenerationError::Proving(error.to_string()).into())
+    }
+
+    fn prove_segment_inner(
+        &mut self,
+        interpreter: &PreflightInterpreter<Val<E::SC>, VB::VmConfig>,
+        program: &Program<Val<E::SC>>,
+        prepared: &VB::Prepared,
+        state: VmState<GuestMemory>,
+        num_insns: u64,
+        modify_ctx: impl FnOnce(&mut ProvingContext<E::PB>),
+    ) -> Result<(Proof<E::SC>, PreflightOutput), VirtualMachineError>
+    where
+        Val<E::SC>: VmField,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>> + 'static,
+        VB: PostflightTracegen<E>,
+    {
+        let (ctx, output) = self.execute_segment_inner(
+            interpreter,
+            program,
+            prepared,
+            state,
+            num_insns,
+            modify_ctx,
+        )?;
+        let proof = self.prove_segment_ctx(ctx)?;
         Ok((proof, output))
     }
 
@@ -1749,6 +1790,19 @@ pub type ContinuationProverFn<E, VB> = Box<
         + Send,
 >;
 
+/// The scheduler-driven continuation driver, installed by
+/// [`VmInstance::set_segment_scheduler`].
+///
+/// It is boxed so that the thread bounds proving concurrently requires stay with
+/// whoever opts in, rather than narrowing the serial path's signatures.
+pub type ScheduledContinuationDriver<E, VB> = Box<
+    dyn FnMut(
+        &mut VmInstance<E, VB>,
+        Streams,
+        &mut dyn FnMut(usize, &mut ProvingContext<<E as StarkEngine>::PB>),
+    ) -> Result<ContinuationVmProof<<E as StarkEngine>::SC>, VirtualMachineError>,
+>;
+
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
 pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
@@ -1784,6 +1838,13 @@ where
     exe: Arc<VmExe<Val<E::SC>>>,
     #[getset(get = "pub", get_mut = "pub")]
     state: Option<VmState<GuestMemory>>,
+    /// `None` selects the serial continuation driver; `Some` selects the
+    /// scheduler-driven one. Both arms live in the same binary so they can be
+    /// compared without rebuilding.
+    segment_scheduler: Option<SegmentSchedulerConfig>,
+    scheduled_driver: Option<ScheduledContinuationDriver<E, VB>>,
+    /// High-water mark of proves dispatched together by the last scheduled run.
+    max_concurrent_proves: usize,
 }
 
 impl<E, VB> VmInstance<E, VB>
@@ -1805,7 +1866,20 @@ where
             program_commitment,
             exe,
             state: Some(state),
+            segment_scheduler: None,
+            scheduled_driver: None,
+            max_concurrent_proves: 0,
         })
+    }
+
+    pub fn segment_scheduler(&self) -> Option<SegmentSchedulerConfig> {
+        self.segment_scheduler
+    }
+
+    /// The most proves the last scheduled run had running at once. Zero until a
+    /// scheduled run has happened.
+    pub fn max_concurrent_proves(&self) -> usize {
+        self.max_concurrent_proves
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
@@ -1850,15 +1924,51 @@ where
         Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
     VB: PostflightTracegen<E>,
 {
+    /// Selects the scheduler-driven continuation prover, or `None` for the serial
+    /// one. Both are compiled in, so an A/B can interleave them in one process.
+    pub fn set_segment_scheduler(&mut self, scheduler: Option<SegmentSchedulerConfig>)
+    where
+        E: Sync + 'static,
+        VB: 'static,
+        DeviceMultiStarkProvingKey<E::PB>: Sync,
+        ProvingContext<E::PB>: Send,
+        Proof<E::SC>: Send,
+    {
+        self.segment_scheduler = scheduler;
+        self.scheduled_driver = scheduler.map(|scheduler| -> ScheduledContinuationDriver<E, VB> {
+            Box::new(move |instance, input, modify_ctx| {
+                instance.prove_continuations_scheduled(input, modify_ctx, &scheduler)
+            })
+        });
+    }
+
     /// For internal use to resize trace matrices before proving.
     ///
     /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
     pub(crate) fn prove_continuations(
         &mut self,
         input: impl Into<Streams>,
-        mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
+        modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();
+        let mut modify_ctx = modify_ctx;
+        // The scheduled driver needs the engine and proving key to be shareable
+        // across threads. Installing it as a boxed closure keeps those bounds on
+        // whoever opts in, instead of pushing them onto every caller of the serial
+        // path.
+        let Some(mut driver) = self.scheduled_driver.take() else {
+            return self.prove_continuations_serial(input, modify_ctx);
+        };
+        let proof = driver(self, input, &mut modify_ctx);
+        self.scheduled_driver = Some(driver);
+        proof
+    }
+
+    fn prove_continuations_serial(
+        &mut self,
+        input: Streams,
+        mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         self.reset_state(input.clone());
         if self.interpreter.is_none() {
             self.interpreter = Some(self.vm.preflight_interpreter(&self.exe)?);
@@ -1910,6 +2020,179 @@ where
             user_public_values,
         })
     }
+
+    /// Proves the same segments as [`Self::prove_continuations_serial`], but decides
+    /// *when* each half of a segment runs by admitting nodes from a
+    /// [`segment_graph`] against its declared budget.
+    ///
+    /// A segment proof is a function of the proving key and that segment's context
+    /// alone, and `per_segment` is assembled by segment index rather than by
+    /// completion order, so the proof this returns does not depend on the order the
+    /// graph admits work in.
+    fn prove_continuations_scheduled(
+        &mut self,
+        input: Streams,
+        modify_ctx: &mut dyn FnMut(usize, &mut ProvingContext<E::PB>),
+        scheduler: &SegmentSchedulerConfig,
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
+    where
+        E: Sync,
+        DeviceMultiStarkProvingKey<E::PB>: Sync,
+        ProvingContext<E::PB>: Send,
+        Proof<E::SC>: Send,
+    {
+        self.reset_state(input.clone());
+        if self.interpreter.is_none() {
+            self.interpreter = Some(self.vm.preflight_interpreter(&self.exe)?);
+        }
+        let interpreter = self
+            .interpreter
+            .as_ref()
+            .expect("preflight interpreter was initialized above");
+        let vm = &mut self.vm;
+        let metered_ctx = vm.build_metered_ctx(&self.exe);
+        let metered_instance = vm.metered_instance(&self.exe)?;
+        let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
+        let prepared = VB::prepare_postflight(vm, &self.exe.program)?;
+
+        let mut graph = segment_graph(segments.len(), scheduler).map_err(scheduling_error)?;
+        let mut contexts: Vec<Option<ProvingContext<E::PB>>> = std::iter::repeat_with(|| None)
+            .take(segments.len())
+            .collect();
+        let mut proofs: Vec<Option<Proof<E::SC>>> = std::iter::repeat_with(|| None)
+            .take(segments.len())
+            .collect();
+        let mut state = self.state.take();
+        // Admitted proves wait here rather than running where they were admitted, so
+        // that everything the budget lets in at once goes to threads together. An
+        // execute is not held: it runs where it is admitted, on this thread, because
+        // it needs the VM mutably.
+        let mut waiting: Vec<(usize, ProvingContext<E::PB>)> = Vec::new();
+        let mut max_concurrent_proves = 0usize;
+        loop {
+            match graph.admit() {
+                Admission::Admitted(nodes) => {
+                    for node in nodes {
+                        match node {
+                            SegmentNode::Execute(idx) => {
+                                let _span = info_span!("execute_segment", segment = idx).entered();
+                                let from_state = Option::take(&mut state)
+                                    .expect("the execute chain carries the state forward");
+                                let (ctx, output) = vm.execute_segment_inner(
+                                    interpreter,
+                                    &self.exe.program,
+                                    &prepared,
+                                    from_state,
+                                    segments[idx].num_insns,
+                                    |ctx| modify_ctx(idx, ctx),
+                                )?;
+                                contexts[idx] = Some(ctx);
+                                state = Some(output.state);
+                                // Execute holds nothing past its own run; releasing it
+                                // here is what lets its prove and the next execute in.
+                                graph.complete(&node).map_err(scheduling_error)?;
+                            }
+                            SegmentNode::Prove(idx) => {
+                                let ctx = contexts[idx]
+                                    .take()
+                                    .expect("a prove node is admitted only after its execute node");
+                                waiting.push((idx, ctx));
+                            }
+                        }
+                    }
+                }
+                // Only a prove is ever left holding budget, so both of these mean at
+                // least one is waiting and running them is what makes progress.
+                Admission::Backpressure | Admission::Blocked => {
+                    let batch = std::mem::take(&mut waiting);
+                    assert!(
+                        !batch.is_empty(),
+                        "admission reports backpressure or blocked only while a prove is resident"
+                    );
+                    max_concurrent_proves = max_concurrent_proves.max(batch.len());
+                    for (idx, proof) in prove_segments_concurrently(vm, batch)? {
+                        proofs[idx] = Some(proof);
+                        graph
+                            .complete(&SegmentNode::Prove(idx))
+                            .map_err(scheduling_error)?;
+                    }
+                }
+                Admission::AllComplete => break,
+            }
+        }
+        self.max_concurrent_proves = max_concurrent_proves;
+
+        let to_state = state.expect("the execute chain produced a final state");
+        let per_segment = proofs
+            .into_iter()
+            .map(|proof| proof.expect("every registered prove node ran"))
+            .collect();
+        let final_memory = &to_state.memory.memory;
+        let final_memory_top_tree = vm.memory_top_tree().expect("memory top tree should exist");
+        let user_public_values = UserPublicValuesProof::compute(
+            vm.config().as_ref(),
+            &vm_poseidon2_hasher(),
+            final_memory,
+            final_memory_top_tree,
+        );
+        self.state = Some(to_state);
+        Ok(ContinuationVmProof {
+            per_segment,
+            user_public_values,
+        })
+    }
+}
+
+fn scheduling_error(error: impl std::fmt::Display) -> VirtualMachineError {
+    VirtualMachineError::Scheduling(error.to_string())
+}
+
+/// A segment index paired with the proof produced for it.
+type SegmentProof<E> = (usize, Proof<<E as StarkEngine>::SC>);
+/// The same, before a prove thread's error has been mapped back to this crate's.
+type SegmentProveOutcome<E> = (usize, Result<Proof<<E as StarkEngine>::SC>, String>);
+
+/// Proves a batch of segments on one thread each.
+///
+/// Each thread borrows only the engine and the proving key, never the whole VM, so
+/// this coexists with the execute chain's need for the VM mutably: the borrow ends
+/// with the scope, before the caller executes another segment.
+fn prove_segments_concurrently<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    batch: Vec<(usize, ProvingContext<E::PB>)>,
+) -> Result<Vec<SegmentProof<E>>, VirtualMachineError>
+where
+    E: StarkEngine + Sync,
+    VB: VmBuilder<E>,
+    DeviceMultiStarkProvingKey<E::PB>: Sync,
+    ProvingContext<E::PB>: Send,
+    Proof<E::SC>: Send,
+{
+    let engine = &vm.engine;
+    let pk = &vm.pk;
+    let results: Vec<SegmentProveOutcome<E>> = std::thread::scope(|scope| {
+        let handles = batch
+            .into_iter()
+            .map(|(idx, ctx)| {
+                scope.spawn(move || (idx, engine.prove(pk, ctx).map_err(|e| e.to_string())))
+            })
+            .collect_vec();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|payload| resume_unwind(payload))
+            })
+            .collect()
+    });
+    results
+        .into_iter()
+        .map(|(idx, proof)| match proof {
+            Ok(proof) => Ok((idx, proof)),
+            Err(error) => Err(GenerationError::Proving(error).into()),
+        })
+        .collect()
 }
 
 /// The payload of a verified guest VM execution.

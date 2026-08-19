@@ -37,6 +37,7 @@ use crate::{prover::ChildVkKind, SC};
 mod dummy;
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
 mod e2e;
+mod segment_scheduler;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {

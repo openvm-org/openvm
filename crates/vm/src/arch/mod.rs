@@ -18,6 +18,8 @@ mod postflight;
 mod preflight;
 #[cfg(feature = "rvr")]
 pub mod rvr;
+/// Continuation proving expressed as a scheduler graph.
+mod segment_scheduler;
 /// VM state definitions
 mod state;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.
@@ -49,6 +51,10 @@ pub use preflight::{
 #[cfg(feature = "rvr")]
 pub use rvr::{
     PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
+};
+pub use segment_scheduler::{
+    Budget, ResourceProfile, SegmentNode, SegmentSchedulerConfig, DEFAULT_PROVE_LOOKAHEAD,
+    EXECUTE_GPU_BYTES, PROVE_MARGINAL_GPU_BYTES, SHARED_GPU_BASE_BYTES,
 };
 pub use state::*;
 pub use vm::*;

@@ -44,6 +44,7 @@ openvm-riscv-transpiler = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
 openvm-transpiler = { workspace = true }
+bitcode = { workspace = true }
 test-case = { workspace = true }
 
 [features]
