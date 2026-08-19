@@ -1884,7 +1884,7 @@ mod tests {
         let elf = build_example_program_at_path(get_programs_dir!(), "critical-section", &config)?;
         let exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
