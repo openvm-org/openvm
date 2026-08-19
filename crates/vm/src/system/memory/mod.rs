@@ -31,9 +31,8 @@ use crate::{
 /// bytes.
 ///
 /// RV64 targets 2^32 byte-addressable memory. Since `MEMORY_AS` uses u16 storage cells, 2^32
-/// bytes equals 2^31 u16 cells, so the AS-native pointer width is 31 bits. See [`crate::arch`]'s
-/// `BYTE_POINTER_MAX_BITS` for the corresponding *byte*-pointer width (32), which matches the
-/// platform's `MEM_BITS` (guest runtime memory).
+/// bytes equals 2^31 u16 cells, so the AS-native pointer width is 31 bits. The corresponding
+/// *byte*-pointer width (32) matches the platform's `MEM_BITS` (guest runtime memory).
 pub const DEFAULT_POINTER_MAX_BITS: usize = 31;
 // Valid RVR memory pointers and leaf indices fit in `u32`. Guest operands stay
 // `u64` until a runtime bounds check proves that they are valid pointers.

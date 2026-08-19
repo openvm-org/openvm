@@ -12,6 +12,7 @@ use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 pub use openvm_instructions::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
+use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -82,20 +83,10 @@ pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
     ptr_bits + U16_CELL_SIZE_BITS
 }
 
-/// Default RV64 *byte*-pointer bit width.
-///
-/// RV64 byte addresses span 2^32 bytes, so byte pointers are 32 bits wide. This is distinct
-/// from [`DEFAULT_POINTER_MAX_BITS`] (31), the AS-native u16-*cell* pointer width: 2^32 bytes =
-/// 2^31 u16 cells.
-pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(DEFAULT_POINTER_MAX_BITS);
-
-/// Default RV64 byte-addressable memory capacity (2^32 bytes).
-///
-/// This is the *circuit* capacity of `MEMORY_AS`, and matches the guest runtime memory size
-/// (`openvm_platform::memory::MEM_SIZE`).
-// TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
-// execution state carries the memory config.
-pub const DEFAULT_MEMORY_BYTE_CAPACITY: usize = 1usize << BYTE_POINTER_MAX_BITS;
+// Executor bounds and `MemoryConfig::default()` use the platform `MEM_SIZE` as the circuit
+// byte capacity of `MEMORY_AS`, so the platform memory size and the default circuit pointer
+// width must stay in lock-step.
+const _: () = assert!(MEM_SIZE == 1 << to_byte_ptr_bits(DEFAULT_POINTER_MAX_BITS));
 
 /// Number of registers in the RV64 register file.
 pub const NUM_REGISTERS: usize = 32;
@@ -244,7 +235,7 @@ impl Default for MemoryConfig {
         // RV64 register and memory address spaces use u16 storage cells. Public values are bytes.
         addr_spaces[REGISTER_AS as usize].num_cells =
             NUM_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[MEMORY_AS as usize].num_cells = DEFAULT_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE;
+        addr_spaces[MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, DEFAULT_POINTER_MAX_BITS, 29, 17)

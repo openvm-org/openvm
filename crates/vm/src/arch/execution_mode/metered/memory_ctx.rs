@@ -124,7 +124,7 @@ impl MemoryCtx {
             _ => panic!("unsupported metered address space {address_space}"),
         };
         let leaf_label = ptr >> leaf_bits;
-        // `end_leaf_label < 2^address_height` since `end_ptr < 2^BYTE_POINTER_MAX_BITS`.
+        // `end_leaf_label < 2^address_height` since `end_ptr` fits the 32-bit byte-pointer domain.
         let end_leaf_label = (end_ptr >> leaf_bits) as u32;
         let num_leaves = end_leaf_label - leaf_label + 1;
         debug_assert!(
