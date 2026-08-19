@@ -2,8 +2,12 @@ use std::array::from_fn;
 
 use itertools::Itertools;
 use openvm_circuit::arch::{PostflightError, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::riscv::BYTE_BITS;
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr_value, u16_block_to_bytes};
+use openvm_riscv_circuit::adapters::{
+    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value,
+    cell_ptr_hi_bits, u16_block_to_bytes, u32_to_ptr_limbs, BYTE_PTR_ALIGN_BITS, U16_BITS,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
@@ -65,6 +69,34 @@ pub(crate) fn checked_pointer_offset(
             u32::try_from(offset).map_err(|_| PostflightError::new("memory offset exceeds u32"))?,
         )
         .ok_or_else(|| PostflightError::new(message))
+}
+
+/// Computes the byte->cell conversion carry and the add carries for blocks after block zero of
+/// one block-aligned heap pointer, registering range-check counts that mirror the adapter AIRs:
+/// the block-alignment check on the low pointer byte, the conversion's high-limb check, and one
+/// 16-bit low-limb check per subsequent block.
+pub(crate) fn compute_aligned_pointer_carries(
+    range_checker: &VariableRangeCheckerChip,
+    byte_ptr: u32,
+    num_blocks: usize,
+    byte_ptr_max_bits: usize,
+) -> (u32, Vec<u32>) {
+    range_checker.add_count(
+        (byte_ptr & u8::MAX as u32) / MEMORY_BLOCK_BYTES as u32,
+        BYTE_PTR_ALIGN_BITS,
+    );
+    let (conv_carry, base_cell) =
+        byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
+    range_checker.add_count(base_cell[1], cell_ptr_hi_bits(byte_ptr_max_bits));
+    let add_carries = (1..num_blocks)
+        .map(|i| {
+            let (add_carry, block_cell_ptr) =
+                add_const_u16_limbs_value(base_cell, (i * BLOCK_FE_WIDTH) as u32);
+            range_checker.add_count(block_cell_ptr[0], U16_BITS);
+            add_carry
+        })
+        .collect();
+    (conv_carry, add_carries)
 }
 
 #[inline(always)]

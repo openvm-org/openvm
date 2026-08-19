@@ -13,7 +13,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_span};
+use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_span};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -175,12 +175,12 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
         exec_state.streams.deferrals.len(),
         pre_compute.deferral_idx,
     )?;
-    let output_ptr = validate_memory_block_byte_span(
+    let output_ptr = validate_memory_block_span(
         pc,
         bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rd_ptr)),
         0,
     )?;
-    let input_ptr = validate_memory_block_byte_span(
+    let input_ptr = validate_memory_block_span(
         pc,
         bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rs_ptr)),
         OUTPUT_TOTAL_MEMORY_OPS,
@@ -192,7 +192,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     let (output_commit, output_len) = split_output(output_key);
 
     let output_len_val = checked_output_len(pc, output_len)? as usize;
-    validate_memory_block_byte_span(pc, output_ptr, output_len_val / MEMORY_BLOCK_BYTES)?;
+    validate_memory_block_span(pc, output_ptr, output_len_val / MEMORY_BLOCK_BYTES)?;
 
     // Bytes are sponge-hashed and constrained against output_commit. The
     // sponge rate is DIGEST_SIZE.

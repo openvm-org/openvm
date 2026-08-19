@@ -76,12 +76,18 @@ template <typename T> struct DeferralOutputCols {
     // non-last rows, compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
 
-    // Carry for converting the heap `input` base byte pointer (read on the first row) to AS-native
-    // u16 cell pointer limbs, plus per-block cell-offset carries.
-    T input_cell_carry;
-    T input_add_carry[OUTPUT_TOTAL_MEMORY_OPS];
+    // Carry for converting the input byte pointer to memory-cell pointer limbs.
+    T input_byte_to_cell_carry;
 
-    // Per-row output write cell pointer limbs `[lo16, hi16]`. On write rows this equals
-    // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2`.
-    T write_cell_ptr[2];
+    // Carries for adding offsets of input blocks after block zero.
+    T input_block_add_carries[OUTPUT_TOTAL_MEMORY_OPS - 1];
+
+    // Carry for converting the output byte pointer on the first row.
+    T output_byte_to_cell_carry;
+
+    // Cell pointer associated with this section row.
+    T write_cell_ptr_limbs[2];
+
+    // Carry when advancing the write pointer by one digest.
+    T write_ptr_add_carry;
 };

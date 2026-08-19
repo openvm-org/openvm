@@ -13,7 +13,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
-use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_span};
+use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_span};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::FieldExprVecHeapExecutor;
@@ -373,9 +373,9 @@ unsafe fn execute_e12_impl<
         .rs_addrs
         .map(|addr| bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, addr as u32)));
     for &address in &rs_vals {
-        validate_memory_block_byte_span(pc, address, BLOCKS)?;
+        validate_memory_block_span(pc, address, BLOCKS)?;
     }
-    let rd_val = validate_memory_block_byte_span(
+    let rd_val = validate_memory_block_span(
         pc,
         bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32)),
         BLOCKS,
@@ -409,9 +409,9 @@ unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
         .rs_addrs
         .map(|addr| bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, addr as u32)));
     for &address in &rs_vals {
-        validate_memory_block_byte_span(pc, address, BLOCKS)?;
+        validate_memory_block_span(pc, address, BLOCKS)?;
     }
-    let rd_val = validate_memory_block_byte_span(
+    let rd_val = validate_memory_block_span(
         pc,
         bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32)),
         BLOCKS,
@@ -452,9 +452,9 @@ unsafe fn execute_e12_setup_impl<
         .rs_addrs
         .map(|addr| bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, addr as u32)));
     for &address in &rs_vals {
-        validate_memory_block_byte_span(pc, address, BLOCKS)?;
+        validate_memory_block_span(pc, address, BLOCKS)?;
     }
-    let rd_val = validate_memory_block_byte_span(
+    let rd_val = validate_memory_block_span(
         pc,
         bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32)),
         BLOCKS,

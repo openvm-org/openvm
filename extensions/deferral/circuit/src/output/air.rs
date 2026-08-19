@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
     system::memory::{
         offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryAddress, DEFAULT_POINTER_MAX_BITS,
+        MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
@@ -22,8 +22,9 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs,
-    expand_to_register, pack_u8_pair, reg_byte_ptr_to_cell_ptr_limbs,
+    cell_ptr_hi_bits, eval_add_const_u16_limbs, eval_byte_ptr_block_aligned,
+    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_register, pack_u8_ptr_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -89,14 +90,20 @@ pub struct DeferralOutputCols<T> {
     // non-last rows, compression on the last row.
     pub poseidon2_res: [T; DIGEST_SIZE],
 
-    // Carry for converting the heap `input` base *byte* pointer (read on the first row) to
-    // AS-native u16 *cell* pointer limbs, plus per-block cell-offset carries.
-    pub input_cell_carry: T,
-    pub input_add_carry: [T; OUTPUT_TOTAL_MEMORY_OPS],
+    /// Carry for converting the input byte pointer to memory-cell pointer limbs.
+    pub input_byte_to_cell_carry: T,
 
-    // Per-row output write *cell* pointer limbs `[lo16, hi16]`. On write rows this equals
-    // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2` (cell = byte / 2).
-    pub write_cell_ptr: [T; 2],
+    /// Carries for adding offsets of input blocks after block zero.
+    pub input_block_add_carries: [T; OUTPUT_TOTAL_MEMORY_OPS - 1],
+
+    /// Carry for converting the output byte pointer on the first row.
+    pub output_byte_to_cell_carry: T,
+
+    /// Cell pointer associated with this section row.
+    pub write_cell_ptr_limbs: [T; 2],
+
+    /// Carry when advancing the write pointer by one digest.
+    pub write_ptr_add_carry: T,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -322,7 +329,6 @@ where
         // Constrain memory reads and writes using the MemoryBridge. a and b are
         // register pointers whose values are read first, then used as heap
         // pointers. c carries deferral_idx.
-        let output_ptr = bytes_to_f(&local.rd_val);
         let output_len_full = from_fn(|i| {
             if i < F_NUM_BYTES {
                 local.output_len[i].into()
@@ -337,40 +343,50 @@ where
                 output_commit_and_len,
             );
 
-        // Cell offset (in u16 cells) between consecutive heap read blocks.
-        let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-
-        // Convert the `input` base *byte* pointer (read on the first row) to AS-native u16 *cell*
-        // pointer limbs. The byte pointer is little-endian 16-bit limbs from the low 4 register
-        // bytes.
-        let input_byte_limbs: [AB::Expr; 2] = [
-            pack_u8_pair(local.rs_val[0].into(), local.rs_val[1].into()),
-            pack_u8_pair(local.rs_val[2].into(), local.rs_val[3].into()),
-        ];
-        let input_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+        // Both heap byte pointers must be memory-block (eight-byte) aligned; block zero of the
+        // input reads and the first output write then use the converted base cell limbs directly.
+        eval_byte_ptr_block_aligned::<AB>(
             builder,
             self.range_bus,
-            input_byte_limbs,
-            local.input_cell_carry,
+            local.rs_val[0],
+            local.is_first.into(),
+        );
+        eval_byte_ptr_block_aligned::<AB>(
+            builder,
+            self.range_bus,
+            local.rd_val[0],
+            local.is_first.into(),
+        );
+
+        // Convert the `input` base *byte* pointer (read on the first row) to AS-native u16 *cell*
+        // pointer limbs.
+        let input_base_cell = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            pack_u8_ptr_limbs(&local.rs_val),
+            local.input_byte_to_cell_carry,
             self.address_bits,
             local.is_first.into(),
         );
 
-        for (chunk_idx, (data, aux, carry)) in izip!(
+        for (chunk_idx, (data, aux)) in izip!(
             output_commit_and_len_chunks,
-            &local.output_commit_and_len_aux,
-            &local.input_add_carry
+            &local.output_commit_and_len_aux
         )
         .enumerate()
         {
-            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
-                builder,
-                self.range_bus,
-                input_base_cell.clone(),
-                chunk_idx as u32 * heap_cell_stride,
-                *carry,
-                local.is_first.into(),
-            );
+            let block_cell_ptr = if chunk_idx == 0 {
+                input_base_cell.clone()
+            } else {
+                eval_add_const_u16_limbs::<AB>(
+                    builder,
+                    self.range_bus,
+                    input_base_cell.clone(),
+                    (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                    local.input_block_add_carries[chunk_idx - 1],
+                    local.is_first.into(),
+                )
+            };
             self.memory_bridge
                 .read(
                     MemoryAddress::from_cell_pointer_limbs(
@@ -390,27 +406,54 @@ where
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
         let is_write_row = local.is_valid - local.is_first;
 
-        // Output write *cell* pointer for this row: `(output_ptr + (section_idx - 1) * DIGEST_SIZE)
-        // / 2`. The composed cell-pointer field expression can approach 2^31 (and thus exceed the
-        // field modulus), so it is witnessed as little-endian 16-bit cell-pointer limbs
-        // `[lo16, hi16]` and range-checked; the limbs are then constrained to equal the composed
-        // expression. With `lo16 < 2^16` and `hi16 < 2^(DEFAULT_POINTER_MAX_BITS - 16)` the
-        // decomposition is the unique canonical representative in `[0, 2^31)`.
-        let write_cell_lo = local.write_cell_ptr[0];
-        let write_cell_hi = local.write_cell_ptr[1];
-        let composed_write_cell = byte_ptr_to_u16_ptr::<AB>(
-            output_ptr.clone() + section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE),
+        // The write pointer is carried as little-endian 16-bit *cell* pointer limbs and advanced
+        // limb-wise, so no field recomposition of the (up to 31-bit) pointer ever occurs.
+        //
+        // Convert the `output` base *byte* pointer to cell-pointer limbs on the first row.
+        let output_base_cell = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            pack_u8_ptr_limbs(&local.rd_val),
+            local.output_byte_to_cell_carry,
+            self.address_bits,
+            local.is_first.into(),
         );
-        builder.when(is_write_row.clone()).assert_zero(
-            write_cell_lo + write_cell_hi * AB::Expr::from_u32(1 << U16_BITS) - composed_write_cell,
+
+        // A first row writes no output. If the next row belongs to the same section, it is the
+        // section's first write row and writes exactly at the output base cell pointer.
+        let is_first_write = local.is_first * is_transition.clone();
+        assert_array_eq(
+            &mut builder.when(is_first_write),
+            output_base_cell,
+            next.write_cell_ptr_limbs,
         );
+
+        // Subsequent write rows advance the pointer by one digest (in cells), carrying limb-wise.
+        let stride = AB::F::from_usize(DIGEST_SIZE / U16_CELL_SIZE);
+        builder.assert_bool(local.write_ptr_add_carry);
+        let next_lo = local.write_cell_ptr_limbs[0] + stride
+            - local.write_ptr_add_carry * AB::F::from_u32(1 << U16_BITS);
+        let next_hi = local.write_cell_ptr_limbs[1] + local.write_ptr_add_carry;
+        let is_next_write = is_write_row.clone() * is_transition.clone();
+        builder
+            .when(is_next_write.clone())
+            .assert_eq(next.write_cell_ptr_limbs[0], next_lo);
+        builder
+            .when(is_next_write)
+            .assert_eq(next.write_cell_ptr_limbs[1], next_hi);
+
+        // Range-check the pointer limbs on every write row. The low-limb check also forces
+        // `write_ptr_add_carry` to be the correct low-limb carry.
         self.range_bus
-            .range_check(write_cell_lo, U16_BITS)
+            .range_check(local.write_cell_ptr_limbs[0], U16_BITS)
             .eval(builder, is_write_row.clone());
         self.range_bus
-            .range_check(write_cell_hi, DEFAULT_POINTER_MAX_BITS - U16_BITS)
+            .range_check(
+                local.write_cell_ptr_limbs[1],
+                cell_ptr_hi_bits(self.address_bits),
+            )
             .eval(builder, is_write_row.clone());
-        let write_cell: [AB::Expr; 2] = [write_cell_lo.into(), write_cell_hi.into()];
+        let write_cell: [AB::Expr; 2] = local.write_cell_ptr_limbs.map(Into::into);
 
         for (chunk_idx, (data, aux)) in write_bytes_chunks
             .into_iter()

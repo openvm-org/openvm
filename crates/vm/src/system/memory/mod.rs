@@ -20,7 +20,7 @@ pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 use crate::{
-    arch::{to_byte_ptr_bits, AirRefWithColumns, MemoryConfig},
+    arch::{AirRefWithColumns, MemoryConfig},
     system::memory::{
         interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
         persistent::PersistentBoundaryAir,
@@ -36,7 +36,6 @@ use crate::{
 /// `MEM_BITS` (guest-visible runtime memory) may be smaller; the circuit bound here is
 /// independent of it.
 pub const DEFAULT_POINTER_MAX_BITS: usize = 31;
-const _: () = assert!(MEM_BITS <= to_byte_ptr_bits(DEFAULT_POINTER_MAX_BITS));
 // Valid RVR memory pointers and leaf indices fit in `u32`. Guest operands stay
 // `u64` until a runtime bounds check proves that they are valid pointers.
 const _: () = assert!(MEM_BITS <= u32::BITS as usize);
@@ -99,17 +98,6 @@ impl<S, T> MemoryAddress<S, T> {
 }
 
 impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
-    /// Builds a bus address from a concrete, block-aligned AS-native cell pointer.
-    #[inline(always)]
-    pub fn from_u32_pointer(address_space: S, pointer: u32) -> Self {
-        Self {
-            address_space,
-            block_index: T::from_u32(pointer_to_block_index(pointer)),
-        }
-    }
-}
-
-impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
     /// Builds a bus address from little-endian 16-bit limbs of a block-aligned AS-native cell
     /// pointer. The caller must constrain the limbs to be canonical and the low limb to be
     /// divisible by [`BLOCK_FE_WIDTH`].
@@ -126,13 +114,6 @@ impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddres
             block_index,
         }
     }
-}
-
-/// Converts a concrete, block-aligned AS-native cell pointer to its memory-bus block index.
-#[inline(always)]
-pub const fn pointer_to_block_index(pointer: u32) -> u32 {
-    assert!(pointer.is_multiple_of(BLOCK_FE_WIDTH as u32));
-    pointer / BLOCK_FE_WIDTH as u32
 }
 
 #[derive(Clone)]

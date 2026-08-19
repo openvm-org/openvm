@@ -208,13 +208,13 @@ template <typename T> struct DeferralCallAdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_input_acc_aux[DIGEST_F_MEMORY_OPS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_output_acc_aux[DIGEST_F_MEMORY_OPS];
 
-    // Carries for converting the heap `input`/`output` base byte pointers to AS-native u16 cell
-    // pointer limbs, plus per-block cell-offset carries. The DEFERRAL_AS accumulator pointers are
-    // bounded below 2^16 and need no carry/decomposition columns.
-    T input_cell_carry;
-    T output_cell_carry;
-    T input_commit_add_carry[COMMIT_MEMORY_OPS];
-    T output_add_carry[OUTPUT_TOTAL_MEMORY_OPS];
+    // Carries for converting heap byte pointers to cell-pointer limbs.
+    T input_byte_to_cell_carry;
+    T output_byte_to_cell_carry;
+
+    // Carries for advancing from the base pointer to subsequent memory blocks.
+    T input_add_carries[COMMIT_MEMORY_OPS - 1];
+    T output_add_carries[OUTPUT_TOTAL_MEMORY_OPS - 1];
 };
 
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
@@ -327,27 +327,24 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     }
 
     // Convert the heap `input` (rs_val) and `output` (rd_val) base byte pointers to AS-native u16
-    // cell pointer limbs and emit the matching range-check counts. Mirrors the per-block carry
-    // computation in the host `DeferralCallAdapterFiller`.
-    const uint32_t heap_cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
-
+    // cell pointer limbs and emit the matching range-check counts. Mirrors the carry computation
+    // in the host `DeferralCallAdapterFiller`.
     {
         const uint32_t input_ptr =
             static_cast<uint32_t>(record.rs_val[0]) |
             (static_cast<uint32_t>(record.rs_val[1]) << BYTE_BITS) |
             (static_cast<uint32_t>(record.rs_val[2]) << (2 * BYTE_BITS)) |
             (static_cast<uint32_t>(record.rs_val[3]) << (3 * BYTE_BITS));
-        uint32_t add_carries[COMMIT_MEMORY_OPS];
-        const uint32_t conv_carry = compute_pointer_carries(
+        uint32_t add_carries[COMMIT_MEMORY_OPS - 1];
+        const uint32_t conv_carry = compute_aligned_pointer_carries(
             range_checker,
             input_ptr,
             address_bits,
             COMMIT_MEMORY_OPS,
-            heap_cell_stride,
             add_carries
         );
-        COL_WRITE_VALUE(row, DeferralCallAdapterCols, input_cell_carry, Fp(conv_carry));
-        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, input_commit_add_carry, add_carries);
+        COL_WRITE_VALUE(row, DeferralCallAdapterCols, input_byte_to_cell_carry, Fp(conv_carry));
+        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, input_add_carries, add_carries);
     }
 
     {
@@ -356,17 +353,16 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             (static_cast<uint32_t>(record.rd_val[1]) << BYTE_BITS) |
             (static_cast<uint32_t>(record.rd_val[2]) << (2 * BYTE_BITS)) |
             (static_cast<uint32_t>(record.rd_val[3]) << (3 * BYTE_BITS));
-        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS];
-        const uint32_t conv_carry = compute_pointer_carries(
+        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS - 1];
+        const uint32_t conv_carry = compute_aligned_pointer_carries(
             range_checker,
             output_ptr,
             address_bits,
             OUTPUT_TOTAL_MEMORY_OPS,
-            heap_cell_stride,
             add_carries
         );
-        COL_WRITE_VALUE(row, DeferralCallAdapterCols, output_cell_carry, Fp(conv_carry));
-        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, output_add_carry, add_carries);
+        COL_WRITE_VALUE(row, DeferralCallAdapterCols, output_byte_to_cell_carry, Fp(conv_carry));
+        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, output_add_carries, add_carries);
     }
 }
 

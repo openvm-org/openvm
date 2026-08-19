@@ -20,7 +20,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block,
+    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
     reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
@@ -154,7 +154,7 @@ impl<
 
         // Convert each base *byte* pointer to base AS-native u16 *cell* pointer limbs.
         let rs_base_cell: [[AB::Expr; 2]; NUM_READS] = from_fn(|i| {
-            eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
                 builder,
                 self.range_bus,
                 cols.rs_val[i].map(Into::into),
@@ -163,7 +163,7 @@ impl<
                 ctx.instruction.is_valid.clone(),
             )
         });
-        let rd_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+        let rd_base_cell = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
             builder,
             self.range_bus,
             cols.rd_val.map(Into::into),

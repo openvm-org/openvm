@@ -3,7 +3,7 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{Postflight, PostflightError, U16Access, VmField, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
-    system::memory::{MemoryAuxColsFactory, DEFAULT_POINTER_MAX_BITS},
+    system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
@@ -17,7 +17,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, compute_pointer_carries, u16_block_to_bytes, u32_to_ptr_limbs,
+    byte_ptr_to_u16_ptr_value, cell_ptr_hi_bits, u16_block_to_bytes, u32_to_ptr_limbs,
 };
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -28,9 +28,9 @@ use crate::{
     output::{DeferralOutputChip, DeferralOutputCols},
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        checked_pointer_offset, checked_u16_pointer, f_commit_to_bytes, logged_u32_pointer,
-        require_block_alignment, split_output, DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES,
-        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        checked_pointer_offset, checked_u16_pointer, compute_aligned_pointer_carries,
+        f_commit_to_bytes, logged_u32_pointer, require_block_alignment, split_output,
+        DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -301,20 +301,30 @@ fn fill_output_section<F: VmField>(
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
             }
 
-            // Byte -> cell pointer conversion carry and per-block cell-offset carries for
-            // the `input` base pointer (read on the first row), plus matching range checks.
-            let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-            let (input_conv, input_add) = compute_pointer_carries(
+            // Byte -> cell pointer conversion carries for the `input` base pointer (read on the
+            // first row) and the `output` base pointer (first write address), plus matching
+            // range checks.
+            let (input_conv, input_add) = compute_aligned_pointer_carries(
                 &filler.range_checker_chip,
                 section.rs_val,
                 OUTPUT_TOTAL_MEMORY_OPS,
-                heap_cell_stride,
                 filler.address_bits,
             );
-            cols.input_cell_carry = F::from_u32(input_conv);
-            for (carry_col, &add_carry) in cols.input_add_carry.iter_mut().zip(input_add.iter()) {
+            cols.input_byte_to_cell_carry = F::from_u32(input_conv);
+            for (carry_col, &add_carry) in cols
+                .input_block_add_carries
+                .iter_mut()
+                .zip(input_add.iter())
+            {
                 *carry_col = F::from_u32(add_carry);
             }
+            let (output_conv, _) = compute_aligned_pointer_carries(
+                &filler.range_checker_chip,
+                section.rd_val,
+                1,
+                filler.address_bits,
+            );
+            cols.output_byte_to_cell_carry = F::from_u32(output_conv);
 
             cols.sponge_inputs = initial_sponge_input;
             current_poseidon2_res = filler.poseidon2_chip.perm_and_record(
@@ -343,9 +353,8 @@ fn fill_output_section<F: VmField>(
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
             }
 
-            // Output write *cell* pointer for this row =
-            // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2`, witnessed as
-            // little-endian 16-bit cell-pointer limbs `[lo16, hi16]` and range-checked.
+            // Output write *cell* pointer limbs for this row, advanced limb-wise from the
+            // converted output base pointer, and the carry into the next write row.
             let write_byte_ptr = section.rd_val + ((row_idx - 1) * DIGEST_SIZE) as u32;
             let write_cell_ptr = byte_ptr_to_u16_ptr_value(write_byte_ptr);
             let write_cell_limbs = u32_to_ptr_limbs(write_cell_ptr);
@@ -354,8 +363,10 @@ fn fill_output_section<F: VmField>(
                 .add_count(write_cell_limbs[0], U16_BITS);
             filler
                 .range_checker_chip
-                .add_count(write_cell_limbs[1], DEFAULT_POINTER_MAX_BITS - U16_BITS);
-            cols.write_cell_ptr = write_cell_limbs.map(F::from_u32);
+                .add_count(write_cell_limbs[1], cell_ptr_hi_bits(filler.address_bits));
+            cols.write_cell_ptr_limbs = write_cell_limbs.map(F::from_u32);
+            let stride = (DIGEST_SIZE / U16_CELL_SIZE) as u32;
+            cols.write_ptr_add_carry = F::from_u32((write_cell_limbs[0] + stride) >> U16_BITS);
         }
         cols.poseidon2_res = current_poseidon2_res;
     }

@@ -41,7 +41,7 @@ use crate::{
 pub const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
 /// Number of low bits in the first leaf-label range-check limb.
-pub const LOW_LEAF_BITS: usize = U16_BITS - DIGEST_WIDTH_BITS;
+pub const LEAF_LABEL_LO_BITS: usize = U16_BITS - DIGEST_WIDTH_BITS;
 
 /// Each row describes one touched merkle leaf (`DIGEST_WIDTH` cells): its data and hash in both
 /// the initial and final memory state, together with the per-block final timestamps.
@@ -52,7 +52,7 @@ pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
     pub is_valid: T,
     pub is_dirty: T,
     pub address_space: T,
-    /// Leaf label decomposed as `low + 2^LOW_LEAF_BITS * high` for the 16-bit range checker.
+    /// Leaf label decomposed as `low + 2^LEAF_LABEL_LO_BITS * high` for the 16-bit range checker.
     pub leaf_label_limbs: [T; 2],
     pub initial_values: [T; DIGEST_WIDTH],
     pub final_values: [T; DIGEST_WIDTH],
@@ -123,13 +123,13 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
 
         let low = local.leaf_label_limbs[0];
         let high = local.leaf_label_limbs[1];
-        let leaf_label = low.into() + high.into() * AB::F::from_u32(1 << LOW_LEAF_BITS);
+        let leaf_label = low.into() + high.into() * AB::F::from_u32(1 << LEAF_LABEL_LO_BITS);
         let high_bits = self
             .memory_dimensions
             .address_height
-            .saturating_sub(LOW_LEAF_BITS);
+            .saturating_sub(LEAF_LABEL_LO_BITS);
         self.range_bus
-            .range_check(low, LOW_LEAF_BITS)
+            .range_check(low, LEAF_LABEL_LO_BITS)
             .eval(builder, local.is_valid);
         self.range_bus
             .range_check(high, high_bits)
@@ -405,19 +405,19 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            let low_mask = (1u32 << LOW_LEAF_BITS) - 1;
+            let low_mask = (1u32 << LEAF_LABEL_LO_BITS) - 1;
             let high_bits = self
                 .air
                 .memory_dimensions
                 .address_height
-                .saturating_sub(LOW_LEAF_BITS);
+                .saturating_sub(LEAF_LABEL_LO_BITS);
 
             rows.par_chunks_mut(width)
                 .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
                     let low = touched_label.label & low_mask;
-                    let high = touched_label.label >> LOW_LEAF_BITS;
-                    self.range_checker.add_count(low, LOW_LEAF_BITS);
+                    let high = touched_label.label >> LEAF_LABEL_LO_BITS;
+                    self.range_checker.add_count(low, LEAF_LABEL_LO_BITS);
                     self.range_checker.add_count(high, high_bits);
                     *row.borrow_mut() = PersistentBoundaryCols {
                         is_valid: Val::<SC>::ONE,

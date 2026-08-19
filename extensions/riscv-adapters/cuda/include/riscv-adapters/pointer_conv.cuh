@@ -62,6 +62,34 @@ __device__ __forceinline__ void compute_block_add_carries(
     }
 }
 
+// Bit width of the block-alignment range check on a byte pointer's low byte. Mirrors
+// `BYTE_PTR_ALIGN_BITS` in `openvm_riscv_circuit::adapters`.
+inline constexpr size_t BYTE_PTR_ALIGN_BITS = openvm::BYTE_BITS - 3;
+static_assert(MEMORY_BLOCK_BYTES == 1 << 3);
+
+// Mirrors `compute_aligned_pointer_carries` in the deferral circuit: returns the conversion
+// carry and writes one add-carry per block after block zero into add_carry_out, registering
+// the block-alignment, high-limb, and per-subsequent-block low-limb range-check counts.
+__device__ __forceinline__ uint32_t compute_aligned_pointer_carries(
+    VariableRangeChecker &range_checker,
+    uint32_t byte_ptr,
+    size_t byte_ptr_max_bits,
+    uint32_t num_blocks,
+    uint32_t *add_carry_out
+) {
+    range_checker.add_count((byte_ptr & 0xffu) / MEMORY_BLOCK_BYTES, BYTE_PTR_ALIGN_BITS);
+    CellPtr conv = byte_ptr_limbs_to_cell_ptr_limbs_value(
+        byte_ptr & 0xffffu, byte_ptr >> openvm::U16_BITS
+    );
+    range_checker.add_count(conv.limbs[1], cell_ptr_hi_bits(byte_ptr_max_bits));
+    for (uint32_t i = 1; i < num_blocks; i++) {
+        uint32_t sum_lo = conv.limbs[0] + i * BLOCK_FE_WIDTH;
+        range_checker.add_count(sum_lo & 0xffffu, openvm::U16_BITS);
+        add_carry_out[i - 1] = sum_lo >> openvm::U16_BITS;
+    }
+    return conv.carry;
+}
+
 // Returns the conversion carry; writes one add-carry per block into add_carry_out.
 __device__ __forceinline__ uint32_t compute_pointer_carries(
     VariableRangeChecker &range_checker,

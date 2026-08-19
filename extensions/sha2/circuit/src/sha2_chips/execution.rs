@@ -8,7 +8,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_byte_span};
+use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_span};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{Sha2Config, Sha2VmExecutor, SHA2_READ_SIZE};
@@ -117,9 +117,9 @@ unsafe fn execute_e12_impl<C: Sha2Config, CTX: ExecutionCtxTrait, const IS_E1: b
     let dst_u32 = bytes_to_u32(dst);
     let state_u32 = bytes_to_u32(state);
     let input_u32 = bytes_to_u32(input);
-    validate_memory_block_byte_span(pc, dst_u32, C::STATE_WRITES)?;
-    validate_memory_block_byte_span(pc, state_u32, C::STATE_READS)?;
-    validate_memory_block_byte_span(pc, input_u32, C::BLOCK_READS)?;
+    validate_memory_block_span(pc, dst_u32, C::STATE_WRITES)?;
+    validate_memory_block_span(pc, state_u32, C::STATE_READS)?;
+    validate_memory_block_span(pc, input_u32, C::BLOCK_READS)?;
 
     let mut input_block = Vec::with_capacity(C::BLOCK_BYTES);
     for i in 0..C::BLOCK_READS {

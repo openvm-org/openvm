@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::BLOCK_FE_WIDTH,
-    system::memory::persistent::{PersistentBoundaryCols, LOW_LEAF_BITS},
+    system::memory::persistent::{PersistentBoundaryCols, LEAF_LABEL_LO_BITS},
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
@@ -55,7 +55,7 @@ impl BoundaryChipGPU {
             device_ctx,
             poseidon2_buffer,
             range_checker,
-            leaf_label_high_bits: address_height.saturating_sub(LOW_LEAF_BITS) as u32,
+            leaf_label_high_bits: address_height.saturating_sub(LEAF_LABEL_LO_BITS) as u32,
             initial_leaves: Vec::new(),
             cell_types,
             records: None,

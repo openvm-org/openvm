@@ -22,6 +22,8 @@ template <typename T> struct PersistentBoundaryCols {
     T is_valid;
     T is_dirty;
     T address_space;
+    // Range-check decomposition `leaf_label = low + 2^LEAF_LABEL_LO_BITS * high`; the merkle
+    // bus carries the recomposed scalar label (see persistent.rs).
     T leaf_label_limbs[LEAF_LABEL_LIMBS];
     T initial_values[DIGEST_WIDTH];
     T final_values[DIGEST_WIDTH];
@@ -60,11 +62,11 @@ __global__ void cukernel_persistent_boundary_tracegen(
         // The AIR range-checks both leaf-label limbs with multiplicity `is_valid = 1`.
         uint32_t const leaf_label = record.ptr / DIGEST_WIDTH;
         uint32_t const leaf_label_limbs[LEAF_LABEL_LIMBS] = {
-            leaf_label & ((uint32_t(1) << LOW_LEAF_BITS) - 1),
-            leaf_label >> LOW_LEAF_BITS,
+            leaf_label & ((uint32_t(1) << LEAF_LABEL_LO_BITS) - 1),
+            leaf_label >> LEAF_LABEL_LO_BITS,
         };
         COL_WRITE_ARRAY(row, PersistentBoundaryCols, leaf_label_limbs, leaf_label_limbs);
-        range_checker.add_count(leaf_label_limbs[0], LOW_LEAF_BITS);
+        range_checker.add_count(leaf_label_limbs[0], LEAF_LABEL_LO_BITS);
         range_checker.add_count(leaf_label_limbs[1], leaf_label_high_bits);
 
         FpArray<DIGEST_WIDTH> init_values{};

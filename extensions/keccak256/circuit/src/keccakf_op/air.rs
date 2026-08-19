@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block,
+    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
     reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
@@ -85,7 +85,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // Convert the base `buffer` *byte* pointer to base AS-native u16 *cell* pointer limbs.
         let buffer_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.buffer_ptr_limbs[i].into());
-        let buffer_base_cell_ptr = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+        let buffer_base_cell_ptr = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
             builder,
             self.range_bus,
             buffer_byte_limbs,

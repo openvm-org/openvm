@@ -92,14 +92,14 @@ pub(crate) struct ReplayResult<const NUM_LIMBS: usize, M> {
 /// the RV64 u16 address spaces that makes every proof-visible block start
 /// [`MEMORY_BLOCK_BYTES`]-byte aligned.
 #[inline(always)]
-pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, ExecutionError> {
-    if !ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
+pub fn validate_memory_block_start(pc: u32, byte_ptr: u32) -> Result<u32, ExecutionError> {
+    if !byte_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
         return Err(ExecutionError::Fail {
             pc,
             msg: "memory block pointer must be eight-byte aligned",
         });
     }
-    Ok(ptr)
+    Ok(byte_ptr)
 }
 
 /// Validate a contiguous span of memory-bus blocks starting at a guest byte pointer.
@@ -107,38 +107,38 @@ pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, Executio
 /// This check must happen before computing per-block `u32` addresses so an access crossing the
 /// top of the 32-bit RV64 memory domain cannot wrap back to address zero in release builds.
 #[inline(always)]
-pub fn validate_memory_block_byte_span(
+pub fn validate_memory_block_span(
     pc: u32,
-    ptr: u32,
+    byte_ptr: u32,
     num_blocks: usize,
 ) -> Result<u32, ExecutionError> {
-    validate_memory_block_byte_ptr(pc, ptr)?;
+    validate_memory_block_start(pc, byte_ptr)?;
     let Some(num_bytes) = num_blocks.checked_mul(MEMORY_BLOCK_BYTES) else {
         return Err(ExecutionError::Fail {
             pc,
             msg: "memory block span exceeds implemented memory address space",
         });
     };
-    validate_memory_byte_span(pc, ptr, num_bytes)
+    validate_memory_byte_span(pc, byte_ptr, num_bytes)
 }
 
 /// Validate a contiguous byte span without imposing an instruction-specific alignment rule.
 #[inline(always)]
 pub fn validate_memory_byte_span(
     pc: u32,
-    ptr: u32,
+    byte_ptr: u32,
     num_bytes: usize,
 ) -> Result<u32, ExecutionError> {
     let end = u64::try_from(num_bytes)
         .ok()
-        .and_then(|bytes| u64::from(ptr).checked_add(bytes));
+        .and_then(|bytes| u64::from(byte_ptr).checked_add(bytes));
     if end.is_none_or(|end| end > DEFAULT_RV64_MEMORY_BYTE_CAPACITY as u64) {
         return Err(ExecutionError::Fail {
             pc,
             msg: "memory block span exceeds implemented memory address space",
         });
     }
-    Ok(ptr)
+    Ok(byte_ptr)
 }
 
 /// Supported load/store access widths in bytes.
@@ -178,6 +178,20 @@ pub fn pack_u8_pair<T: PrimeCharacteristicRing>(lo: T, hi: T) -> T {
 #[inline(always)]
 pub fn pack_u8_pair_u32<T: PrimeCharacteristicRing>(lo: u32, hi: u32) -> T {
     pack_u8_pair(T::from_u32(lo), T::from_u32(hi))
+}
+
+/// Packs a byte pointer's four little-endian u8 limbs into little-endian 16-bit pointer limbs
+/// `[lo16, hi16]`.
+#[inline(always)]
+pub fn pack_u8_ptr_limbs<V, T>(bytes: &[V; WORD_NUM_LIMBS]) -> PtrLimbs<T>
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    [
+        pack_u8_pair(bytes[0].clone().into(), bytes[1].clone().into()),
+        pack_u8_pair(bytes[2].clone().into(), bytes[3].clone().into()),
+    ]
 }
 
 #[inline(always)]
@@ -531,7 +545,7 @@ pub fn reg_byte_ptr_to_cell_ptr_limbs_value(byte_ptr: u32) -> u32 {
 /// `cell_hi_bits = cell_max_bits - U16_BITS`. Since `cell_hi` is a bounded integer expression, this
 /// also forces `carry = byte_hi & 1`.
 #[allow(clippy::too_many_arguments)]
-pub fn eval_byte_ptr_limbs_to_u16_cell_ptr_limbs<AB: InteractionBuilder>(
+pub fn eval_byte_ptr_limbs_to_cell_ptr_limbs<AB: InteractionBuilder>(
     builder: &mut AB,
     range_bus: VariableRangeCheckerBus,
     byte_limbs: [AB::Expr; 2],
@@ -556,6 +570,27 @@ pub fn eval_byte_ptr_limbs_to_u16_cell_ptr_limbs<AB: InteractionBuilder>(
 #[inline(always)]
 pub fn cell_ptr_hi_bits(byte_ptr_max_bits: usize) -> usize {
     byte_ptr_max_bits - U16_CELL_SIZE_BITS - U16_BITS
+}
+
+/// Bit width of the range check in [`eval_byte_ptr_block_aligned`] (and its trace mirror).
+pub const BYTE_PTR_ALIGN_BITS: usize = BYTE_BITS - MEMORY_BLOCK_BYTES.ilog2() as usize;
+
+/// Constrains a byte pointer to be [`MEMORY_BLOCK_BYTES`]-aligned by range-checking
+/// `low_byte / MEMORY_BLOCK_BYTES` to [`BYTE_PTR_ALIGN_BITS`] bits. `low_byte` must already be
+/// constrained to a canonical byte; alignment only concerns its low bits, so the higher pointer
+/// limbs need no constraint.
+pub fn eval_byte_ptr_block_aligned<AB: InteractionBuilder>(
+    builder: &mut AB,
+    range_bus: VariableRangeCheckerBus,
+    low_byte: impl Into<AB::Expr>,
+    enabled: AB::Expr,
+) {
+    range_bus
+        .range_check(
+            low_byte.into() * AB::F::from_u32(MEMORY_BLOCK_BYTES as u32).inverse(),
+            BYTE_PTR_ALIGN_BITS,
+        )
+        .eval(builder, enabled);
 }
 
 /// Adds a small constant `constant` (`< 2^16`) to a pointer given as little-endian 16-bit limbs
@@ -612,7 +647,7 @@ pub fn compute_block_add_carries(
         .collect()
 }
 
-/// Value form of [`eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`]. Returns
+/// Value form of [`eval_byte_ptr_limbs_to_cell_ptr_limbs`]. Returns
 /// `(carry, [cell_lo, cell_hi])` for an aligned byte pointer given as little-endian 16-bit limb
 /// values. The caller is responsible for registering the matching range-check for `cell_hi`
 /// to `hi_bits`.
@@ -765,9 +800,8 @@ mod tests {
     use openvm_instructions::instruction::InstructionOperand;
 
     use super::{
-        checked_register_u16_pointer, decode_signed_instruction_imm,
-        validate_memory_block_byte_ptr, validate_memory_block_byte_span, validate_memory_byte_span,
-        RV_B_TYPE_IMM_BITS,
+        checked_register_u16_pointer, decode_signed_instruction_imm, validate_memory_block_span,
+        validate_memory_block_start, validate_memory_byte_span, RV_B_TYPE_IMM_BITS,
     };
 
     #[test]
@@ -800,13 +834,10 @@ mod tests {
     #[test]
     fn memory_block_pointer_uses_the_eight_byte_equipartition() {
         for pointer in [0, 8] {
-            assert_eq!(
-                validate_memory_block_byte_ptr(12, pointer).unwrap(),
-                pointer
-            );
+            assert_eq!(validate_memory_block_start(12, pointer).unwrap(), pointer);
         }
         for pointer in [2, 4, 6] {
-            let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
+            let error = validate_memory_block_start(12, pointer).unwrap_err();
             assert!(error.to_string().contains("eight-byte aligned"), "{error}");
         }
     }
@@ -815,11 +846,11 @@ mod tests {
     fn memory_block_span_rejects_32_bit_wraparound() {
         let final_block = u32::MAX - 7;
         assert_eq!(
-            validate_memory_block_byte_span(12, final_block, 1).unwrap(),
+            validate_memory_block_span(12, final_block, 1).unwrap(),
             final_block
         );
 
-        let error = validate_memory_block_byte_span(12, final_block, 2).unwrap_err();
+        let error = validate_memory_block_span(12, final_block, 2).unwrap_err();
         assert!(
             error
                 .to_string()

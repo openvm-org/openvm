@@ -2,10 +2,7 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use itertools::Itertools;
 use openvm_circuit::{
-    arch::{
-        Postflight, PostflightError, U16Access, VmField, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
-        U16_CELL_SIZE,
-    },
+    arch::{Postflight, PostflightError, U16Access, VmField, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
@@ -18,7 +15,7 @@ use openvm_instructions::{
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::{compute_pointer_carries, u16_block_to_bytes};
+use openvm_riscv_circuit::adapters::u16_block_to_bytes;
 use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -29,9 +26,10 @@ use crate::{
     count::DeferralCircuitCountChip,
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        byte_commit_to_f, checked_pointer_offset, checked_u16_pointer, f_memory_op_chunk,
-        logged_u32_pointer, require_block_alignment, COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES,
-        DIGEST_F_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, checked_pointer_offset, checked_u16_pointer,
+        compute_aligned_pointer_carries, f_memory_op_chunk, logged_u32_pointer,
+        require_block_alignment, COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
+        F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
 };
@@ -313,34 +311,28 @@ fn fill_call_adapter<F: VmField>(
         }
     }
 
-    // Byte -> cell pointer conversion carries and per-block cell-offset carries for the heap
-    // `input`/`output` pointers, plus matching range-check counts.
-    let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-    let (input_conv, input_add) = compute_pointer_carries(
+    // Byte -> cell pointer conversion carries and subsequent-block cell-offset carries for the
+    // heap `input`/`output` pointers, plus matching range-check counts.
+    let (input_conv, input_add) = compute_aligned_pointer_carries(
         &filler.range_checker_chip,
         replay.rs_val,
         COMMIT_MEMORY_OPS,
-        heap_cell_stride,
         filler.address_bits,
     );
-    let (output_conv, output_add) = compute_pointer_carries(
+    let (output_conv, output_add) = compute_aligned_pointer_carries(
         &filler.range_checker_chip,
         replay.rd_val,
         OUTPUT_TOTAL_MEMORY_OPS,
-        heap_cell_stride,
         filler.address_bits,
     );
-    cols.input_cell_carry = F::from_u32(input_conv);
-    cols.output_cell_carry = F::from_u32(output_conv);
-    for (col, &c) in cols.input_commit_add_carry.iter_mut().zip(input_add.iter()) {
+    cols.input_byte_to_cell_carry = F::from_u32(input_conv);
+    cols.output_byte_to_cell_carry = F::from_u32(output_conv);
+    for (col, &c) in cols.input_add_carries.iter_mut().zip(input_add.iter()) {
         *col = F::from_u32(c);
     }
-    for (col, &c) in cols.output_add_carry.iter_mut().zip(output_add.iter()) {
+    for (col, &c) in cols.output_add_carries.iter_mut().zip(output_add.iter()) {
         *col = F::from_u32(c);
     }
-
-    // The DEFERRAL_AS accumulator cell pointers are bounded below 2^16 (see the static assert
-    // in `super`), so they need no limb decomposition, range checks, or add-carry columns.
 
     for (aux, access) in cols
         .new_output_acc_aux

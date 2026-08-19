@@ -2,7 +2,7 @@ use openvm_circuit::{
     arch::{ExecutionCtxTrait, ExecutionError, VmExecState, MEMORY_BLOCK_BYTES},
     system::memory::online::GuestMemory,
 };
-use openvm_riscv_circuit::adapters::validate_memory_block_byte_span;
+use openvm_riscv_circuit::adapters::validate_memory_block_span;
 
 use crate::{
     BYTE_BITS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U32_LIMBS, INT256_NUM_U64_LIMBS,
@@ -16,7 +16,7 @@ pub fn read_int256<CTX: ExecutionCtxTrait>(
     addr_space: u32,
     ptr: u32,
 ) -> Result<[u8; INT256_NUM_U8_LIMBS], ExecutionError> {
-    validate_memory_block_byte_span(exec_state.pc(), ptr, INT256_NUM_MEMORY_BLOCKS)?;
+    validate_memory_block_span(exec_state.pc(), ptr, INT256_NUM_MEMORY_BLOCKS)?;
     let mut result = [0u8; INT256_NUM_U8_LIMBS];
     for i in 0..INT256_NUM_MEMORY_BLOCKS {
         let block: [u8; MEMORY_BLOCK_BYTES] =
@@ -34,7 +34,7 @@ pub fn write_int256<CTX: ExecutionCtxTrait>(
     ptr: u32,
     data: &[u8; INT256_NUM_U8_LIMBS],
 ) -> Result<(), ExecutionError> {
-    validate_memory_block_byte_span(exec_state.pc(), ptr, INT256_NUM_MEMORY_BLOCKS)?;
+    validate_memory_block_span(exec_state.pc(), ptr, INT256_NUM_MEMORY_BLOCKS)?;
     for i in 0..INT256_NUM_MEMORY_BLOCKS {
         let block: [u8; MEMORY_BLOCK_BYTES] = data
             [i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES]

@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block,
+    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
     reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
@@ -193,7 +193,7 @@ impl XorinVmAir {
         // Convert the base `buffer` *byte* pointer to base AS-native u16 *cell* pointer limbs.
         let buffer_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.buffer_ptr_limbs[i].into());
-        let buffer_base_cell_ptr = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+        let buffer_base_cell_ptr = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
             builder,
             self.range_bus,
             buffer_byte_limbs,
@@ -256,7 +256,7 @@ impl XorinVmAir {
         // Convert the base `input` *byte* pointer to base AS-native u16 *cell* pointer limbs.
         let input_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.input_ptr_limbs[i].into());
-        let input_base_cell_ptr = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+        let input_base_cell_ptr = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
             builder,
             self.range_bus,
             input_byte_limbs,

@@ -6,7 +6,10 @@
 namespace openvm {
 inline constexpr size_t BYTE_BITS = 8;
 inline constexpr size_t U16_BITS = 16;
-// log2 of the byte width of one u16-celled storage cell.
+// A u16 storage cell is 2 bytes wide, so byte pointers and u16-cell pointers convert by a
+// shift: `byte_ptr = cell_ptr << U16_CELL_SIZE_BITS`. Mirrors the Rust-side
+// `openvm_circuit::arch::U16_CELL_SIZE_BITS`; `params.cuh` static-asserts consistency with
+// `U16_CELL_SIZE`.
 inline constexpr size_t U16_CELL_SIZE_BITS = 1;
 } // namespace openvm
 
