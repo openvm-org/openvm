@@ -51,7 +51,7 @@ use super::{
 use crate::{
     circuit::{
         deferral::{DeferralCircuitPvs, DeferralMerkleProofs, DEF_HOOK_PVS_AIR_ID},
-        inner::ProofsType,
+        inner::{ProofsType, VerifierCircuitType},
     },
     prover::{
         engine_device_ctx, ChildVkKind, DeferralChildVkKind,
@@ -560,7 +560,7 @@ fn test_deferral_e2e() -> Result<()> {
     let leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<GpuEngine>(
         Arc::new(app_pk.get_vk()),
         leaf_system_params(),
-        false,
+        VerifierCircuitType::Leaf,
         Some(def_hook_cached_commit),
     );
     warn!("proving VM leaf aggregation");
@@ -570,7 +570,7 @@ fn test_deferral_e2e() -> Result<()> {
     let i4l_prover = InnerProver::<MAX_NUM_PROOFS>::new::<GpuEngine>(
         leaf_prover.get_vk(),
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalForLeaf,
         Some(def_hook_cached_commit),
     );
     warn!("proving VM internal-for-leaf");
@@ -580,7 +580,7 @@ fn test_deferral_e2e() -> Result<()> {
     let ir_prover = InnerProver::<MAX_NUM_PROOFS>::new::<GpuEngine>(
         i4l_prover.get_vk(),
         internal_system_params(),
-        true,
+        VerifierCircuitType::InternalRecursive,
         Some(def_hook_cached_commit),
     );
     warn!("proving VM internal-recursive");
@@ -594,7 +594,7 @@ fn test_deferral_e2e() -> Result<()> {
     let deferral_leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<GpuEngine>(
         hook_prover_for_commit.get_vk(),
         leaf_system_params(),
-        false,
+        VerifierCircuitType::Leaf,
         Some(def_hook_cached_commit),
     );
 
@@ -636,7 +636,7 @@ fn test_deferral_e2e() -> Result<()> {
     let def_i4l_prover = InnerProver::<MAX_NUM_PROOFS>::new::<GpuEngine>(
         deferral_leaf_prover.get_vk(),
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalForLeaf,
         Some(def_hook_cached_commit),
     );
     warn!("proving deferral-path internal-for-leaf");
@@ -650,7 +650,7 @@ fn test_deferral_e2e() -> Result<()> {
     let def_ir_prover = InnerProver::<MAX_NUM_PROOFS>::new::<GpuEngine>(
         def_i4l_prover.get_vk(),
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalRecursive,
         Some(def_hook_cached_commit),
     );
     warn!("proving deferral-path internal-recursive");

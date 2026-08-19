@@ -26,7 +26,10 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 
 use crate::circuit::{
-    inner::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
+    inner::{
+        bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
+        VerifierCircuitType,
+    },
     root::NUM_DIGESTS_IN_VM_COMMIT,
     subair::{HashSliceCtx, HashSliceSubAir},
     utils::{assert_vk_commit_eq, assert_vk_commit_unset, vk_commit_components},
@@ -54,6 +57,8 @@ pub struct VerifierPvsAir {
     pub range_bus: RangeCheckerBus,
     pub pvs_air_consistency_bus: PvsAirConsistencyBus,
     pub deferral_config: VerifierDeferralConfig,
+
+    pub verifier_type: VerifierCircuitType,
 }
 
 impl<F> BaseAir<F> for VerifierPvsAir {
@@ -339,6 +344,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             recursion_depth,
             internal_recursive_vk_commit,
         } = builder.public_values()[0..base_pvs_width].borrow();
+
+        builder.assert_eq(internal_flag, AB::Expr::from_u8(self.verifier_type as u8));
 
         // constrain internal_flag is 0 at the leaf level
         builder
