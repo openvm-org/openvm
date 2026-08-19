@@ -52,11 +52,11 @@ impl<'a, T> DummyMemoryInteractionColsRef<'a, T> {
 impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
     pub fn from_mut_slice(slice: &'a mut [T]) -> Self {
         let (addr_space, slice) = slice.split_first_mut().unwrap();
-        let (block_index, slice) = slice.split_first_mut().unwrap();
+        let (pointer, slice) = slice.split_first_mut().unwrap();
         let (count, slice) = slice.split_last_mut().unwrap();
         let (timestamp, data) = slice.split_last_mut().unwrap();
         Self {
-            address: MemoryAddress::new(addr_space, block_index),
+            address: MemoryAddress::new(addr_space, pointer),
             data,
             timestamp,
             count,
@@ -65,7 +65,7 @@ impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
 }
 
 /// AIR width = BLOCK_FE_WIDTH + 4
-/// (addr_space, block_index, data[BLOCK_FE_WIDTH], timestamp, count)
+/// (addr_space, pointer, data[BLOCK_FE_WIDTH], timestamp, count)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct MemoryDummyAir {
     pub bus: MemoryBus,
@@ -90,7 +90,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryDummyAir {
 
         self.bus
             .send(
-                MemoryAddress::new(*local.address.address_space, *local.address.block_index),
+                MemoryAddress::new(*local.address.address_space, *local.address.pointer),
                 local.data.to_vec(),
                 *local.timestamp,
             )

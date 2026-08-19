@@ -63,24 +63,25 @@ pub enum OpType {
 /// BLOCK_FE_WIDTH` instead of the AS-native cell pointer.
 pub const MEMORY_BLOCK_INDEX_SHIFT: usize = BLOCK_FE_WIDTH.ilog2() as usize;
 
-/// The full address of a memory-bus block consists of an address space and a block index within
+/// The full pointer to a location in memory consists of an address space and a pointer within
 /// the address space.
 ///
-/// A block index is an AS-native cell pointer divided by [`BLOCK_FE_WIDTH`]. With the largest
+/// The memory bus addresses [`BLOCK_FE_WIDTH`]-cell blocks, so the pointer is expressed at block
+/// granularity: an AS-native cell pointer divided by [`BLOCK_FE_WIDTH`]. With the largest
 /// supported 32-bit AS-native pointer domain it is at most 30 bits wide, so it fits injectively in
 /// the BabyBear field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct MemoryAddress<S, T> {
     pub address_space: S,
-    pub block_index: T,
+    pub pointer: T,
 }
 
 impl<S, T> MemoryAddress<S, T> {
-    pub fn new(address_space: S, block_index: T) -> Self {
+    pub fn new(address_space: S, pointer: T) -> Self {
         Self {
             address_space,
-            block_index,
+            pointer,
         }
     }
 
@@ -91,7 +92,7 @@ impl<S, T> MemoryAddress<S, T> {
     {
         Self {
             address_space: a.address_space.into(),
-            block_index: a.block_index.into(),
+            pointer: a.pointer.into(),
         }
     }
 }
@@ -106,11 +107,11 @@ impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddres
         [lo, hi]: [T; 2],
         block_width_inverse: U,
     ) -> Self {
-        let block_index = lo * block_width_inverse.into()
+        let pointer = lo * block_width_inverse.into()
             + hi * T::from_u32(1 << (16 - MEMORY_BLOCK_INDEX_SHIFT));
         Self {
             address_space,
-            block_index,
+            pointer,
         }
     }
 }
