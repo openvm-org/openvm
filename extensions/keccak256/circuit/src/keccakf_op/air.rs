@@ -18,7 +18,7 @@ use openvm_riscv_circuit::adapters::{
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -128,7 +128,11 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             let data: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::F::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::F::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     data,
                     timestamp_pp(),
                     MemoryWriteAuxInput::from_prev_data_exprs(&base_aux, prev_data),

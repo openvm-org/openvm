@@ -40,14 +40,7 @@ use crate::{
 /// Number of memory-bus blocks covered by one merkle leaf.
 pub const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-/// Number of low bits of a leaf label kept in the `low` limb of [`PersistentBoundaryCols::
-/// leaf_label_limbs`].
-///
-/// A merkle leaf spans `DIGEST_WIDTH` AS-native cells, so the leaf's base cell pointer is
-/// `leaf_label * DIGEST_WIDTH`. To send that pointer's low 16-bit limb without composing the full
-/// (up to 31-bit) pointer into a field element, we keep the low `LOW_LEAF_BITS` bits of the leaf
-/// label in `low` so that `low * DIGEST_WIDTH` (plus a small in-leaf block offset) stays within
-/// 16 bits: `LOW_LEAF_BITS = U16_BITS - DIGEST_WIDTH_BITS`.
+/// Number of low bits in the first leaf-label range-check limb.
 pub const LOW_LEAF_BITS: usize = U16_BITS - DIGEST_WIDTH_BITS;
 
 /// Each row describes one touched merkle leaf (`DIGEST_WIDTH` cells): its data and hash in both
@@ -59,12 +52,7 @@ pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
     pub is_valid: T,
     pub is_dirty: T,
     pub address_space: T,
-    /// Leaf label decomposed into little-endian limbs `[low, high]`:
-    ///   `leaf_label = low + 2^LOW_LEAF_BITS * high`,
-    /// where `low` is range-checked to [`LOW_LEAF_BITS`] bits and `high` to
-    /// `address_height - LOW_LEAF_BITS` bits. The decomposition lets us emit the leaf's base
-    /// AS-native cell pointer as two 16-bit limbs without composing the full pointer into one
-    /// field element.
+    /// Leaf label decomposed as `low + 2^LOW_LEAF_BITS * high` for the 16-bit range checker.
     pub leaf_label_limbs: [T; 2],
     pub initial_values: [T; DIGEST_WIDTH],
     pub final_values: [T; DIGEST_WIDTH],
@@ -133,14 +121,9 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         // `final_hash` needs no clean-row constraint: both interactions that contain it
         // have multiplicity `is_dirty`, so it is unused here.
 
-        // Decompose the leaf label into `[low, high]` limbs and reconstruct it for the merkle bus.
-        // `leaf_label = low + 2^LOW_LEAF_BITS * high`. We range-check the limbs (on valid rows
-        // only) so that the leaf's base cell pointer `leaf_label * DIGEST_WIDTH` splits cleanly
-        // into two 16-bit limbs below: `low * DIGEST_WIDTH < 2^16` and `high < 2^16`.
         let low = local.leaf_label_limbs[0];
         let high = local.leaf_label_limbs[1];
-        let leaf_label = low.into() + high.into() * AB::F::from_u32(1u32 << LOW_LEAF_BITS);
-
+        let leaf_label = low.into() + high.into() * AB::F::from_u32(1 << LOW_LEAF_BITS);
         let high_bits = self
             .memory_dimensions
             .address_height
@@ -167,7 +150,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             AB::Expr::NEG_ONE,
             AB::Expr::ZERO,
             local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
-            leaf_label,
+            leaf_label.clone(),
         ];
         expand_fields.extend(local.final_hash.map(Into::into));
         self.merkle_bus
@@ -194,21 +177,13 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
 
         // memory bus interactions
         for block_idx in 0..BLOCKS_PER_LEAF {
-            // The leaf's base cell pointer is `leaf_label * DIGEST_WIDTH`; block `block_idx` starts
-            // at `+ block_idx * BLOCK_FE_WIDTH`. As little-endian 16-bit limbs:
-            //   pointer_lo = low * DIGEST_WIDTH + block_idx * BLOCK_FE_WIDTH   (< 2^16)
-            //   pointer_hi = high
-            let pointer_lo = low.into() * AB::F::from_usize(DIGEST_WIDTH)
-                + AB::F::from_usize(block_idx * BLOCK_FE_WIDTH);
-            let pointer_hi: AB::Expr = high.into();
+            let memory_block_index = leaf_label.clone() * AB::F::from_usize(BLOCKS_PER_LEAF)
+                + AB::F::from_usize(block_idx);
             // Each block uses its own timestamp; untouched blocks stay at t=0.
             // initial block
             self.memory_bus
                 .send(
-                    MemoryAddress::new(
-                        local.address_space.into(),
-                        [pointer_lo.clone(), pointer_hi.clone()],
-                    ),
+                    MemoryAddress::new(local.address_space.into(), memory_block_index.clone()),
                     local.initial_values
                         [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
@@ -218,7 +193,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             // final block
             self.memory_bus
                 .send(
-                    MemoryAddress::new(local.address_space.into(), [pointer_lo, pointer_hi]),
+                    MemoryAddress::new(local.address_space.into(), memory_block_index),
                     local.final_values
                         [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
@@ -430,7 +405,6 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            // `leaf_label = low + 2^LOW_LEAF_BITS * high`.
             let low_mask = (1u32 << LOW_LEAF_BITS) - 1;
             let high_bits = self
                 .air
@@ -443,7 +417,6 @@ where
                 .for_each(|(row, touched_label)| {
                     let low = touched_label.label & low_mask;
                     let high = touched_label.label >> LOW_LEAF_BITS;
-                    // The AIR sends each limb range check with multiplicity `is_valid = 1`.
                     self.range_checker.add_count(low, LOW_LEAF_BITS);
                     self.range_checker.add_count(high, high_bits);
                     *row.borrow_mut() = PersistentBoundaryCols {

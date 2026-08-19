@@ -33,7 +33,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-use p3_field::PrimeField32;
+use p3_field::{Field, PrimeField32};
 
 use crate::{
     canonicity::{CanonicityAuxCols, CanonicitySubAir},
@@ -373,7 +373,11 @@ where
             );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(e.clone(), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        e.clone(),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&data),
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
@@ -425,7 +429,11 @@ where
             debug_assert_eq!(chunk_idx, 0);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(e.clone(), write_cell.clone()),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        e.clone(),
+                        write_cell.clone(),
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&data_expr),
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)

@@ -28,9 +28,6 @@ template <typename T> struct HintStoreCols {
     // Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`; the upper 4 bytes are
     // known to be zero and are hardcoded in the memory bus interaction.
     T mem_ptr_limbs[PTR_U16_LIMBS];
-    // Carry (`mem_ptr_limbs[1] & 1`) for converting the byte pointer to AS-native u16 *cell*
-    // pointer limbs.
-    T mem_ptr_carry;
     // Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment.
     T mem_ptr_inc_carry;
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
@@ -101,18 +98,12 @@ struct HintStore {
         COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
         COL_WRITE_ARRAY(row, HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
-        // Byte -> cell pointer conversion (heap write) and the per-row range checks:
-        // cell_hi (hi_bits) and the low byte limb (16 bits, for the limb-wise `+8` increment).
-        // `mem_ptr_limbs` are the little-endian 16-bit *byte*-pointer limbs `[byte_lo, byte_hi]`.
-        uint32_t mem_carry = mem_ptr_limbs[1] & 1u;
-        uint32_t cell_hi = mem_ptr_limbs[1] >> 1;
+        // Per-row block-index range checks prove alignment and the pointer bound.
         uint32_t inc_carry =
             (mem_ptr_limbs[0] + (uint32_t)REGISTER_NUM_LIMBS) >> U16_BITS;
-        COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_carry, mem_carry);
         COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_inc_carry, inc_carry);
-        uint32_t hi_bits = (uint32_t)pointer_max_bits - U16_CELL_SIZE_BITS - U16_BITS;
-        range_checker.add_count(cell_hi, hi_bits);
-        range_checker.add_count(mem_ptr_limbs[0], U16_BITS);
+        range_checker.add_count(mem_ptr_limbs[0] >> 3, U16_BITS - 3);
+        range_checker.add_count(mem_ptr_limbs[1], pointer_max_bits - U16_BITS);
 
         if (local_idx == 0) {
 #ifdef CUDA_DEBUG

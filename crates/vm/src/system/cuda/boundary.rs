@@ -17,11 +17,8 @@ use crate::cuda_abi::boundary::persistent_boundary_tracegen;
 pub struct BoundaryChipGPU {
     pub device_ctx: GpuDeviceCtx,
     pub poseidon2_buffer: SharedBuffer<F>,
-    /// Range checker receiving the leaf-label limb counts emitted by the tracegen kernel
-    /// (the AIR range-checks `leaf_label_limbs` on every valid row).
+    /// Range checker receiving the leaf-label counts emitted by the tracegen kernel.
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    /// Bit width of the high leaf-label limb range check:
-    /// `address_height - LOW_LEAF_BITS` (saturating).
     pub leaf_label_high_bits: u32,
     /// A `Vec` of pointers to the copied guest memory on device.
     /// This struct cannot own the device memory, hence we take extra care not to use memory we

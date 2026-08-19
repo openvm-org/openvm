@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, VecHeapBranchAdapterInterface,
-        VmAdapterAir, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
+        VmAdapterAir, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
     },
     system::memory::{
         offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols},
@@ -144,7 +144,11 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                 );
                 self.memory_bridge
                     .read(
-                        MemoryAddress::new(e, block_cell_ptr),
+                        MemoryAddress::from_cell_pointer_limbs(
+                            e,
+                            block_cell_ptr,
+                            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                        ),
                         pack_u8_block::<AB>(&read),
                         timestamp_pp(),
                         aux,

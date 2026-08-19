@@ -19,12 +19,6 @@ template <typename T> struct StoreMultiByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
-    // Carry (`byte_hi & 1`) for converting the aligned heap *byte* pointer into AS-native u16
-    // *cell* pointer limbs.
-    T mem_ptr_carry;
-    // Carry into the high cell limb when adding the block stride (in u16 cells) to the first
-    // block's cell pointer to address the second block.
-    T block1_add_carry;
     MemoryBaseAuxCols<T> write_base_aux[2];
 };
 
@@ -105,25 +99,7 @@ struct StoreAdapter {
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
         range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
-        // Byte -> cell pointer conversion for the first block; the AIR range-checks `cell_hi`
-        // with `enabled = is_valid`.
-        CellPtr mem_cell = byte_ptr_limbs_to_cell_ptr_limbs_value(aligned_limb, ptr_limbs[1]);
-        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, mem_ptr_carry, mem_cell.carry);
-        range_checker.add_count(mem_cell.limbs[1], cell_ptr_hi_bits(pointer_max_bits));
-        // Second-block cell pointer carry and low-limb range check (AIR `enabled = cross`).
-        if (crosses) {
-            CellPtr block1_cell = add_const_u16_limbs_value(
-                mem_cell.limbs[0],
-                mem_cell.limbs[1],
-                uint32_t(MEMORY_BLOCK_BYTES / U16_CELL_SIZE)
-            );
-            COL_WRITE_VALUE(
-                row, StoreMultiByteAdapterCols, block1_add_carry, block1_cell.carry
-            );
-            range_checker.add_count(block1_cell.limbs[0], U16_BITS);
-        } else {
-            COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, block1_add_carry, 0);
-        }
+        range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
     }
 };
 
@@ -138,9 +114,6 @@ template <typename T> struct StoreByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
-    // Carry (`byte_hi & 1`) for converting the aligned heap *byte* pointer into AS-native u16
-    // *cell* pointer limbs.
-    T mem_ptr_carry;
     MemoryBaseAuxCols<T> write_base_aux;
 };
 
@@ -210,10 +183,6 @@ struct StoreByteAdapter {
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
         range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
-        // Byte -> cell pointer conversion for the heap block; the AIR range-checks `cell_hi`
-        // with `enabled = is_valid`.
-        CellPtr mem_cell = byte_ptr_limbs_to_cell_ptr_limbs_value(aligned_limb, ptr_limbs[1]);
-        COL_WRITE_VALUE(row, StoreByteAdapterCols, mem_ptr_carry, mem_cell.carry);
-        range_checker.add_count(mem_cell.limbs[1], cell_ptr_hi_bits(pointer_max_bits));
+        range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
     }
 };

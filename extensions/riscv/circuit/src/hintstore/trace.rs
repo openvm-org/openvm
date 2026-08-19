@@ -17,8 +17,8 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{validate_hint_buffer_num_words, HintStoreChip, HintStoreCols, REM_WORDS_SHIFT};
 use crate::adapters::{
-    byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value, cell_ptr_hi_bits,
-    checked_register_pointer, ptr_to_field_u16_limbs, u32_to_ptr_limbs, PTR_BITS, U16_BITS,
+    byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs, u32_to_ptr_limbs,
+    PTR_BITS, U16_BITS,
 };
 
 struct HintStoreReplayInput {
@@ -241,15 +241,12 @@ fn fill_row<F: PrimeField32>(
     cols.data = write.value.map(F::from_u16);
     cols.is_buffer_start = F::from_bool(local_index == 0 && !is_single);
     cols.mem_ptr_limbs = ptr_to_field_u16_limbs(byte_ptr);
-    // Byte -> cell pointer conversion (heap write) and the per-row range checks: cell_hi
-    // (hi_bits) and the low byte limb (16 bits, for the limb-wise `+8` increment).
+    // Per-row block-index range checks prove eight-byte alignment and the pointer bound.
     let byte_limbs = u32_to_ptr_limbs(byte_ptr);
-    let (mem_carry, cell_limbs) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
-    cols.mem_ptr_carry = F::from_u32(mem_carry);
     // `+8` carry from this row's low byte limb into the high limb.
     cols.mem_ptr_inc_carry = F::from_u32((byte_limbs[0] + REGISTER_NUM_LIMBS as u32) >> U16_BITS);
-    range_checker.add_count(cell_limbs[1], cell_ptr_hi_bits(pointer_max_bits));
-    range_checker.add_count(byte_limbs[0], U16_BITS);
+    range_checker.add_count(byte_limbs[0] >> 3, U16_BITS - 3);
+    range_checker.add_count(byte_limbs[1], pointer_max_bits - U16_BITS);
     cols.mem_ptr_ptr = F::from_u32(input.mem_ptr_ptr);
     cols.from_state.timestamp = F::from_u32(timestamp);
     cols.from_state.pc = F::from_u32(input.from_pc);

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::VM_DIGEST_WIDTH;
+use openvm_instructions::{BLOCK_FE_WIDTH, VM_DIGEST_WIDTH};
 use openvm_platform::memory::MEM_BITS;
 use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 
@@ -58,32 +58,31 @@ pub enum OpType {
     Write = 1,
 }
 
-/// Number of little-endian 16-bit limbs used to represent an AS-native memory pointer on the
-/// memory bus.
+/// Number of low pointer bits omitted from a memory-bus address.
 ///
-/// AS-native pointers can be up to [`DEFAULT_POINTER_MAX_BITS`] (31) bits wide, which exceeds the
-/// BabyBear field modulus. To avoid composing a full pointer into a single field element, every
-/// memory-bus pointer is carried as two little-endian 16-bit limbs `[lo16, hi16]`.
-pub const POINTER_LIMBS: usize = 2;
+/// Every memory-bus operation addresses one [`BLOCK_FE_WIDTH`]-cell block, and block starts are
+/// aligned to [`BLOCK_FE_WIDTH`]. The bus therefore carries the block index `pointer /
+/// BLOCK_FE_WIDTH` instead of the AS-native cell pointer.
+pub const MEMORY_BLOCK_INDEX_SHIFT: usize = BLOCK_FE_WIDTH.ilog2() as usize;
 
-/// The full pointer to a location in memory consists of an address space and a pointer within
+/// The full address of a memory-bus block consists of an address space and a block index within
 /// the address space.
 ///
-/// The AS-native pointer is stored as little-endian 16-bit limbs `pointer_limbs = [lo16, hi16]`
-/// (see [`POINTER_LIMBS`]). These limbs are *AS-native cell* pointer limbs, not guest byte-pointer
-/// limbs.
+/// A block index is an AS-native cell pointer divided by [`BLOCK_FE_WIDTH`]. With the largest
+/// supported 32-bit AS-native pointer domain it is at most 30 bits wide, so it fits injectively in
+/// the BabyBear field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct MemoryAddress<S, T> {
     pub address_space: S,
-    pub pointer_limbs: [T; POINTER_LIMBS],
+    pub block_index: T,
 }
 
 impl<S, T> MemoryAddress<S, T> {
-    pub fn new(address_space: S, pointer_limbs: [T; POINTER_LIMBS]) -> Self {
+    pub fn new(address_space: S, block_index: T) -> Self {
         Self {
             address_space,
-            pointer_limbs,
+            block_index,
         }
     }
 
@@ -94,29 +93,46 @@ impl<S, T> MemoryAddress<S, T> {
     {
         Self {
             address_space: a.address_space.into(),
-            pointer_limbs: a.pointer_limbs.map(Into::into),
+            block_index: a.block_index.into(),
         }
     }
 }
 
 impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
-    /// Build an address from a concrete AS-native `pointer`, split into little-endian 16-bit
-    /// limbs `[lo16, hi16]`.
+    /// Builds a bus address from a concrete, block-aligned AS-native cell pointer.
     #[inline(always)]
     pub fn from_u32_pointer(address_space: S, pointer: u32) -> Self {
         Self {
             address_space,
-            pointer_limbs: pointer_to_limbs(pointer),
+            block_index: T::from_u32(pointer_to_block_index(pointer)),
         }
     }
 }
 
-/// Splits a concrete AS-native pointer into little-endian 16-bit limbs `[lo16, hi16]`.
+impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
+    /// Builds a bus address from little-endian 16-bit limbs of a block-aligned AS-native cell
+    /// pointer. The caller must constrain the limbs to be canonical and the low limb to be
+    /// divisible by [`BLOCK_FE_WIDTH`].
+    #[inline(always)]
+    pub fn from_cell_pointer_limbs<U: Into<T>>(
+        address_space: S,
+        [lo, hi]: [T; 2],
+        block_width_inverse: U,
+    ) -> Self {
+        let block_index = lo * block_width_inverse.into()
+            + hi * T::from_u32(1 << (16 - MEMORY_BLOCK_INDEX_SHIFT));
+        Self {
+            address_space,
+            block_index,
+        }
+    }
+}
+
+/// Converts a concrete, block-aligned AS-native cell pointer to its memory-bus block index.
 #[inline(always)]
-pub fn pointer_to_limbs<T: openvm_stark_backend::p3_field::PrimeCharacteristicRing>(
-    pointer: u32,
-) -> [T; POINTER_LIMBS] {
-    [T::from_u32(pointer & 0xffff), T::from_u32(pointer >> 16)]
+pub const fn pointer_to_block_index(pointer: u32) -> u32 {
+    assert!(pointer.is_multiple_of(BLOCK_FE_WIDTH as u32));
+    pointer / BLOCK_FE_WIDTH as u32
 }
 
 #[derive(Clone)]

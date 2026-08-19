@@ -396,14 +396,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // are bounded below 2^16 because the count bus constrains `deferral_idx < MAX_DEF_CIRCUITS`
         // (see the static assert in `super`). The pointer therefore fits entirely in the low cell
         // limb with a high limb of zero, so — unlike the heap pointers — no limb decomposition,
-        // range checks, or add carries are needed: each cell pointer is just `[base + offset, 0]`.
+        // range checks, or add carries are needed.
         let acc_base_ptr =
             deferral_idx.clone() * AB::Expr::from_usize(NUM_ACCUMULATORS_PER_IDX * DIGEST_SIZE);
-        let acc_cell_ptr = |offset: usize| -> [AB::Expr; 2] {
-            [
-                acc_base_ptr.clone() + AB::Expr::from_usize(offset),
-                AB::Expr::ZERO,
-            ]
+        let acc_block_index = |offset: usize| -> AB::Expr {
+            (acc_base_ptr.clone() + AB::Expr::from_usize(offset))
+                * AB::F::from_usize(BLOCK_FE_WIDTH).inverse()
         };
 
         let DeferralCallReads {
@@ -453,7 +451,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(e.clone(), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        e.clone(),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
@@ -472,7 +474,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .read(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        acc_cell_ptr(chunk_idx * BLOCK_FE_WIDTH),
+                        acc_block_index(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -492,7 +494,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .read(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        acc_cell_ptr(DIGEST_SIZE + chunk_idx * BLOCK_FE_WIDTH),
+                        acc_block_index(DIGEST_SIZE + chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -523,7 +525,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             );
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(e.clone(), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        e.clone(),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
@@ -542,7 +548,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .write(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        acc_cell_ptr(chunk_idx * BLOCK_FE_WIDTH),
+                        acc_block_index(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -562,7 +568,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .write(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        acc_cell_ptr(DIGEST_SIZE + chunk_idx * BLOCK_FE_WIDTH),
+                        acc_block_index(DIGEST_SIZE + chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),

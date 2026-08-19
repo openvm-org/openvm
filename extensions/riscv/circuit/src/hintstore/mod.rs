@@ -26,10 +26,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{
-    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
-    PTR_U16_LIMBS, U16_BITS,
-};
+use crate::adapters::{expand_to_block, reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS, U16_BITS};
 
 mod execution;
 
@@ -86,9 +83,6 @@ pub struct HintStoreCols<T> {
     /// *byte*-pointer limbs `[lo16, hi16]`. The byte pointer may span the full 2^32 byte address
     /// space.
     pub mem_ptr_limbs: [T; PTR_U16_LIMBS],
-    /// Carry (`mem_ptr_limbs[1] & 1`) for converting the byte pointer to AS-native u16 *cell*
-    /// pointer limbs. See `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`.
-    pub mem_ptr_carry: T,
     /// Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment (computed limb-wise to
     /// avoid composing a 32-bit pointer into one field element).
     pub mem_ptr_inc_carry: T,
@@ -203,19 +197,12 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             )
             .eval(builder, local_cols.is_buffer_start);
 
-        // write hint: convert the (aligned) heap byte pointer `mem_ptr_limbs` to AS-native cell
-        // pointer limbs without composing the full byte pointer into one field element.
-        let mem_ptr_cell_limbs = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
-            builder,
-            self.range_bus,
-            local_cols.mem_ptr_limbs.map(Into::into),
-            local_cols.mem_ptr_carry,
-            self.pointer_max_bits,
-            is_valid.clone(),
-        );
+        let block_bytes = AB::F::from_usize(MEMORY_BLOCK_BYTES);
+        let block_index = local_cols.mem_ptr_limbs[0] * block_bytes.inverse()
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << (U16_BITS - 3));
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_u32(MEMORY_AS), mem_ptr_cell_limbs),
+                MemoryAddress::new(AB::F::from_u32(MEMORY_AS), block_index),
                 local_cols.data.map(Into::into),
                 timestamp_pp(),
                 &local_cols.write_aux,
@@ -240,12 +227,19 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Range-check the low byte-pointer limb to 16 bits so the limb-wise `+8` increment below
-        // is sound. The high byte limb is bounded by the cell-pointer range checks in
-        // `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs` above (`cell_hi < 2^(pointer_max_bits - 16)`
-        // implies `byte_hi < 2^16`, i.e. byte pointer `< 2^32`).
+        // Dividing the aligned low limb by 8 gives the low 13 bits of the block index and proves
+        // both alignment and canonicality. The high limb completes the byte-pointer bound.
         self.range_bus
-            .range_check(local_cols.mem_ptr_limbs[0], U16_BITS)
+            .range_check(
+                local_cols.mem_ptr_limbs[0] * AB::F::from_usize(MEMORY_BLOCK_BYTES).inverse(),
+                U16_BITS - 3,
+            )
+            .eval(builder, is_valid.clone());
+        self.range_bus
+            .range_check(
+                local_cols.mem_ptr_limbs[1],
+                self.pointer_max_bits - U16_BITS,
+            )
             .eval(builder, is_valid.clone());
         // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
         self.range_bus

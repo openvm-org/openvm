@@ -498,25 +498,22 @@ pub fn ptr_limbs_to_u32(limbs: PtrLimbs<u32>) -> u32 {
     limbs[0] | (limbs[1] << U16_BITS)
 }
 
-/// AS-native cell-pointer limbs for a byte pointer in the register address space
-/// ([`REGISTER_AS`]).
+/// Memory-bus block index for a byte pointer in the register address space ([`REGISTER_AS`]).
 ///
-/// The register file holds at most `NUM_REGISTERS * 8` bytes, so a register byte pointer's
-/// cell pointer `ptr / 2` is far below `2^16`: it fits entirely in the low 16-bit limb and the
-/// high limb is always zero. This lets us skip the carry/decomposition columns and range checks
-/// that a general (up to `DEFAULT_POINTER_MAX_BITS`-bit) memory pointer requires. Only use this for
-/// register-AS pointers; for the memory address space use the range-checked decomposition helpers.
+/// Register pointers are aligned to one eight-byte register/memory-bus block, so their block index
+/// is `ptr / MEMORY_BLOCK_BYTES`.
 #[inline(always)]
 pub fn reg_byte_ptr_to_cell_ptr_limbs<AB: InteractionBuilder>(
     byte_ptr: impl Into<AB::Expr>,
-) -> PtrLimbs<AB::Expr> {
-    [byte_ptr_to_u16_ptr::<AB>(byte_ptr), AB::Expr::ZERO]
+) -> AB::Expr {
+    byte_ptr.into() * AB::F::from_usize(MEMORY_BLOCK_BYTES).inverse()
 }
 
 /// Value form of [`reg_byte_ptr_to_cell_ptr_limbs`].
 #[inline(always)]
-pub fn reg_byte_ptr_to_cell_ptr_limbs_value(byte_ptr: u32) -> PtrLimbs<u32> {
-    [byte_ptr_to_u16_ptr_value(byte_ptr), 0]
+pub fn reg_byte_ptr_to_cell_ptr_limbs_value(byte_ptr: u32) -> u32 {
+    debug_assert!(byte_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32));
+    byte_ptr / MEMORY_BLOCK_BYTES as u32
 }
 
 /// Converts an aligned RV64 byte pointer given as little-endian 16-bit limbs `[byte_lo, byte_hi]`

@@ -23,7 +23,7 @@ use openvm_riscv_circuit::adapters::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -230,7 +230,11 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::Expr::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&[
                         buffer_block[0].into(),
                         buffer_block[1].into(),
@@ -284,7 +288,11 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::Expr::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&[
                         input[0].into(),
                         input[1].into(),
@@ -381,7 +389,11 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::Expr::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     data,
                     timestamp.clone(),
                     MemoryWriteAuxInput::from_prev_data_exprs(base_aux, prev_data),

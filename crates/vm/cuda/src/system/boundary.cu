@@ -22,9 +22,7 @@ template <typename T> struct PersistentBoundaryCols {
     T is_valid;
     T is_dirty;
     T address_space;
-    // Leaf label decomposed into little-endian limbs `[low, high]`:
-    // `leaf_label = low + 2^LOW_LEAF_BITS * high` (see persistent.rs).
-    T leaf_label_limbs[POINTER_LIMBS];
+    T leaf_label_limbs[LEAF_LABEL_LIMBS];
     T initial_values[DIGEST_WIDTH];
     T final_values[DIGEST_WIDTH];
     T initial_hash[DIGEST_WIDTH];
@@ -59,10 +57,9 @@ __global__ void cukernel_persistent_boundary_tracegen(
         bool is_dirty = record.is_dirty != 0;
         COL_WRITE_VALUE(row, PersistentBoundaryCols, is_dirty, is_dirty);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
-        // `leaf_label = low + 2^LOW_LEAF_BITS * high`. The AIR range-checks the limbs with
-        // multiplicity `is_valid = 1`, so register one count per limb per active row.
+        // The AIR range-checks both leaf-label limbs with multiplicity `is_valid = 1`.
         uint32_t const leaf_label = record.ptr / DIGEST_WIDTH;
-        uint32_t const leaf_label_limbs[POINTER_LIMBS] = {
+        uint32_t const leaf_label_limbs[LEAF_LABEL_LIMBS] = {
             leaf_label & ((uint32_t(1) << LOW_LEAF_BITS) - 1),
             leaf_label >> LOW_LEAF_BITS,
         };

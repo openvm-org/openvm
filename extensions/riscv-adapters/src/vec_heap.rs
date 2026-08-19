@@ -303,7 +303,11 @@ impl<
                 );
                 self.memory_bridge
                     .read(
-                        MemoryAddress::new(e, block_cell_ptr),
+                        MemoryAddress::from_cell_pointer_limbs(
+                            e,
+                            block_cell_ptr,
+                            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                        ),
                         pack_u8_block::<AB>(&read),
                         timestamp_pp(),
                         aux,
@@ -326,7 +330,11 @@ impl<
             );
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(e, block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        e,
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     pack_u8_block::<AB>(&write),
                     timestamp_pp(),
                     aux,

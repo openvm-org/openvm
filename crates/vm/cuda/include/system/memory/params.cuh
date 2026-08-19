@@ -52,7 +52,7 @@ enum MemoryCellType : uint32_t {
 //
 //   byte_ptr = size_of::<F>() * ptr
 //
-// In every AS, ptr counts cells. Block k starts at ptr k * BLOCK_FE_WIDTH, and
+// In every AS, ptr counts cells. Memory-bus block index k starts at ptr k * BLOCK_FE_WIDTH, and
 // merkle leaf l starts at ptr l * DIGEST_WIDTH.
 
 #include "poseidon2.cuh" // brings in CELLS / CELLS_OUT from stark-backend
@@ -73,17 +73,14 @@ inline constexpr size_t MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 // Blocks per merkle leaf.
 inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-// Number of little-endian 16-bit limbs used to represent an AS-native memory pointer on the
-// memory bus.
-inline constexpr size_t POINTER_LIMBS = 2;
-inline constexpr size_t POINTER_LIMB_BITS = 16;
-
 // log2 of DIGEST_WIDTH (= CELLS_OUT = 8).
 inline constexpr size_t DIGEST_WIDTH_BITS = 3;
 
-// Number of low bits of a leaf label kept in the low limb so that
-// `low * DIGEST_WIDTH` fits in one 16-bit memory-bus pointer limb.
-inline constexpr size_t LOW_LEAF_BITS = POINTER_LIMB_BITS - DIGEST_WIDTH_BITS;
+// The boundary trace decomposes a leaf label for the 16-bit range checker. These are not
+// memory-bus address columns; the memory bus carries one scalar block index.
+inline constexpr size_t LEAF_LABEL_LIMB_BITS = 16;
+inline constexpr size_t LEAF_LABEL_LIMBS = 2;
+inline constexpr size_t LOW_LEAF_BITS = LEAF_LABEL_LIMB_BITS - DIGEST_WIDTH_BITS;
 
 // Upper bound on a subtree's `base_height`, i.e. on the number of bottom merkle levels that may be
 // omitted from its buffer. Sizes the thread-local scratch of `recompute_omitted_node`, which

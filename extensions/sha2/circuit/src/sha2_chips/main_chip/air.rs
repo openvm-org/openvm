@@ -18,7 +18,7 @@ use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -277,7 +277,11 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::Expr::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.mem.input_reads[i],
@@ -309,7 +313,11 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::Expr::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.mem.state_reads[i],
@@ -351,7 +359,11 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             );
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::Expr::from_u32(MEMORY_AS), block_cell_ptr),
+                    MemoryAddress::from_cell_pointer_limbs(
+                        AB::Expr::from_u32(MEMORY_AS),
+                        block_cell_ptr,
+                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
+                    ),
                     chunk,
                     timestamp_pp(),
                     &local.mem.write_aux[i],

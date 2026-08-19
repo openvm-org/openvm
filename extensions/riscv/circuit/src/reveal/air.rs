@@ -151,18 +151,14 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .enumerate()
         {
             let values: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|lane| bytes[lane].into());
-            // Public values are byte-celled, so the aligned reveal *byte* pointer is already the
-            // AS-native cell pointer. `dst_ptr_low_limb` is 8-byte aligned and below `2^16`, so
-            // adding the chunk offset cannot carry into the high limb.
+            // Public values are byte-celled, so divide the byte pointer by four cells per block.
+            let block_index = cols.dst_ptr_low_limb * AB::F::from_usize(BLOCK_FE_WIDTH).inverse()
+                + dst_ptr_high_limb.clone()
+                    * AB::F::from_u32(1 << (U16_BITS - BLOCK_FE_WIDTH.ilog2() as usize))
+                + AB::F::from_usize(chunk_idx);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        AB::F::from_u32(PUBLIC_VALUES_AS),
-                        [
-                            cols.dst_ptr_low_limb + AB::F::from_usize(chunk_idx * BLOCK_FE_WIDTH),
-                            dst_ptr_high_limb.clone(),
-                        ],
-                    ),
+                    MemoryAddress::new(AB::F::from_u32(PUBLIC_VALUES_AS), block_index),
                     values,
                     timestamp.clone() + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
