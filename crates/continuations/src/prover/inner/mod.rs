@@ -17,7 +17,7 @@ use tracing::instrument;
 
 use crate::{
     circuit::{
-        inner::{InnerCircuit, InnerTraceGen, ProofsType},
+        inner::{InnerCircuit, InnerTraceGen, ProofsType, VerifierCircuitType},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -110,7 +110,7 @@ where
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         system_params: SystemParams,
-        is_self_recursive: bool,
+        verifier_type: VerifierCircuitType,
         def_hook_cached_commit: Option<Digest>,
     ) -> Self
     where
@@ -129,10 +129,11 @@ where
         let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_cached_commit.map(|d| d.into()),
+            verifier_type,
         ));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let self_vk_pcs_data = if is_self_recursive {
+        let self_vk_pcs_data = if verifier_type == VerifierCircuitType::InternalRecursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
             None
@@ -153,7 +154,7 @@ where
     pub fn from_pk<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         pk: Arc<MultiStarkProvingKey<SC>>,
-        is_self_recursive: bool,
+        verifier_type: VerifierCircuitType,
         def_hook_cached_commit: Option<Digest>,
     ) -> Self
     where
@@ -172,10 +173,11 @@ where
         let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_cached_commit.map(|d| d.into()),
+            verifier_type,
         ));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let self_vk_pcs_data = if is_self_recursive {
+        let self_vk_pcs_data = if verifier_type == VerifierCircuitType::InternalRecursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
             None

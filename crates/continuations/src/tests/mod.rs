@@ -31,7 +31,7 @@ use p3_field::PrimeCharacteristicRing;
 use test_case::test_case;
 use tracing::Level;
 
-use crate::{prover::ChildVkKind, SC};
+use crate::{circuit::inner::VerifierCircuitType, prover::ChildVkKind, SC};
 
 #[cfg(feature = "cuda")]
 mod dummy;
@@ -155,7 +155,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
     let leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_pk.get_vk()),
         leaf_system_params(),
-        false,
+        VerifierCircuitType::Leaf,
         None,
     );
     let leaf_proof =
@@ -185,7 +185,7 @@ fn run_full_aggregation(
     let internal_for_leaf_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_vk,
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalForLeaf,
         None,
     );
     let internal_for_leaf_proof = internal_for_leaf_prover
@@ -194,7 +194,7 @@ fn run_full_aggregation(
     let internal_recursive_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
         internal_system_params(),
-        true,
+        VerifierCircuitType::InternalRecursive,
         None,
     );
     let mut internal_recursive_proof = internal_recursive_prover
@@ -247,19 +247,19 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     let leaf_prover = InnerProver::<MAX_LEAF_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_vk),
         leaf_system_params(),
-        false,
+        VerifierCircuitType::Leaf,
         def_hook_cached_commit,
     );
     let internal_0_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalForLeaf,
         def_hook_cached_commit,
     );
     let internal_1_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_0_prover.get_vk(),
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalRecursive,
         def_hook_cached_commit,
     );
 
@@ -267,7 +267,7 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     let test_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_1_prover.get_vk(),
         internal_system_params(),
-        true,
+        VerifierCircuitType::InternalRecursive,
         def_hook_cached_commit,
     );
     assert_eq!(
