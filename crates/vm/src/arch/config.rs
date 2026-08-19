@@ -91,8 +91,8 @@ pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(DEFAULT_POINTER_MAX_BI
 
 /// Default RV64 byte-addressable memory capacity (2^32 bytes).
 ///
-/// This is the *circuit* capacity of `MEMORY_AS`. The guest-visible runtime memory size
-/// (`openvm_platform::memory::MEM_SIZE`) may be smaller.
+/// This is the *circuit* capacity of `MEMORY_AS`, and matches the guest runtime memory size
+/// (`openvm_platform::memory::MEM_SIZE`).
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
 pub const DEFAULT_MEMORY_BYTE_CAPACITY: usize = 1usize << BYTE_POINTER_MAX_BITS;

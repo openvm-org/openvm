@@ -10,7 +10,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/bincode/elf/openvm-bincode-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     let file_data = include_bytes!("../../../guest/bincode/minecraft_savedata.bin");

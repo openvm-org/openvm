@@ -381,8 +381,8 @@ pub(crate) fn checked_memory_address(
     imm_extended: u32,
     access_width: usize,
 ) -> Result<u32, ExecutionError> {
-    // Bound by the *circuit* memory capacity (2^32 bytes), not the guest platform's
-    // `MEM_SIZE`: the RV64 memory address space supports the full 2^32-byte range.
+    // Bound by the circuit memory capacity: the RV64 memory address space supports the
+    // full 2^32-byte range.
     // TODO: use `MemoryConfig::pointer_max_bits` once execution state carries the memory config.
     debug_assert!(access_width <= DEFAULT_MEMORY_BYTE_CAPACITY);
     let address = address_add_imm(base, imm_extended);

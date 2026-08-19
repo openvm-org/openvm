@@ -8,10 +8,11 @@ use core::{arch::asm, hint::black_box, ptr};
 
 openvm::entry!(main);
 
-/// End of the guest platform's memory (`openvm_platform::memory::MEM_SIZE`, 2^29 bytes).
-/// The circuit's RV64 memory address space extends beyond it to the full 2^32 bytes.
-const PLATFORM_MEM_END: u64 = 1 << 29;
-/// One past the last addressable byte.
+/// End of the pre-2^32 guest platform memory (512 MiB); kept as a representative
+/// high-address boundary now that `openvm_platform::memory::MEM_SIZE` spans the full
+/// 2^32 bytes.
+const LEGACY_PLATFORM_MEM_END: u64 = 1 << 29;
+/// One past the last addressable byte (`openvm_platform::memory::MEM_SIZE`).
 const MEM_TOP: u64 = 1 << 32;
 
 fn addr<T>(byte_addr: u64) -> *mut T {
@@ -26,9 +27,9 @@ unsafe fn round_trip<T: Copy + PartialEq + core::fmt::Debug>(byte_addr: u64, val
 
 pub fn main() {
     unsafe {
-        // Aligned round trips of every access width, from just past the platform
-        // memory bound up through the 2^31 cell-pointer top bit.
-        round_trip::<u64>(PLATFORM_MEM_END, 0x0123_4567_89ab_cdef);
+        // Aligned round trips of every access width, from just past the legacy
+        // platform memory bound up through the 2^31 cell-pointer top bit.
+        round_trip::<u64>(LEGACY_PLATFORM_MEM_END, 0x0123_4567_89ab_cdef);
         round_trip::<u32>((1 << 30) + 0x40, 0xdead_beef);
         round_trip::<u16>((1 << 31) + 0x10, 0xa55a);
         round_trip::<u8>(0xc000_0003, 0x5a);

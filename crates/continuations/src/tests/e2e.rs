@@ -324,7 +324,7 @@ fn test_deferral_e2e() -> Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../programs/examples/multiple.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = VmExe::from_elf(
         elf,

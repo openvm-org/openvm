@@ -33,7 +33,7 @@ type F = BabyBear;
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
-    let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+    let elf = Elf::decode(&data, MEM_SIZE as u64)?;
     Ok(elf)
 }
 

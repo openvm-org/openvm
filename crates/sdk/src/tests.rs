@@ -120,7 +120,7 @@ fn get_params_from_env(env_var: &str, default: SystemParams) -> SystemParams {
 fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, VerificationBaseline)> {
     let fib_elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let fib_exe = fib_sdk.convert_to_exe(fib_elf)?;
     let n = 100u64;
@@ -390,7 +390,7 @@ fn test_sdk_fibonacci() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let app_exe = sdk.convert_to_exe(elf)?;
 
@@ -408,7 +408,7 @@ fn test_preflight_app_prover_reuse() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
     let mut prover = sdk.app_prover(exe)?;
@@ -444,7 +444,7 @@ fn test_preflight_stark_prover() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
     let mut prover = sdk.prover(exe)?;
@@ -466,7 +466,7 @@ fn test_verify_stark_deferral() -> Result<()> {
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
@@ -500,7 +500,7 @@ fn test_verify_many_deferrals() -> Result<()> {
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-many.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
@@ -516,7 +516,7 @@ fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let vs_exe = sdk.convert_to_exe(vs_elf)?;
 
@@ -541,7 +541,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let app_exe = sdk.convert_to_exe(elf)?;
 
@@ -558,7 +558,7 @@ fn test_sdk_cfg_block_starts_affect_compilation() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
     let baseline = sdk.compile(exe.clone())?;
@@ -587,7 +587,7 @@ fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -614,7 +614,7 @@ fn test_sdk_compiled_instret_tracking_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -652,7 +652,7 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -693,7 +693,7 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -728,7 +728,7 @@ fn test_sdk_compiled_metered_execute() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -746,7 +746,7 @@ fn test_sdk_compiled_preflight_executes_metered_segment() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -776,7 +776,7 @@ fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
 
@@ -814,7 +814,7 @@ fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let app_exe = aware_sdk.convert_to_exe(elf)?;
 
@@ -839,7 +839,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
@@ -895,7 +895,7 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
@@ -1048,7 +1048,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
             let elf = Elf::decode(
                 include_bytes!("../programs/examples/fibonacci.elf"),
-                MEM_SIZE as u32,
+                MEM_SIZE as u64,
             )?;
             let sdk = Sdk::riscv64(app_params, agg_params);
             let app_exe = sdk.convert_to_exe(elf)?;

@@ -1931,14 +1931,11 @@ mod tests {
         Ok(())
     }
 
-    /// The circuit supports the full 2^32-byte RV64 memory address space even though the
-    /// guest platform's memory ends at 2^29: raw-pointer accesses up to the last
-    /// addressable byte must execute and prove. Uses the default config because
-    /// `test_rv64im_config()` shrinks `MEMORY_AS` below the addresses exercised
-    /// here. Protected rvr execution intentionally traps above the platform bound
-    /// (`test_out_of_bound_mem_access`), so this test is gated to non-rvr builds.
+    /// The full 2^32-byte RV64 memory address space is supported end to end: raw-pointer
+    /// accesses up to the last addressable byte must execute and prove. Uses the default
+    /// config because `test_rv64im_config()` shrinks `MEMORY_AS` below the addresses
+    /// exercised here.
     #[test]
-    #[cfg(not(feature = "rvr"))]
     fn test_high_address_mem() -> Result<()> {
         let config = Rv64ImConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), "high_address_mem", &config)?;

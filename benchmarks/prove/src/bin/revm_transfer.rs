@@ -11,7 +11,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/revm_transfer/elf/openvm-revm-transfer.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     args.run(vm_config, elf, StdIn::default())
