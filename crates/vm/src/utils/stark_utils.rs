@@ -46,8 +46,7 @@ cfg_if::cfg_if! {
 }
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
-// VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes
-// them.
+// VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe>)
 where

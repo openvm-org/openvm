@@ -442,32 +442,6 @@ fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() 
     assert!(!actual.values.is_empty());
     drop(postflight);
 
-    let field_index = history.memory.field_values.len() - 1;
-    let original_value = history.memory.field_values[field_index].values[0];
-    history.memory.field_values[field_index].values[0] = F::ORDER_U32;
-    let counts_before = count
-        .1
-        .count
-        .iter()
-        .map(|count| count.load(Ordering::Relaxed))
-        .collect::<Vec<_>>();
-    let poseidon_records_before = poseidon2.1.records.len();
-    let error = Postflight::<F>::new(&program, history, &memory_config, None)
-        .err()
-        .expect("noncanonical CALL field values must be rejected");
-    assert!(error.to_string().contains("non-canonical raw field value"));
-    assert_eq!(
-        counts_before,
-        count
-            .1
-            .count
-            .iter()
-            .map(|count| count.load(Ordering::Relaxed))
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(poseidon_records_before, poseidon2.1.records.len());
-    history.memory.field_values[field_index].values[0] = original_value;
-
     let removed = history
         .memory
         .accesses

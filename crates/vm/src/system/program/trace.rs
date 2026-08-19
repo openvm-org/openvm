@@ -29,10 +29,7 @@ use crate::{
     },
 };
 
-/// Lowers a field-independent instruction operand into the proof field.
-///
-/// This belongs at trace-generation boundaries: execution and transpilation should use the
-/// operand's integer representation directly.
+/// Converts an instruction operand into the proof field.
 #[inline]
 pub fn instruction_operand_to_field<F: PrimeField32>(operand: InstructionOperand) -> F {
     assert!(

@@ -29,10 +29,8 @@ pub trait VmExecutionExtension {
 The `VmExecutionExtension` provides a way to specify hooks for handling new instructions.
 The associated type `Executor` is an enum containing the opcode executors introduced by the
 extension. Each variant supplies pure/preflight execution through `Executor<F>` and metering
-through `MeteredExecutor<F>`. Their instruction-facing APIs are field-independent, though the
-field parameter still selects genuinely field-dependent behavior such as Deferral memory access.
-The enum does not need to handle instructions outside of this extension. The VM execution
-extension registers these hooks using the
+through `MeteredExecutor<F>`. The enum does not need to handle instructions outside of this
+extension. The VM execution extension registers these hooks using the
 `ExecutorInventoryBuilder` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventoryBuilder.html). The main APIs are
 - `inventory.add_executor(executor, opcodes)` to associate an executor with a set of opcodes.
 - `inventory.add_phantom_sub_executor(sub_executor, discriminant)` to associate a phantom sub-executor with a phantom discriminant.

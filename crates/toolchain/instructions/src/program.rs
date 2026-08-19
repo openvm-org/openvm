@@ -60,11 +60,7 @@ impl Program {
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
-                .map(|instruction| {
-                    instruction
-                        .as_ref()
-                        .map(|instruction| (instruction.clone(), None))
-                })
+                .map(|instruction| instruction.clone().map(|instruction| (instruction, None)))
                 .collect(),
             pc_base,
         }

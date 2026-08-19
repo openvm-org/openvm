@@ -8,10 +8,7 @@ consists of executor structs that handle specific instruction opcodes. The same 
 transition runs in pure and preflight contexts, while `MeteredExecutor` supplies segmentation
 metadata.
 
-We define an **instruction** to be an **opcode** combined with the **operands** for the opcode.
-`Instruction`, `Program`, and `VmExe` store field-independent `InstructionOperand` values; operands
-are converted into the proof field only during trace generation. Each opcode must be mapped to a
-specific executor that contains the logic for executing the instruction.
+We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor that contains the logic for executing the instruction.
 There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
 
 ### Execution Modes
@@ -20,9 +17,7 @@ There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which 
 
 Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
 
-The `InterpreterExecutor<F>` trait defines the interface for pure execution (aliased as
-`Executor<F>` via a supertrait). The field parameter selects field-dependent execution behavior,
-while instructions themselves remain field-independent:
+The `InterpreterExecutor<F>` trait defines the interface for pure execution (aliased as `Executor<F>` via a supertrait):
 
 ```rust
 pub trait InterpreterExecutor<F> {
@@ -52,8 +47,7 @@ Each executor pre-computes instruction-specific data during a preprocessing step
 
 Metered execution tracks the trace heights for each chip along with normal execution. This mode divides the execution into segments, where each segment consists of an instruction range and an (over)estimate of the resulting trace heights for each chip in the segment. Segmentation is done based on configurable limits like maximum trace height, maximum trace cells etc.
 
-The `InterpreterMeteredExecutor<F>` trait defines the interface for metered execution (aliased as
-`MeteredExecutor<F>` via a supertrait). Its instructions are likewise field-independent:
+The `InterpreterMeteredExecutor<F>` trait defines the interface for metered execution (aliased as `MeteredExecutor<F>` via a supertrait):
 
 ```rust
 pub trait InterpreterMeteredExecutor<F> {
@@ -206,11 +200,7 @@ where
 }
 ```
 
-A `VmConfig` should implement the `VmExecutionConfig` trait which provides execution
-configuration. The field parameter is retained because some extensions have genuinely
-field-dependent runtime behavior, but the executor enum and its instructions need not store the
-field. The `Executor` type is typically an enum over executor structs that handle instruction
-execution.
+A `VmConfig` should implement the `VmExecutionConfig` trait which provides execution configuration. The `Executor` type is typically an enum over executor structs that handle instruction execution.
 
 ```rust
 pub trait VmExecutionConfig<F> {

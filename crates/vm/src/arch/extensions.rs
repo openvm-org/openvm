@@ -334,6 +334,7 @@ impl<E> ExecutorInventory<E> {
                 return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
             }
         }
+
         Ok(inventory_ext)
     }
 

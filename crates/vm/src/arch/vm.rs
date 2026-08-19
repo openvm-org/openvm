@@ -1,6 +1,6 @@
-//! [VmExecutor] executes an _arbitrary_ program, provided in the form of a
-//! [VmExe](openvm_instructions::exe::VmExe), for a fixed set of OpenVM instructions corresponding
-//! to a [VmExecutionConfig].
+//! [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
+//! [VmExe](openvm_instructions::exe::VmExe), for a fixed set of OpenVM instructions
+//! corresponding to a [VmExecutionConfig].
 //! Internally once it is given a program, it will preprocess the program to rewrite it into a more
 //! optimized format for runtime execution. This **instance** of the executor will be a separate
 //! struct specialized to running a _fixed_ program on different program inputs.
@@ -292,7 +292,8 @@ impl From<Vec<Vec<u8>>> for Streams {
 type PreflightInterpreter<F, VC> =
     PreflightInterpretedInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
 
-/// Executes programs for a fixed [`VmExecutionConfig`].
+/// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
+/// [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
 /// Internally once it is given a program, it will preprocess the program to rewrite it into a more
 /// optimized format for runtime execution. This **instance** of the executor will be a separate
 /// struct specialized to running a _fixed_ program on different program inputs.
@@ -316,7 +317,9 @@ impl<F, VC> VmExecutor<F, VC>
 where
     VC: VmExecutionConfig<F>,
 {
-    /// Creates a VM executor with a given config.
+    /// Create a new VM executor with a given config.
+    ///
+    /// The VM will start with a single segment, which is created from the initial state.
     pub fn new(config: VC) -> Result<Self, ExecutorInventoryError> {
         let inventory = config.create_executors()?;
         Ok(Self {
@@ -696,6 +699,7 @@ where
         compiled
             .require_execution_kind(&[RvrExecutionKind::Metered])
             .map_err(map_rvr_compile_error)?;
+
         Ok(RvrMeteredInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
@@ -721,6 +725,7 @@ where
         compiled
             .require_execution_kind(&[RvrExecutionKind::MeteredSegment])
             .map_err(map_rvr_compile_error)?;
+
         Ok(RvrMeteredSegmentInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
@@ -747,6 +752,7 @@ where
         let runtime_hooks = self
             .build_rvr_extensions(Some(executor_idx_to_air_idx))
             .into_runtime_hooks();
+
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
             initial_image: RvrInitialImage::from(exe),
@@ -776,6 +782,7 @@ where
         let compiled = compile_metered_cost(exe, extensions.lifters(), &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         let runtime_hooks = extensions.into_runtime_hooks();
+
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
             initial_image: RvrInitialImage::from(exe),

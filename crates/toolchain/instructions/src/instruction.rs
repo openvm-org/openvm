@@ -242,22 +242,17 @@ impl Instruction {
     }
 
     pub fn from_usize<const N: usize>(opcode: VmOpcode, operands: [usize; N]) -> Self {
-        let operand = |index| {
-            operands
-                .get(index)
-                .copied()
-                .map(InstructionOperand::from_usize)
-                .unwrap_or(InstructionOperand::ZERO)
-        };
+        let mut operands = operands.map(InstructionOperand::from_usize).to_vec();
+        operands.resize(NUM_OPERANDS, InstructionOperand::ZERO);
         Self {
             opcode,
-            a: operand(0),
-            b: operand(1),
-            c: operand(2),
-            d: operand(3),
-            e: operand(4),
-            f: operand(5),
-            g: operand(6),
+            a: operands[0],
+            b: operands[1],
+            c: operands[2],
+            d: operands[3],
+            e: operands[4],
+            f: operands[5],
+            g: operands[6],
         }
     }
 
@@ -325,8 +320,8 @@ impl Instruction {
         Some([a, b, discriminant, c_upper])
     }
 
-    pub const fn operands(&self) -> [InstructionOperand; NUM_OPERANDS] {
-        [self.a, self.b, self.c, self.d, self.e, self.f, self.g]
+    pub fn operands(&self) -> Vec<InstructionOperand> {
+        vec![self.a, self.b, self.c, self.d, self.e, self.f, self.g]
     }
 }
 
@@ -400,11 +395,11 @@ mod tests {
     }
 
     #[test]
-    fn from_usize_pads_without_allocating() {
+    fn from_usize_pads_operands() {
         let instruction = Instruction::from_usize(VmOpcode::from_usize(7), [1, 2, 3]);
         assert_eq!(
             instruction.operands(),
-            [
+            vec![
                 InstructionOperand::ONE,
                 InstructionOperand::TWO,
                 InstructionOperand::from_i32(3),
