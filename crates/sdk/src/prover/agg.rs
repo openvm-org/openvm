@@ -3,7 +3,10 @@ use std::sync::Arc;
 use eyre::Result;
 use itertools::Itertools;
 use openvm_circuit::arch::ContinuationVmProof;
-use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
+use openvm_continuations::{
+    circuit::inner::{ProofsType, VerifierCircuitType},
+    prover::ChildVkKind,
+};
 use openvm_recursion_circuit::{
     prelude::Digest, system::check_param_compatibility, utils::poseidon2_hash_slice,
 };
@@ -65,13 +68,13 @@ impl AggProver {
         let leaf_prover = InnerAggregationProver::<MAX_NUM_CHILDREN_LEAF>::new::<E>(
             app_or_def_vk,
             agg_config.params.leaf.clone(),
-            false,
+            VerifierCircuitType::Leaf,
             def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::<MAX_NUM_CHILDREN_INTERNAL>::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal,
-            false,
+            VerifierCircuitType::InternalForLeaf,
             def_hook_cached_commit,
         );
         AggPrefixProvingKey {
@@ -98,19 +101,19 @@ impl AggProver {
         let leaf_prover = InnerAggregationProver::new::<E>(
             app_or_def_vk,
             agg_config.params.leaf.clone(),
-            false,
+            VerifierCircuitType::Leaf,
             def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
-            false,
+            VerifierCircuitType::InternalForLeaf,
             def_hook_cached_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
-            true,
+            VerifierCircuitType::InternalRecursive,
             def_hook_cached_commit,
         );
         Self {
@@ -138,19 +141,19 @@ impl AggProver {
         let leaf_prover = InnerAggregationProver::from_pk::<E>(
             app_or_def_vk,
             agg_pk.prefix.leaf,
-            false,
+            VerifierCircuitType::Leaf,
             def_hook_cached_commit,
         );
         let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
             agg_pk.prefix.internal_for_leaf,
-            false,
+            VerifierCircuitType::InternalForLeaf,
             def_hook_cached_commit,
         );
         let internal_recursive_prover = InnerAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_pk.internal_recursive,
-            true,
+            VerifierCircuitType::InternalRecursive,
             def_hook_cached_commit,
         );
         Self {

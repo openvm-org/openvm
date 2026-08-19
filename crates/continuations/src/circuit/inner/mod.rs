@@ -34,10 +34,19 @@ pub mod vm_pvs;
 mod trace;
 pub use trace::*;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum VerifierCircuitType {
+    Leaf = 0,
+    InternalForLeaf = 1,
+    InternalRecursive = 2,
+}
+
 #[derive(derive_new::new, Clone)]
 pub struct InnerCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
     pub def_hook_cached_commit: Option<CommitBytes>,
+    pub verifier_type: VerifierCircuitType,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for InnerCircuit<S> {
@@ -72,6 +81,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for I
             range_bus,
             pvs_air_consistency_bus,
             deferral_config,
+            verifier_type: self.verifier_type,
         });
 
         let vm_pvs_air = Arc::new(vm_pvs::VmPvsAir {
