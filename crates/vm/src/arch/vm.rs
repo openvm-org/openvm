@@ -86,13 +86,13 @@ use super::{
     },
     hasher::poseidon2::vm_poseidon2_hasher,
     hint_stream::HintStream,
-    interpreter::InterpretedInstance,
+    interpreter::{check_termination, InterpretedInstance},
     interpreter_preflight::PreflightInterpretedInstance,
-    segment_scheduler::{segment_graph, SegmentNode, SegmentSchedulerConfig},
+    segment_scheduler::{empty_graph, register_segment, SegmentNode, SegmentSchedulerConfig},
     AirInventoryError, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
     ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
-    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
-    VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
+    VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "cuda")]
@@ -2064,19 +2064,13 @@ where
             .as_ref()
             .expect("preflight interpreter was initialized above");
         let vm = &mut self.vm;
-        let metered_ctx = vm.build_metered_ctx(&self.exe);
-        let metered_instance = vm.metered_instance(&self.exe)?;
-        let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
+        let mut producer = SegmentProducer::new(vm, &self.exe, input)?;
         let prepared = VB::prepare_postflight(vm, &self.exe.program)?;
 
-        let boundaries = segment_boundaries(&segments);
-        let mut graph = segment_graph(segments.len(), scheduler).map_err(scheduling_error)?;
-        let mut contexts: Vec<Option<ProvingContext<E::PB>>> = std::iter::repeat_with(|| None)
-            .take(segments.len())
-            .collect();
-        let mut proofs: Vec<Option<Proof<E::SC>>> = std::iter::repeat_with(|| None)
-            .take(segments.len())
-            .collect();
+        let mut graph = empty_graph(scheduler);
+        let mut segments: Vec<Segment> = Vec::new();
+        let mut contexts: Vec<Option<ProvingContext<E::PB>>> = Vec::new();
+        let mut proofs: Vec<Option<Proof<E::SC>>> = Vec::new();
         let mut state = self.state.take();
         // Admitted proves wait here rather than running where they were admitted, so
         // that everything the budget lets in at once goes to threads together. An
@@ -2084,7 +2078,22 @@ where
         // it needs the VM mutably.
         let mut waiting: Vec<(usize, ProvingContext<E::PB>)> = Vec::new();
         let mut max_concurrent_proves = 0usize;
+        let mut proved = 0usize;
         loop {
+            // Keep a little work registered ahead of what is running, so proving a
+            // segment does not have to wait for the whole program to be segmented
+            // first. Producing one segment at a time also bounds how far ahead the
+            // metered pass may run.
+            while !producer.is_finished() && segments.len() < proved + scheduler.prove_lookahead + 2
+            {
+                for segment in producer.step()? {
+                    register_segment(&mut graph, segments.len(), scheduler)
+                        .map_err(scheduling_error)?;
+                    segments.push(segment);
+                    contexts.push(None);
+                    proofs.push(None);
+                }
+            }
             match graph.admit() {
                 Admission::Admitted(nodes) => {
                     for node in nodes {
@@ -2127,16 +2136,24 @@ where
                     max_concurrent_proves = max_concurrent_proves.max(batch.len());
                     for (idx, proof) in prove_segments_concurrently(vm, batch)? {
                         proofs[idx] = Some(proof);
+                        proved += 1;
                         graph
                             .complete(&SegmentNode::Prove(idx))
                             .map_err(scheduling_error)?;
                     }
                 }
-                Admission::AllComplete => break,
+                // Every registered node is done. That is only the end once the
+                // producer has no more segments to register.
+                Admission::AllComplete => {
+                    if producer.is_finished() && segments.len() == proved {
+                        break;
+                    }
+                }
             }
         }
+        producer.finish()?;
         self.max_concurrent_proves = max_concurrent_proves;
-        self.segment_boundaries = boundaries;
+        self.segment_boundaries = segment_boundaries(&segments);
 
         let to_state = state.expect("the execute chain produced a final state");
         let per_segment = proofs
@@ -2156,6 +2173,121 @@ where
             per_segment,
             user_public_values,
         })
+    }
+}
+
+/// Produces the metered segmentation one boundary at a time.
+///
+/// The segmentation is the same one [`InterpretedInstance::execute_metered_from_state`]
+/// computes — the same stepping call, the same termination check — but it is
+/// yielded as it is discovered instead of only at the end, so proving a segment
+/// need not wait for the whole program to be segmented. Setting
+/// `suspend_on_segment` changes only when execution returns to this loop, not
+/// where the boundaries fall.
+///
+/// The instance is detached from the VM that created it, so holding it here does
+/// not borrow the VM the execute chain needs mutably.
+#[cfg(not(feature = "rvr"))]
+struct SegmentProducer {
+    instance: InterpretedInstance<'static, MeteredCtx>,
+    state: Option<VmExecState<GuestMemory, MeteredCtx>>,
+    yielded: usize,
+}
+
+#[cfg(not(feature = "rvr"))]
+impl SegmentProducer {
+    fn new<E, VB>(
+        vm: &VirtualMachine<E, VB>,
+        exe: &VmExe<Val<E::SC>>,
+        input: Streams,
+    ) -> Result<Self, VirtualMachineError>
+    where
+        E: StarkEngine,
+        VB: VmBuilder<E>,
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let ctx = vm.build_metered_ctx(exe).with_suspend_on_segment(true);
+        let instance = vm.metered_instance(exe)?.into_owned();
+        let vm_state = instance.create_initial_vm_state(input);
+        Ok(Self {
+            instance,
+            state: Some(VmExecState::new(vm_state, ctx)),
+            yielded: 0,
+        })
+    }
+
+    fn is_finished(&self) -> bool {
+        self.state.is_none()
+    }
+
+    /// Advances to the next boundary and returns whatever segments that closed.
+    fn step(&mut self) -> Result<Vec<Segment>, VirtualMachineError> {
+        let Some(state) = self.state.take() else {
+            return Ok(Vec::new());
+        };
+        let mut state = self.instance.execute_metered_until_suspend(state)?;
+        let exit_code = std::mem::replace(&mut state.exit_code, Ok(None))?;
+        let terminated = exit_code.is_some();
+        state.exit_code = Ok(exit_code);
+        let fresh = state.ctx.segments()[self.yielded..].to_vec();
+        self.yielded += fresh.len();
+        match terminated {
+            true => check_termination(state.exit_code)?,
+            false => self.state = Some(state),
+        }
+        Ok(fresh)
+    }
+
+    /// Errors if the caller stopped consuming before execution terminated.
+    fn finish(self) -> Result<(), VirtualMachineError> {
+        match self.state {
+            None => Ok(()),
+            Some(_) => Err(ExecutionError::DidNotTerminate.into()),
+        }
+    }
+}
+
+/// The rvr metered instance exposes a different stepping primitive
+/// ([`RvrMeteredInstance::execute_metered_from_state_until_segment_boundary`]) than
+/// the interpreter's, so streaming it is a separate piece of work. Until that
+/// lands, this yields the whole segmentation in one step, which is what the serial
+/// driver has always done.
+#[cfg(feature = "rvr")]
+struct SegmentProducer {
+    segments: Option<Vec<Segment>>,
+}
+
+#[cfg(feature = "rvr")]
+impl SegmentProducer {
+    fn new<E, VB>(
+        vm: &VirtualMachine<E, VB>,
+        exe: &VmExe<Val<E::SC>>,
+        input: Streams,
+    ) -> Result<Self, VirtualMachineError>
+    where
+        E: StarkEngine,
+        VB: VmBuilder<E>,
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let ctx = vm.build_metered_ctx(exe);
+        let (segments, _) = vm.metered_instance(exe)?.execute_metered(input, ctx)?;
+        Ok(Self {
+            segments: Some(segments),
+        })
+    }
+
+    fn is_finished(&self) -> bool {
+        self.segments.is_none()
+    }
+
+    fn step(&mut self) -> Result<Vec<Segment>, VirtualMachineError> {
+        Ok(self.segments.take().unwrap_or_default())
+    }
+
+    fn finish(self) -> Result<(), VirtualMachineError> {
+        Ok(())
     }
 }
 

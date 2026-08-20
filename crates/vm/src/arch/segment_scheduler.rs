@@ -83,35 +83,36 @@ impl SegmentSchedulerConfig {
     }
 }
 
-/// Registers the EXECUTE/PROVE nodes and edges for a metered segmentation.
+/// A graph with no segments in it yet.
+pub(crate) fn empty_graph(config: &SegmentSchedulerConfig) -> Engine<SegmentNode> {
+    Engine::new(config.budget)
+}
+
+/// Adds one segment's EXECUTE and PROVE nodes and their edges.
 ///
-/// Dependencies must already be registered when a node is added, so each segment
-/// contributes its EXECUTE before its PROVE and the graph is acyclic by
-/// construction.
-pub(crate) fn segment_graph(
-    num_segments: usize,
+/// Segments are registered in order, so every dependency named here is already
+/// registered and the graph is acyclic by construction. Callers that discover
+/// segments as they go can keep extending the graph while earlier nodes run.
+pub(crate) fn register_segment(
+    engine: &mut Engine<SegmentNode>,
+    idx: usize,
     config: &SegmentSchedulerConfig,
-) -> Result<Engine<SegmentNode>, SchedulerError<SegmentNode>> {
-    let mut engine = Engine::new(config.budget);
-    let lookahead = config.prove_lookahead.max(1);
-    for idx in 0..num_segments {
-        let mut predecessors = Vec::new();
-        if idx > 0 {
-            predecessors.push(SegmentNode::Execute(idx - 1));
-        }
-        if let Some(bounded_by) = idx.checked_sub(lookahead) {
-            predecessors.push(SegmentNode::Prove(bounded_by));
-        }
-        engine.add_node(Node::new(
-            SegmentNode::Execute(idx),
-            predecessors,
-            config.execute,
-        ))?;
-        engine.add_node(Node::new(
-            SegmentNode::Prove(idx),
-            vec![SegmentNode::Execute(idx)],
-            config.prove,
-        ))?;
+) -> Result<(), SchedulerError<SegmentNode>> {
+    let mut predecessors = Vec::new();
+    if idx > 0 {
+        predecessors.push(SegmentNode::Execute(idx - 1));
     }
-    Ok(engine)
+    if let Some(bounded_by) = idx.checked_sub(config.prove_lookahead.max(1)) {
+        predecessors.push(SegmentNode::Prove(bounded_by));
+    }
+    engine.add_node(Node::new(
+        SegmentNode::Execute(idx),
+        predecessors,
+        config.execute,
+    ))?;
+    engine.add_node(Node::new(
+        SegmentNode::Prove(idx),
+        vec![SegmentNode::Execute(idx)],
+        config.prove,
+    ))
 }
