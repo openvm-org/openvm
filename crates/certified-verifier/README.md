@@ -1,4 +1,4 @@
-# openvm-fv-verifier: vendored Lean Swirl verifier
+# openvm-certified-verifier: vendored Lean Swirl verifier
 
 > The contents of this crate (Rust sources, `build.rs`, and `csrc/`)
 > are vendored from the private `swirl-rbr-fv` repo at commit
@@ -6,9 +6,9 @@
 > of truth: do not edit in place without upstreaming the change, and
 > refresh the vendored copy (see below) when it moves.
 
-This crate lets `openvm-sdk` (behind its `fv-verifier` feature) run
-the formally verified (Lean) Swirl verifier against proofs produced by
-this workspace, as a differential check on the Rust verifier.
+This crate lets `openvm-sdk` (behind its `certified-verifier` feature) run
+the certified Swirl verifier extracted from its Lean formalization against
+proofs produced by this workspace, as a differential check on the Rust verifier.
 
 ## Contents
 
@@ -27,9 +27,9 @@ matching toolchain is required:
 curl -sSf https://elan.lean-lang.org/elan-init.sh | sh
 elan toolchain install leanprover/lean4:v4.26.0
 
-cargo build -p openvm-fv-verifier
+cargo build -p openvm-certified-verifier
 # or, through the SDK:
-cargo build -p openvm-sdk --features fv-verifier
+cargo build -p openvm-sdk --features certified-verifier
 ```
 
 Overrides: `SWIRL_LEANC=<path to leanc>` picks the compiler explicitly.
@@ -51,7 +51,7 @@ lake build swirl_dump_proof
 ## Version coupling
 
 The wire format is a hand-written contract between the encoder and
-tests in `crates/fv-verifier/` and the Lean decoders
+tests in `crates/certified-verifier/` and the Lean decoders
 (`swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`). Validated at:
 
 - `swirl-rbr-fv` @ `b4d396be`

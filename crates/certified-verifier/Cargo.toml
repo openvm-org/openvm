@@ -1,6 +1,6 @@
 [package]
-name = "openvm-fv-verifier"
-description = "Differential verification of OpenVM STARK proofs against the formally verified Lean Swirl verifier."
+name = "openvm-certified-verifier"
+description = "Verification of OpenVM STARK proofs with the certified Lean Swirl verifier."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

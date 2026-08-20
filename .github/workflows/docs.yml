@@ -53,7 +53,7 @@ jobs:
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
 
       - name: Install Lean toolchain
-        # openvm-fv-verifier's build.rs needs leanc from the toolchain that generated csrc/.
+        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
         run: |
           curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"

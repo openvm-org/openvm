@@ -3,7 +3,7 @@
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision (the same fixture
 //! pipeline used by `wire_roundtrip.rs`), serializes `(vk, proof, pv)`
-//! through `openvm-fv-verifier`, pipes the three blobs to `swirl_verify`,
+//! through `openvm-certified-verifier`, pipes the three blobs to `swirl_verify`,
 //! and asserts on the resulting exit code.
 //!
 //! Two cases:
@@ -13,7 +13,7 @@
 //!    Batch boundary claim must survive wire decoding and be rejected by the algebraic verifier
 //!    prefix.
 
-use openvm_fv_verifier::{
+use openvm_certified_verifier::{
     run_swirl_verify, verifier_error_from_exit_code, write_proof, write_public_values, write_vk,
     VerifierError,
 };
@@ -52,7 +52,7 @@ fn generate_fib_proof() -> Fixture {
     Fixture { vk, proof }
 }
 
-/// Encode the fixture into three wire blobs via `openvm-fv-verifier`.
+/// Encode the fixture into three wire blobs via `openvm-certified-verifier`.
 fn encode_fixture(f: &Fixture) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let mut vk_bytes = Vec::new();
     write_vk(&mut vk_bytes, &f.vk).expect("write_vk");
