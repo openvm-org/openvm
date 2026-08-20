@@ -1315,7 +1315,20 @@ fn scheduled_gpu_presents_the_serial_input_envelope() -> Result<()> {
         "NEGATIVE CONTROL FAILED: a different input produced an identical envelope, so \
          the envelope does not actually discriminate and every assertion above is vacuous"
     );
-    tracing::info!("I3-A negative control: a different input moved the envelope");
+    // Vec inequality can be satisfied by length alone, and a smaller input does
+    // produce fewer segments. Compare a segment that exists in both runs, so the
+    // control shows the envelope discriminates on what a segment attests to and not
+    // merely on how many there are.
+    assert_ne!(
+        serial_envelopes[0], other_envelopes[0],
+        "NEGATIVE CONTROL FAILED: segment 0's envelope is identical under a different \
+         input, so the per-segment comparison discriminates only on segment count"
+    );
+    tracing::info!(
+        serial_segments = serial_envelopes.len(),
+        other_segments = other_envelopes.len(),
+        "I3-A negative control: a different input moved the envelope, segment 0 included"
+    );
     Ok(())
 }
 
