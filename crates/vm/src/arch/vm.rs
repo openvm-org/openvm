@@ -32,7 +32,7 @@ use openvm_instructions::{
 };
 #[cfg(feature = "metrics")]
 use openvm_instructions::{LocalOpcode, SystemOpcode};
-use openvm_scheduler::Admission;
+use openvm_scheduler::{Admission, Engine};
 #[cfg(feature = "cuda")]
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
@@ -2080,19 +2080,13 @@ where
         let mut max_concurrent_proves = 0usize;
         let mut proved = 0usize;
         loop {
-            // Keep a little work registered ahead of what is running, so proving a
-            // segment does not have to wait for the whole program to be segmented
-            // first. Producing one segment at a time also bounds how far ahead the
-            // metered pass may run.
-            while !producer.is_finished() && segments.len() < proved + scheduler.prove_lookahead + 2
-            {
-                for segment in producer.step()? {
-                    register_segment(&mut graph, segments.len(), scheduler)
-                        .map_err(scheduling_error)?;
-                    segments.push(segment);
-                    contexts.push(None);
-                    proofs.push(None);
-                }
+            // Only enough to get started, or to break an idle graph. The bulk of
+            // production happens while proves are in flight, below.
+            if segments.is_empty() && !producer.is_finished() {
+                let fresh = producer.step()?;
+                register_segments(&mut graph, &mut segments, fresh, scheduler)?;
+                contexts.resize_with(segments.len(), || None);
+                proofs.resize_with(segments.len(), || None);
             }
             match graph.admit() {
                 Admission::Admitted(nodes) => {
@@ -2134,7 +2128,21 @@ where
                         "admission reports backpressure or blocked only while a prove is resident"
                     );
                     max_concurrent_proves = max_concurrent_proves.max(batch.len());
-                    for (idx, proof) in prove_segments_concurrently(vm, batch)? {
+                    // How far production may run ahead while these proves work.
+                    // Bounded, because each discovered segment's execute will hold a
+                    // proving context until its prove consumes it.
+                    let target = proved + scheduler.prove_lookahead + 2;
+                    let (results, fresh) = prove_segments_concurrently(vm, batch, || {
+                        let mut fresh = Vec::new();
+                        while !producer.is_finished() && segments.len() + fresh.len() < target {
+                            fresh.extend(producer.step()?);
+                        }
+                        Ok(fresh)
+                    })?;
+                    register_segments(&mut graph, &mut segments, fresh, scheduler)?;
+                    contexts.resize_with(segments.len(), || None);
+                    proofs.resize_with(segments.len(), || None);
+                    for (idx, proof) in results {
                         proofs[idx] = Some(proof);
                         proved += 1;
                         graph
@@ -2148,6 +2156,12 @@ where
                     if producer.is_finished() && segments.len() == proved {
                         break;
                     }
+                    // Idle with work still to discover: there is no prove in flight
+                    // to overlap against, so produce here.
+                    let fresh = producer.step()?;
+                    register_segments(&mut graph, &mut segments, fresh, scheduler)?;
+                    contexts.resize_with(segments.len(), || None);
+                    proofs.resize_with(segments.len(), || None);
                 }
             }
         }
@@ -2187,6 +2201,11 @@ where
 ///
 /// The instance is detached from the VM that created it, so holding it here does
 /// not borrow the VM the execute chain needs mutably.
+///
+/// It is stepped only from the driver thread. `InterpretedInstance` keeps raw
+/// pointers into its own `pre_compute_buf` (see the NOTE at its definition), and
+/// whether detaching it is sound across threads has not been established; keep it
+/// on one thread until it has been.
 #[cfg(not(feature = "rvr"))]
 struct SegmentProducer {
     instance: InterpretedInstance<'static, MeteredCtx>,
@@ -2291,6 +2310,19 @@ impl SegmentProducer {
     }
 }
 
+fn register_segments(
+    graph: &mut Engine<SegmentNode>,
+    segments: &mut Vec<Segment>,
+    fresh: Vec<Segment>,
+    scheduler: &SegmentSchedulerConfig,
+) -> Result<(), VirtualMachineError> {
+    for segment in fresh {
+        register_segment(graph, segments.len(), scheduler).map_err(scheduling_error)?;
+        segments.push(segment);
+    }
+    Ok(())
+}
+
 fn segment_boundaries(segments: &[Segment]) -> Vec<(u64, u64)> {
     segments
         .iter()
@@ -2312,42 +2344,53 @@ type SegmentProveOutcome<E> = (usize, Result<Proof<<E as StarkEngine>::SC>, Stri
 /// Each thread borrows only the engine and the proving key, never the whole VM, so
 /// this coexists with the execute chain's need for the VM mutably: the borrow ends
 /// with the scope, before the caller executes another segment.
-fn prove_segments_concurrently<E, VB>(
+fn prove_segments_concurrently<E, VB, P>(
     vm: &VirtualMachine<E, VB>,
     batch: Vec<(usize, ProvingContext<E::PB>)>,
-) -> Result<Vec<SegmentProof<E>>, VirtualMachineError>
+    while_proving: P,
+) -> Result<(Vec<SegmentProof<E>>, Vec<Segment>), VirtualMachineError>
 where
     E: StarkEngine + Sync,
     VB: VmBuilder<E>,
     DeviceMultiStarkProvingKey<E::PB>: Sync,
     ProvingContext<E::PB>: Send,
     Proof<E::SC>: Send,
+    P: FnOnce() -> Result<Vec<Segment>, VirtualMachineError>,
 {
     let engine = &vm.engine;
     let pk = &vm.pk;
-    let results: Vec<SegmentProveOutcome<E>> = std::thread::scope(|scope| {
+    let (results, produced) = std::thread::scope(|scope| {
         let handles = batch
             .into_iter()
             .map(|(idx, ctx)| {
                 scope.spawn(move || (idx, engine.prove(pk, ctx).map_err(|e| e.to_string())))
             })
             .collect_vec();
-        handles
+        // The proves are in flight. Segment production borrows nothing those
+        // threads hold — the metered instance is detached and the VM is only lent
+        // out as `&engine` and `&pk` — so it runs here, on this thread, instead of
+        // waiting for the join. This is the producer/prove overlap.
+        let produced = while_proving();
+        let results: Vec<SegmentProveOutcome<E>> = handles
             .into_iter()
             .map(|handle| {
                 handle
                     .join()
                     .unwrap_or_else(|payload| resume_unwind(payload))
             })
-            .collect()
+            .collect();
+        (results, produced)
     });
-    results
+    let proofs = results
         .into_iter()
         .map(|(idx, proof)| match proof {
             Ok(proof) => Ok((idx, proof)),
             Err(error) => Err(GenerationError::Proving(error).into()),
         })
-        .collect()
+        .collect::<Result<Vec<_>, VirtualMachineError>>()?;
+    // Reported only after the join, so a producer failure never leaves proves
+    // running unobserved.
+    Ok((proofs, produced?))
 }
 
 /// The payload of a verified guest VM execution.
