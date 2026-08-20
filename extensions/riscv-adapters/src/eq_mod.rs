@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
-        MinimalInstruction, VmAdapterAir, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
+        MinimalInstruction, VmAdapterAir, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -20,8 +20,8 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
-    reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS, REGISTER_NUM_LIMBS,
+    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    PTR_U16_LIMBS, REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -48,9 +48,6 @@ pub struct IsEqualModAdapterCols<T, const NUM_READS: usize, const BLOCKS_PER_REA
 
     /// Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
     pub rs_cell_carry: [T; NUM_READS],
-    /// Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to
-    /// each base cell pointer (block `j`'s carry into the high cell limb).
-    pub reads_add_carry: [[T; BLOCKS_PER_READ]; NUM_READS],
 
     pub rd_ptr: T,
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
@@ -135,50 +132,36 @@ impl<
         }
 
         let byte_ptr_max_bits = self.pointer_max_bits;
-        // Cell offset (in u16 cells) between consecutive heap blocks.
-        let cell_ptr_block_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
 
-        // Convert each base *byte* pointer to base AS-native u16 *cell* pointer limbs.
-        let rs_base_cell: [[AB::Expr; 2]; NUM_READS] = from_fn(|i| {
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
-                builder,
-                self.range_bus,
-                cols.rs_val[i].map(Into::into),
-                cols.rs_cell_carry[i],
-                byte_ptr_max_bits,
-                ctx.instruction.is_valid.clone(),
+        // Convert each base *byte* pointer to the bus address of its first heap block.
+        let rs_base: [MemoryAddress<AB::F, AB::Expr>; NUM_READS] = from_fn(|i| {
+            MemoryAddress::from_cell_pointer_limbs(
+                e,
+                eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+                    builder,
+                    self.range_bus,
+                    cols.rs_val[i].map(Into::into),
+                    cols.rs_cell_carry[i],
+                    byte_ptr_max_bits,
+                    ctx.instruction.is_valid.clone(),
+                ),
+                block_width_inverse,
             )
         });
 
-        // Reads from heap: block `j` is at base cell pointer + `j * cell_ptr_block_stride`.
+        // Reads from heap: block `j` is `j` blocks after the base address.
         let read_block_data: [[[_; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS] =
             ctx.reads.map(|r: [AB::Expr; TOTAL_READ_SIZE]| {
                 let mut r_it = r.into_iter();
                 from_fn(|_| from_fn(|_| r_it.next().unwrap()))
             });
 
-        for (base_cell, block_data, block_aux, add_carry) in izip!(
-            rs_base_cell,
-            read_block_data,
-            &cols.heap_read_aux,
-            &cols.reads_add_carry
-        ) {
-            for (j, (data, aux, carry)) in izip!(block_data, block_aux, add_carry).enumerate() {
-                let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
-                    builder,
-                    self.range_bus,
-                    base_cell.clone(),
-                    j as u32 * cell_ptr_block_stride,
-                    *carry,
-                    ctx.instruction.is_valid.clone(),
-                );
+        for (base, block_data, block_aux) in izip!(rs_base, read_block_data, &cols.heap_read_aux) {
+            for (j, (data, aux)) in izip!(block_data, block_aux).enumerate() {
                 self.memory_bridge
                     .read(
-                        MemoryAddress::from_cell_pointer_limbs(
-                            e,
-                            block_cell_ptr,
-                            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
-                        ),
+                        base.offset_blocks(j),
                         pack_u8_block::<AB>(&data),
                         timestamp_pp(),
                         aux,

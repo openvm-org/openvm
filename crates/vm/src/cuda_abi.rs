@@ -22,9 +22,6 @@ pub mod boundary {
             d_poseidon2_raw_buffer: *mut F,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            leaf_label_high_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
     }
@@ -40,8 +37,6 @@ pub mod boundary {
         num_records: usize,
         d_poseidon2_raw_buffer: &DeviceBuffer<F>,
         d_poseidon2_buffer_idx: &DeviceBuffer<u32>,
-        d_range_checker: &DeviceBuffer<F>,
-        leaf_label_high_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_persistent_boundary_tracegen(
@@ -56,9 +51,6 @@ pub mod boundary {
             d_poseidon2_buffer_idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.
             d_poseidon2_raw_buffer.len(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            leaf_label_high_bits,
             stream,
         ))
     }

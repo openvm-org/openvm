@@ -79,15 +79,9 @@ template <typename T> struct DeferralOutputCols {
     // Carry for converting the input byte pointer to memory-cell pointer limbs.
     T input_byte_to_cell_carry;
 
-    // Carries for adding offsets of input blocks after block zero.
-    T input_block_add_carries[OUTPUT_TOTAL_MEMORY_OPS - 1];
-
     // Carry for converting the output byte pointer on the first row.
     T output_byte_to_cell_carry;
 
-    // Cell pointer associated with this section row.
-    T write_cell_ptr_limbs[2];
-
-    // Carry when advancing the write pointer by one digest.
-    T write_ptr_add_carry;
+    // Memory-bus block index written by this section row.
+    T write_block_index;
 };

@@ -66,7 +66,6 @@ impl DeviceMemoryTester {
         ));
         let mut inventory = MemoryInventoryGPU::new(
             mem_config.clone(),
-            range_checker.clone(),
             poseidon2_periphery.clone(),
             device_ctx.clone(),
         );

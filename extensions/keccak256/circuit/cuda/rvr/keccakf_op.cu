@@ -180,20 +180,11 @@ __global__ void keccakf_op_replay_tracegen(
             from.timestamp + 1 + i
         );
     }
-    // Byte -> cell pointer conversion carry and per-block cell-offset carries, plus the matching
-    // range-check counts (mirrors KeccakfOpChip::fill_trace_inputs).
-    uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
-    uint32_t add_carries[KECCAK_WIDTH_MEM_OPS];
-    uint32_t conv_carry = compute_pointer_carries(
-        range_checker,
-        buffer_ptr,
-        pointer_max_bits,
-        KECCAK_WIDTH_MEM_OPS,
-        cell_stride,
-        add_carries
+    // Byte -> cell pointer conversion carry, plus the matching range-check count (mirrors
+    // KeccakfOpChip::fill_trace_inputs).
+    KECCAKF_OP_WRITE(
+        buffer_cell_carry, compute_pointer_carry(range_checker, buffer_ptr, pointer_max_bits)
     );
-    KECCAKF_OP_WRITE(buffer_cell_carry, conv_carry);
-    KECCAKF_OP_WRITE_ARRAY(buffer_word_add_carry, add_carries);
 }
 
 extern "C" int _keccakf_op_replay_tracegen(

@@ -7,7 +7,7 @@ use openvm_circuit::{
         TouchedBlock, TouchedMemory,
     },
 };
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
@@ -165,7 +165,6 @@ impl MemoryInventoryGPU {
 
     pub fn new(
         config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
         device_ctx: GpuDeviceCtx,
     ) -> Self {
@@ -182,15 +181,10 @@ impl MemoryInventoryGPU {
                 cell_type as u8
             })
             .collect();
-        // The boundary tracegen kernel emits the leaf-label limb range-check counts
-        // (the boundary AIR range-checks `leaf_label_limbs` on every valid row).
-        let address_height = config.memory_dimensions().address_height;
         Self {
             device_ctx: device_ctx.clone(),
             boundary: BoundaryChipGPU::new(
                 hasher_chip.shared_buffer(),
-                range_checker,
-                address_height,
                 device_ctx.clone(),
                 cell_types,
             ),
@@ -725,7 +719,6 @@ mod tests {
             TouchedBlock,
         },
     };
-    use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
     use openvm_cuda_backend::{
         data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::F,
     };
@@ -769,16 +762,8 @@ mod tests {
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
-            VariableRangeCheckerBus::new(0, mem_config.decomp),
-            device_ctx.clone(),
-        ));
-        let mut inventory = MemoryInventoryGPU::new(
-            mem_config.clone(),
-            range_checker,
-            hasher_chip,
-            device_ctx.clone(),
-        );
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(initial_memory);
         let contexts = inventory.generate_proving_ctxs(touched_memory);
         device_ctx.stream.synchronize().unwrap();
@@ -795,16 +780,8 @@ mod tests {
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
-            VariableRangeCheckerBus::new(0, mem_config.decomp),
-            device_ctx.clone(),
-        ));
-        let mut inventory = MemoryInventoryGPU::new(
-            mem_config.clone(),
-            range_checker,
-            hasher_chip,
-            device_ctx.clone(),
-        );
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(initial_memory);
         let d_touched = if touched_memory.is_empty() {
             DeviceBuffer::new()
@@ -1127,16 +1104,8 @@ mod tests {
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
-            VariableRangeCheckerBus::new(0, mem_config.decomp),
-            device_ctx.clone(),
-        ));
-        let mut inventory = MemoryInventoryGPU::new(
-            mem_config.clone(),
-            range_checker,
-            hasher_chip,
-            device_ctx.clone(),
-        );
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
 
         inventory.set_initial_memory(&first_memory.memory);
         inventory.set_initial_memory(&second_memory.memory);

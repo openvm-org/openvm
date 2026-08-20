@@ -83,11 +83,6 @@ pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
     ptr_bits + U16_CELL_SIZE_BITS
 }
 
-// Executor bounds and `MemoryConfig::default()` use the platform `MEM_SIZE` as the circuit
-// byte capacity of `MEMORY_AS`, so the platform memory size and the default circuit pointer
-// width must stay in lock-step.
-const _: () = assert!(MEM_SIZE == 1 << to_byte_ptr_bits(DEFAULT_POINTER_MAX_BITS));
-
 /// Number of registers in the RV64 register file.
 pub const NUM_REGISTERS: usize = 32;
 

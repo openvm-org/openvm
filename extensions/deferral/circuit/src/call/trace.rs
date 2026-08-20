@@ -27,7 +27,7 @@ use crate::{
     poseidon2::DeferralPoseidon2Chip,
     utils::{
         byte_commit_to_f, checked_pointer_offset, checked_u16_pointer,
-        compute_aligned_pointer_carries, f_memory_op_chunk, logged_u32_pointer,
+        compute_aligned_pointer_carry, f_memory_op_chunk, logged_u32_pointer,
         require_block_alignment, COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
         F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
@@ -311,28 +311,18 @@ fn fill_call_adapter<F: VmField>(
         }
     }
 
-    // Byte -> cell pointer conversion carries and subsequent-block cell-offset carries for the
-    // heap `input`/`output` pointers, plus matching range-check counts.
-    let (input_conv, input_add) = compute_aligned_pointer_carries(
+    // Byte -> cell pointer conversion carries for the heap `input`/`output` pointers, plus
+    // matching range-check counts.
+    cols.input_byte_to_cell_carry = F::from_u32(compute_aligned_pointer_carry(
         &filler.range_checker_chip,
         replay.rs_val,
-        COMMIT_MEMORY_OPS,
         filler.address_bits,
-    );
-    let (output_conv, output_add) = compute_aligned_pointer_carries(
+    ));
+    cols.output_byte_to_cell_carry = F::from_u32(compute_aligned_pointer_carry(
         &filler.range_checker_chip,
         replay.rd_val,
-        OUTPUT_TOTAL_MEMORY_OPS,
         filler.address_bits,
-    );
-    cols.input_byte_to_cell_carry = F::from_u32(input_conv);
-    cols.output_byte_to_cell_carry = F::from_u32(output_conv);
-    for (col, &c) in cols.input_add_carries.iter_mut().zip(input_add.iter()) {
-        *col = F::from_u32(c);
-    }
-    for (col, &c) in cols.output_add_carries.iter_mut().zip(output_add.iter()) {
-        *col = F::from_u32(c);
-    }
+    ));
 
     for (aux, access) in cols
         .new_output_acc_aux

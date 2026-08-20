@@ -303,50 +303,14 @@ __global__ void xorin_replay_tracegen(
             from.timestamp + XORIN_REGISTER_READS + 2 * num_blocks + i
         );
     }
-    // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
-    // range-check counts. Mirrors `xorin/trace.rs`: the AIR gates the per-block cell-offset add by
-    // `is_enabled`, so add carries (and their range checks) are computed for *every* block,
-    // padding or not.
-    uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
-
-    uint32_t buffer_add_carry[keccak256::KECCAK_RATE_MEM_OPS];
-    uint32_t buffer_conv_carry = compute_pointer_carries(
-        range_checker,
-        buffer_ptr,
-        pointer_max_bits,
-        keccak256::KECCAK_RATE_MEM_OPS,
-        cell_stride,
-        buffer_add_carry
+    // Byte -> cell pointer conversion carries, plus matching range-check counts. Mirrors
+    // `xorin/trace.rs`.
+    XORIN_WRITE(
+        mem_oc.buffer_cell_carry, compute_pointer_carry(range_checker, buffer_ptr, pointer_max_bits)
     );
-    XORIN_WRITE(mem_oc.buffer_cell_carry, buffer_conv_carry);
-    XORIN_WRITE_ARRAY(mem_oc.buffer_read_add_carry, buffer_add_carry);
-
-    uint32_t input_add_carry[keccak256::KECCAK_RATE_MEM_OPS];
-    uint32_t input_conv_carry = compute_pointer_carries(
-        range_checker,
-        input_ptr,
-        pointer_max_bits,
-        keccak256::KECCAK_RATE_MEM_OPS,
-        cell_stride,
-        input_add_carry
+    XORIN_WRITE(
+        mem_oc.input_cell_carry, compute_pointer_carry(range_checker, input_ptr, pointer_max_bits)
     );
-    XORIN_WRITE(mem_oc.input_cell_carry, input_conv_carry);
-    XORIN_WRITE_ARRAY(mem_oc.input_read_add_carry, input_add_carry);
-
-    // The write reuses the converted `buffer` base cell pointer; only the per-block write add
-    // carries (and their range checks) are needed. The base conversion count was registered above
-    // for the buffer read group.
-    uint32_t buffer_write_add_carry[keccak256::KECCAK_RATE_MEM_OPS];
-    CellPtr buffer_cell =
-        byte_ptr_limbs_to_cell_ptr_limbs_value(buffer_ptr & 0xffffu, buffer_ptr >> U16_BITS);
-    compute_block_add_carries(
-        range_checker,
-        buffer_cell.limbs[0],
-        keccak256::KECCAK_RATE_MEM_OPS,
-        cell_stride,
-        buffer_write_add_carry
-    );
-    XORIN_WRITE_ARRAY(mem_oc.buffer_write_add_carry, buffer_write_add_carry);
 }
 
 extern "C" int _xorin_replay_tracegen(

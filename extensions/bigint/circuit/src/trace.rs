@@ -7,7 +7,7 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         fill_trace_rows, Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
+        MEMORY_BLOCK_BYTES,
     },
     system::{memory::MemoryAuxColsFactory, program::trace::instruction_operand_to_field},
     utils::next_power_of_two_or_zero,
@@ -25,10 +25,7 @@ use openvm_riscv_adapters::{
     VecHeapAdapterCols, VecHeapBranchU16AdapterCols, VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
-    adapters::{
-        add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
-        ptr_to_u16_limbs, u32_to_ptr_limbs, U16_BITS,
-    },
+    adapters::{compute_pointer_carry, ptr_to_u16_limbs, U16_BITS},
     AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
     LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
@@ -69,31 +66,6 @@ struct BranchReplay<M> {
     inputs: [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
     taken: bool,
     metadata: M,
-}
-
-/// Fills one base pointer's byte -> cell conversion carry column and its per-block
-/// cell-offset add-carry columns, registering the matching range-check counts
-/// (one `cell_hi` count per conversion, one 16-bit low-limb count per block),
-/// mirroring the adapter AIR's `eval_byte_ptr_limbs_to_cell_ptr_limbs` +
-/// `eval_add_const_u16_limbs` multiplicities.
-fn fill_pointer_carries<F: PrimeField32, const BLOCKS: usize>(
-    range_checker: &VariableRangeCheckerChip,
-    pointer_max_bits: usize,
-    byte_ptr: u32,
-    conv_col: &mut F,
-    add_cols: &mut [F; BLOCKS],
-) {
-    let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-    let (conv_carry, base_cell) =
-        byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
-    range_checker.add_count(base_cell[1], cell_ptr_hi_bits(pointer_max_bits));
-    *conv_col = F::from_u32(conv_carry);
-    for (j, add_col) in add_cols.iter_mut().enumerate() {
-        let (add_carry, block_cell_ptr) =
-            add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
-        range_checker.add_count(block_cell_ptr[0], U16_BITS);
-        *add_col = F::from_u32(add_carry);
-    }
 }
 
 fn invalid(message: impl Into<String>) -> PostflightError {
@@ -234,21 +206,17 @@ fn replay_alu_u16<F: PrimeField32, M>(
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
     for (i, &pointer) in rs_vals.iter().enumerate() {
-        fill_pointer_carries(
+        adapter_row.rs_cell_carry[i] = F::from_u32(compute_pointer_carry(
             range_checker,
-            pointer_max_bits,
             pointer,
-            &mut adapter_row.rs_cell_carry[i],
-            &mut adapter_row.reads_add_carry[i],
-        );
+            pointer_max_bits,
+        ));
     }
-    fill_pointer_carries(
+    adapter_row.rd_cell_carry = F::from_u32(compute_pointer_carry(
         range_checker,
-        pointer_max_bits,
         rd_val,
-        &mut adapter_row.rd_cell_carry,
-        &mut adapter_row.writes_add_carry,
-    );
+        pointer_max_bits,
+    ));
     for (access, cols) in write_accesses.iter().zip(&mut adapter_row.writes_aux) {
         cols.set_prev_data(access.previous_value.map(F::from_u16));
         mem_helper.fill(access.previous_timestamp, access.timestamp, cols.as_mut());
@@ -337,21 +305,17 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
     for (i, &pointer) in rs_vals.iter().enumerate() {
-        fill_pointer_carries(
+        adapter_row.rs_cell_carry[i] = F::from_u32(compute_pointer_carry(
             range_checker,
-            pointer_max_bits,
             pointer,
-            &mut adapter_row.rs_cell_carry[i],
-            &mut adapter_row.reads_add_carry[i],
-        );
+            pointer_max_bits,
+        ));
     }
-    fill_pointer_carries(
+    adapter_row.rd_cell_carry = F::from_u32(compute_pointer_carry(
         range_checker,
-        pointer_max_bits,
         rd_val,
-        &mut adapter_row.rd_cell_carry,
-        &mut adapter_row.writes_add_carry,
-    );
+        pointer_max_bits,
+    ));
     for (access, cols) in write_accesses.iter().zip(&mut adapter_row.writes_aux) {
         cols.set_prev_data(access.previous_value.map(F::from_u16));
         mem_helper.fill(access.previous_timestamp, access.timestamp, cols.as_mut());
@@ -429,12 +393,15 @@ fn replay_branch<F: PrimeField32, M>(
     };
     replay.finish(next_pc)?;
 
-    for ((pointer, conv_col), add_cols) in rs_vals
+    for (pointer, conv_col) in rs_vals
         .into_iter()
         .zip(adapter_row.rs_cell_carry.iter_mut())
-        .zip(adapter_row.reads_add_carry.iter_mut())
     {
-        fill_pointer_carries(range_checker, pointer_max_bits, pointer, conv_col, add_cols);
+        *conv_col = F::from_u32(compute_pointer_carry(
+            range_checker,
+            pointer,
+            pointer_max_bits,
+        ));
     }
     for (access, cols) in read_accesses.iter().zip(
         adapter_row

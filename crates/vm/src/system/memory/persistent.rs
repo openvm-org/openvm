@@ -4,10 +4,7 @@ use std::{
     iter,
 };
 
-use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
-};
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::VM_DIGEST_WIDTH;
@@ -28,20 +25,13 @@ use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
     system::{
-        memory::{
-            controller::{dimensions::MemoryDimensions, DIGEST_WIDTH_BITS},
-            offline_checker::MemoryBus,
-            MemoryAddress, MemoryImage,
-        },
+        memory::{offline_checker::MemoryBus, MemoryAddress, MemoryImage},
         TouchedMemory,
     },
 };
 
 /// Number of memory-bus blocks covered by one merkle leaf.
 pub const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
-
-/// Number of low bits in the first leaf-label range-check limb.
-pub const LEAF_LABEL_LO_BITS: usize = U16_BITS - DIGEST_WIDTH_BITS;
 
 /// Each row describes one touched merkle leaf (`DIGEST_WIDTH` cells): its data and hash in both
 /// the initial and final memory state, together with the per-block final timestamps.
@@ -52,8 +42,7 @@ pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
     pub is_valid: T,
     pub is_dirty: T,
     pub address_space: T,
-    /// Leaf label decomposed as `low + 2^LEAF_LABEL_LO_BITS * high` for the 16-bit range checker.
-    pub leaf_label_limbs: [T; 2],
+    pub leaf_label: T,
     pub initial_values: [T; DIGEST_WIDTH],
     pub final_values: [T; DIGEST_WIDTH],
     pub initial_hash: [T; DIGEST_WIDTH],
@@ -82,8 +71,6 @@ pub struct PersistentBoundaryAir<const DIGEST_WIDTH: usize> {
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
-    pub range_bus: VariableRangeCheckerBus,
-    pub memory_dimensions: MemoryDimensions,
 }
 
 impl<const DIGEST_WIDTH: usize, F> BaseAir<F> for PersistentBoundaryAir<DIGEST_WIDTH> {
@@ -121,26 +108,12 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         // `final_hash` needs no clean-row constraint: both interactions that contain it
         // have multiplicity `is_dirty`, so it is unused here.
 
-        let low = local.leaf_label_limbs[0];
-        let high = local.leaf_label_limbs[1];
-        let leaf_label = low.into() + high.into() * AB::F::from_u32(1 << LEAF_LABEL_LO_BITS);
-        let high_bits = self
-            .memory_dimensions
-            .address_height
-            .saturating_sub(LEAF_LABEL_LO_BITS);
-        self.range_bus
-            .range_check(low, LEAF_LABEL_LO_BITS)
-            .eval(builder, local.is_valid);
-        self.range_bus
-            .range_check(high, high_bits)
-            .eval(builder, local.is_valid);
-
         // merkle-bus interaction: initial leaf
         let mut expand_fields = vec![
             AB::Expr::ONE,
             AB::Expr::ZERO,
             local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
-            leaf_label.clone(),
+            local.leaf_label.into(),
         ];
         expand_fields.extend(local.initial_hash.map(Into::into));
         self.merkle_bus
@@ -150,7 +123,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             AB::Expr::NEG_ONE,
             AB::Expr::ZERO,
             local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
-            leaf_label.clone(),
+            local.leaf_label.into(),
         ];
         expand_fields.extend(local.final_hash.map(Into::into));
         self.merkle_bus
@@ -177,7 +150,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
 
         // memory bus interactions
         for block_idx in 0..BLOCKS_PER_LEAF {
-            let memory_block_index = leaf_label.clone() * AB::F::from_usize(BLOCKS_PER_LEAF)
+            let memory_block_index = local.leaf_label * AB::F::from_usize(BLOCKS_PER_LEAF)
                 + AB::F::from_usize(block_idx);
             // Each block uses its own timestamp; untouched blocks stay at t=0.
             // initial block
@@ -206,7 +179,6 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
 
 pub struct PersistentBoundaryChip<F, const DIGEST_WIDTH: usize> {
     pub air: PersistentBoundaryAir<DIGEST_WIDTH>,
-    range_checker: SharedVariableRangeCheckerChip,
     touched_labels: Option<Vec<FinalTouchedLabel<F, DIGEST_WIDTH>>>,
     overridden_height: Option<usize>,
 }
@@ -279,18 +251,13 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
         memory_bus: MemoryBus,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
-        range_checker: SharedVariableRangeCheckerChip,
-        memory_dimensions: MemoryDimensions,
     ) -> Self {
         Self {
             air: PersistentBoundaryAir {
                 memory_bus,
                 merkle_bus,
                 compression_bus,
-                range_bus: range_checker.bus(),
-                memory_dimensions,
             },
-            range_checker,
             touched_labels: None,
             overridden_height: None,
         }
@@ -405,25 +372,14 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            let low_mask = (1u32 << LEAF_LABEL_LO_BITS) - 1;
-            let high_bits = self
-                .air
-                .memory_dimensions
-                .address_height
-                .saturating_sub(LEAF_LABEL_LO_BITS);
-
             rows.par_chunks_mut(width)
                 .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
-                    let low = touched_label.label & low_mask;
-                    let high = touched_label.label >> LEAF_LABEL_LO_BITS;
-                    self.range_checker.add_count(low, LEAF_LABEL_LO_BITS);
-                    self.range_checker.add_count(high, high_bits);
                     *row.borrow_mut() = PersistentBoundaryCols {
                         is_valid: Val::<SC>::ONE,
                         is_dirty: Val::<SC>::from_bool(touched_label.is_dirty),
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
-                        leaf_label_limbs: [Val::<SC>::from_u32(low), Val::<SC>::from_u32(high)],
+                        leaf_label: Val::<SC>::from_u32(touched_label.label),
                         initial_values: touched_label.init_values,
                         final_values: touched_label.final_values,
                         initial_hash: touched_label.init_hash,

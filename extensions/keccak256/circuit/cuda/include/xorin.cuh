@@ -41,12 +41,6 @@ struct XorinMemoryCols {
     // pointer limbs.
     T buffer_cell_carry;
     T input_cell_carry;
-    // Per-block carry for adding the cell offset `i * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to each
-    // base cell pointer (block `i`'s carry into the high cell limb). One set per heap access group
-    // (buffer read, input read, buffer write).
-    T buffer_read_add_carry[keccak256::KECCAK_RATE_MEM_OPS];
-    T input_read_add_carry[keccak256::KECCAK_RATE_MEM_OPS];
-    T buffer_write_add_carry[keccak256::KECCAK_RATE_MEM_OPS];
 };
 
 template <typename T>

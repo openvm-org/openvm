@@ -66,45 +66,15 @@ static __device__ __forceinline__ void sha2_main_replay_row_body(
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_u16s);
-    // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
-    // range-check counts. Mirrors `compute_pointer_carries` in `main_chip/trace.rs`.
-    uint32_t read_cell_stride = SHA2_READ_SIZE / 2;
-    uint32_t write_cell_stride = SHA2_WRITE_SIZE / 2;
-
-    uint32_t input_add_carry[V::BLOCK_READS];
-    uint32_t state_add_carry[V::STATE_READS];
-    uint32_t write_add_carry[V::STATE_WRITES];
-    uint32_t input_conv_carry = compute_pointer_carries(
-        range_checker,
-        input.input_ptr,
-        ptr_max_bits,
-        V::BLOCK_READS,
-        read_cell_stride,
-        input_add_carry
-    );
-    uint32_t state_conv_carry = compute_pointer_carries(
-        range_checker,
-        input.state_ptr,
-        ptr_max_bits,
-        V::STATE_READS,
-        read_cell_stride,
-        state_add_carry
-    );
-    uint32_t dst_conv_carry = compute_pointer_carries(
-        range_checker,
-        input.dst_ptr,
-        ptr_max_bits,
-        V::STATE_WRITES,
-        write_cell_stride,
-        write_add_carry
-    );
+    // Byte -> cell pointer conversion carries, plus matching range-check counts. Mirrors
+    // `compute_pointer_carry` in `main_chip/trace.rs`.
+    uint32_t input_conv_carry = compute_pointer_carry(range_checker, input.input_ptr, ptr_max_bits);
+    uint32_t state_conv_carry = compute_pointer_carry(range_checker, input.state_ptr, ptr_max_bits);
+    uint32_t dst_conv_carry = compute_pointer_carry(range_checker, input.dst_ptr, ptr_max_bits);
 
     SHA2_MAIN_WRITE_MEM(V, row, input_cell_carry, Fp(input_conv_carry));
     SHA2_MAIN_WRITE_MEM(V, row, state_cell_carry, Fp(state_conv_carry));
     SHA2_MAIN_WRITE_MEM(V, row, dst_cell_carry, Fp(dst_conv_carry));
-    SHA2_MAIN_WRITE_ARRAY_MEM(V, row, input_add_carry, input_add_carry);
-    SHA2_MAIN_WRITE_ARRAY_MEM(V, row, state_add_carry, state_add_carry);
-    SHA2_MAIN_WRITE_ARRAY_MEM(V, row, write_add_carry, write_add_carry);
 
 #pragma unroll
     for (size_t i = 0; i < SHA2_REGISTER_READS; i++) {

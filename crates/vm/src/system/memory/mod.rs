@@ -20,7 +20,7 @@ pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 use crate::{
-    arch::{AirRefWithColumns, MemoryConfig},
+    arch::{AirRefWithColumns, MemoryConfig, U16_CELL_SIZE_BITS},
     system::memory::{
         interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
         persistent::PersistentBoundaryAir,
@@ -29,11 +29,7 @@ use crate::{
 
 /// Default maximum bit width of pointers within each address space. Pointers index cells, not
 /// bytes.
-///
-/// RV64 targets 2^32 byte-addressable memory. Since `MEMORY_AS` uses u16 storage cells, 2^32
-/// bytes equals 2^31 u16 cells, so the AS-native pointer width is 31 bits. The corresponding
-/// *byte*-pointer width (32) matches the platform's `MEM_BITS` (guest runtime memory).
-pub const DEFAULT_POINTER_MAX_BITS: usize = 31;
+pub const DEFAULT_POINTER_MAX_BITS: usize = MEM_BITS - U16_CELL_SIZE_BITS;
 // Valid RVR memory pointers and leaf indices fit in `u32`. Guest operands stay
 // `u64` until a runtime bounds check proves that they are valid pointers.
 const _: () = assert!(MEM_BITS <= u32::BITS as usize);
@@ -115,6 +111,17 @@ impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddres
     }
 }
 
+impl<S: Clone, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
+    /// Returns the address `blocks` memory-bus blocks after `self`.
+    #[inline(always)]
+    pub fn offset_blocks(&self, blocks: usize) -> Self {
+        Self::new(
+            self.address_space.clone(),
+            self.pointer.clone() + T::from_usize(blocks),
+        )
+    }
+}
+
 #[derive(Clone)]
 pub struct MemoryAirInventory {
     pub bridge: MemoryBridge,
@@ -134,8 +141,6 @@ impl MemoryAirInventory {
             memory_bus,
             merkle_bus,
             compression_bus,
-            range_bus: bridge.range_bus(),
-            memory_dimensions: memory_dims,
         };
         let merkle = MemoryMerkleAir::<VM_DIGEST_WIDTH> {
             memory_dimensions: memory_dims,

@@ -37,9 +37,6 @@ pub struct KeccakfOpCols<T> {
     /// Carry for converting the base `buffer` *byte* pointer to AS-native u16 *cell* pointer
     /// limbs.
     pub buffer_cell_carry: T,
-    /// Per-block carry for adding the cell offset `word_idx * (MEMORY_BLOCK_BYTES /
-    /// U16_CELL_SIZE)` to the base cell pointer (block's carry into the high cell limb).
-    pub buffer_word_add_carry: [T; KECCAK_WIDTH_MEM_OPS],
 }
 
 pub const NUM_KECCAKF_OP_COLS: usize = size_of::<KeccakfOpCols<u8>>();

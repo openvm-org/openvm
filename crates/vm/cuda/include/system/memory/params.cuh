@@ -68,8 +68,7 @@ static_assert(DIGEST_WIDTH == CELLS_OUT);
 inline constexpr size_t POSEIDON2_WIDTH = CELLS;
 
 // Host byte width of one u16-celled storage cell.
-inline constexpr size_t U16_CELL_SIZE = 2;
-static_assert(U16_CELL_SIZE == 1 << openvm::U16_CELL_SIZE_BITS);
+inline constexpr size_t U16_CELL_SIZE = 1 << openvm::U16_CELL_SIZE_BITS;
 
 // Cells per memory-bus block.
 inline constexpr size_t BLOCK_FE_WIDTH = 4;
@@ -77,12 +76,6 @@ inline constexpr size_t BLOCK_FE_WIDTH = 4;
 inline constexpr size_t MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 // Blocks per merkle leaf.
 inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
-
-// The boundary trace decomposes a leaf label for the 16-bit range checker. These are not
-// memory-bus address columns; the memory bus carries one scalar block index.
-inline constexpr size_t LEAF_LABEL_LIMB_BITS = 16;
-inline constexpr size_t LEAF_LABEL_LIMBS = 2;
-inline constexpr size_t LEAF_LABEL_LO_BITS = LEAF_LABEL_LIMB_BITS - DIGEST_WIDTH_BITS;
 
 // Upper bound on a subtree's `base_height`, i.e. on the number of bottom merkle levels that may be
 // omitted from its buffer. Sizes the thread-local scratch of `recompute_omitted_node`, which

@@ -5,16 +5,12 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
-        U16_CELL_SIZE,
-    },
+    arch::{Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{MemoryAuxColsFactory, SharedMemoryHelper},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
-    U16_BITS,
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerChip,
 };
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
@@ -23,9 +19,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value,
-    bytes_to_u16_block, cell_ptr_hi_bits, ptr_to_field_u16_limbs, try_bytes_to_u32,
-    u16_block_to_bytes, u32_to_ptr_limbs,
+    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, compute_pointer_carry, ptr_to_field_u16_limbs,
+    try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
@@ -111,20 +106,13 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
             timestamp += 1;
         }
 
-        // Byte -> cell pointer conversion carry and per-block cell-offset carries, plus the
-        // matching range-check counts (one `cell_hi` count for the conversion, one 16-bit
-        // low-limb count per block), mirroring the AIR's per-valid-row multiplicities.
-        let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-        let (conv_carry, base_cell) =
-            byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(replay.buffer_ptr));
-        range_checker.add_count(base_cell[1], cell_ptr_hi_bits(self.pointer_max_bits));
-        local.buffer_cell_carry = F::from_u32(conv_carry);
-        for (j, col) in local.buffer_word_add_carry.iter_mut().enumerate() {
-            let (add_carry, block_cell_ptr) =
-                add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
-            range_checker.add_count(block_cell_ptr[0], U16_BITS);
-            *col = F::from_u32(add_carry);
-        }
+        // Byte -> cell pointer conversion carry, plus the matching `cell_hi` range-check count,
+        // mirroring the AIR's per-valid-row multiplicity.
+        local.buffer_cell_carry = F::from_u32(compute_pointer_carry(
+            range_checker,
+            replay.buffer_ptr,
+            self.pointer_max_bits,
+        ));
     }
 }
 

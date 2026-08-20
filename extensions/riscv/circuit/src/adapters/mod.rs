@@ -10,7 +10,7 @@ use openvm_circuit::{
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_circuit_primitives::{
     encoder::Encoder,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use openvm_instructions::{
     instruction::InstructionOperand,
@@ -594,60 +594,6 @@ pub fn eval_byte_ptr_block_aligned<AB: InteractionBuilder>(
         .eval(builder, enabled);
 }
 
-/// Adds a small constant `constant` (`< 2^16`) to a pointer given as little-endian 16-bit limbs
-/// `[lo, hi]`, carrying into the high limb:
-///   new_lo = lo + constant - carry * 2^16,   new_hi = hi + carry.
-/// `carry` is a witness boolean. Only `new_lo` is range-checked (to 16 bits): this forces `carry`
-/// to be the correct carry bit (given `lo` canonical), so `new_hi = hi + carry` is canonical
-/// whenever `hi` is. Use to add a per-block cell offset to an already-converted base cell pointer.
-#[allow(clippy::too_many_arguments)]
-pub fn eval_add_const_u16_limbs<AB: InteractionBuilder>(
-    builder: &mut AB,
-    range_bus: VariableRangeCheckerBus,
-    limbs: [AB::Expr; 2],
-    constant: u32,
-    carry: AB::Var,
-    enabled: AB::Expr,
-) -> PtrLimbs<AB::Expr> {
-    let carry_e: AB::Expr = carry.into();
-    builder.when(enabled.clone()).assert_bool(carry_e.clone());
-    let [lo, hi] = limbs;
-    let new_lo =
-        lo + AB::Expr::from_u32(constant) - carry_e.clone() * AB::F::from_u32(1 << U16_BITS);
-    let new_hi = hi + carry_e;
-    range_bus
-        .range_check(new_lo.clone(), U16_BITS)
-        .eval(builder, enabled);
-    [new_lo, new_hi]
-}
-
-/// Value form of [`eval_add_const_u16_limbs`]: returns `(carry, [new_lo, new_hi])`.
-#[inline(always)]
-pub fn add_const_u16_limbs_value(limbs: PtrLimbs<u32>, constant: u32) -> (u32, PtrLimbs<u32>) {
-    let sum_lo = limbs[0] + constant;
-    let carry = sum_lo >> U16_BITS;
-    (carry, [sum_lo & 0xffff, limbs[1] + carry])
-}
-
-/// Computes one add-carry per memory block from an already-converted base cell pointer,
-/// registering the matching range checks for each block's new low limb.
-pub fn compute_block_add_carries(
-    range_checker: &SharedVariableRangeCheckerChip,
-    base_cell: [u16; 2],
-    num_blocks: usize,
-    cell_stride: u32,
-) -> Vec<u32> {
-    let base_cell = base_cell.map(u32::from);
-    (0..num_blocks)
-        .map(|i| {
-            let (add_carry, block_cell_ptr) =
-                add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
-            range_checker.add_count(block_cell_ptr[0], U16_BITS);
-            add_carry
-        })
-        .collect()
-}
-
 /// Value form of [`eval_byte_ptr_limbs_to_cell_ptr_limbs`]. Returns
 /// `(carry, [cell_lo, cell_hi])` for an aligned byte pointer given as little-endian 16-bit limb
 /// values. The caller is responsible for registering the matching range-check for `cell_hi`
@@ -660,30 +606,17 @@ pub fn byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs: PtrLimbs<u32>) -> (u32
     (carry, [cell_lo, cell_hi])
 }
 
-/// Computes the byte->cell conversion carry and one add-carry per block for a heap
-/// access group, registering the matching range checks.
-///
-/// Returns `(conv_carry, add_carries)`.
-///
-/// Column writes are left to the caller because vec_heap-family fillers must buffer
-/// carries before overwriting their records.
-pub fn compute_pointer_carries(
-    range_checker: &SharedVariableRangeCheckerChip,
+/// Computes the byte->cell conversion carry of a heap base pointer, registering the matching
+/// `cell_hi` range-check count.
+pub fn compute_pointer_carry(
+    range_checker: &VariableRangeCheckerChip,
     byte_ptr: u32,
-    num_blocks: usize,
-    cell_stride: u32,
     byte_ptr_max_bits: usize,
-) -> (u32, Vec<u32>) {
-    let byte_limbs = u32_to_ptr_limbs(byte_ptr);
-    let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+) -> u32 {
+    let (conv_carry, base_cell) =
+        byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
     range_checker.add_count(base_cell[1], cell_ptr_hi_bits(byte_ptr_max_bits));
-    let add_carries = compute_block_add_carries(
-        range_checker,
-        base_cell.map(|limb| limb as u16),
-        num_blocks,
-        cell_stride,
-    );
-    (conv_carry, add_carries)
+    conv_carry
 }
 
 /// Expand `N` limbs to `REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for

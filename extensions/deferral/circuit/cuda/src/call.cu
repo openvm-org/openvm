@@ -211,10 +211,6 @@ template <typename T> struct DeferralCallAdapterCols {
     // Carries for converting heap byte pointers to cell-pointer limbs.
     T input_byte_to_cell_carry;
     T output_byte_to_cell_carry;
-
-    // Carries for advancing from the base pointer to subsequent memory blocks.
-    T input_add_carries[COMMIT_MEMORY_OPS - 1];
-    T output_add_carries[OUTPUT_TOTAL_MEMORY_OPS - 1];
 };
 
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
@@ -335,16 +331,12 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             (static_cast<uint32_t>(record.rs_val[1]) << BYTE_BITS) |
             (static_cast<uint32_t>(record.rs_val[2]) << (2 * BYTE_BITS)) |
             (static_cast<uint32_t>(record.rs_val[3]) << (3 * BYTE_BITS));
-        uint32_t add_carries[COMMIT_MEMORY_OPS - 1];
-        const uint32_t conv_carry = compute_aligned_pointer_carries(
-            range_checker,
-            input_ptr,
-            address_bits,
-            COMMIT_MEMORY_OPS,
-            add_carries
+        COL_WRITE_VALUE(
+            row,
+            DeferralCallAdapterCols,
+            input_byte_to_cell_carry,
+            Fp(compute_aligned_pointer_carry(range_checker, input_ptr, address_bits))
         );
-        COL_WRITE_VALUE(row, DeferralCallAdapterCols, input_byte_to_cell_carry, Fp(conv_carry));
-        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, input_add_carries, add_carries);
     }
 
     {
@@ -353,16 +345,12 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             (static_cast<uint32_t>(record.rd_val[1]) << BYTE_BITS) |
             (static_cast<uint32_t>(record.rd_val[2]) << (2 * BYTE_BITS)) |
             (static_cast<uint32_t>(record.rd_val[3]) << (3 * BYTE_BITS));
-        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS - 1];
-        const uint32_t conv_carry = compute_aligned_pointer_carries(
-            range_checker,
-            output_ptr,
-            address_bits,
-            OUTPUT_TOTAL_MEMORY_OPS,
-            add_carries
+        COL_WRITE_VALUE(
+            row,
+            DeferralCallAdapterCols,
+            output_byte_to_cell_carry,
+            Fp(compute_aligned_pointer_carry(range_checker, output_ptr, address_bits))
         );
-        COL_WRITE_VALUE(row, DeferralCallAdapterCols, output_byte_to_cell_carry, Fp(conv_carry));
-        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, output_add_carries, add_carries);
     }
 }
 

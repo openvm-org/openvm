@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, VecHeapBranchAdapterInterface,
-        VmAdapterAir, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
+        VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
@@ -20,8 +20,8 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
-    reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS,
+    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -46,9 +46,6 @@ pub struct VecHeapBranchU16AdapterCols<T, const NUM_READS: usize, const BLOCKS_P
 
     /// Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
     pub rs_cell_carry: [T; NUM_READS],
-    /// Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to
-    /// each base cell pointer (block `j`'s carry into the high cell limb).
-    pub reads_add_carry: [[T; BLOCKS_PER_READ]; NUM_READS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
@@ -112,49 +109,30 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
 
         let byte_ptr_max_bits = self.pointer_max_bits;
         let e = AB::F::from_u32(MEMORY_AS);
-        // Cell offset (in u16 cells) between consecutive heap blocks.
-        let cell_ptr_block_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
 
-        // Convert each base *byte* pointer to base AS-native u16 *cell* pointer limbs.
-        let rs_base_cell: [[AB::Expr; 2]; NUM_READS] = from_fn(|i| {
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
-                builder,
-                self.range_bus,
-                cols.rs_val[i].map(Into::into),
-                cols.rs_cell_carry[i],
-                byte_ptr_max_bits,
-                ctx.instruction.is_valid.clone(),
+        // Convert each base *byte* pointer to the bus address of its first heap block.
+        let rs_base: [MemoryAddress<AB::F, AB::Expr>; NUM_READS] = from_fn(|i| {
+            MemoryAddress::from_cell_pointer_limbs(
+                e,
+                eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+                    builder,
+                    self.range_bus,
+                    cols.rs_val[i].map(Into::into),
+                    cols.rs_cell_carry[i],
+                    byte_ptr_max_bits,
+                    ctx.instruction.is_valid.clone(),
+                ),
+                block_width_inverse,
             )
         });
 
-        // Reads from heap: block `j` is at base cell pointer + `j * cell_ptr_block_stride`.
-        for (base_cell, reads, reads_aux, add_carry) in izip!(
-            rs_base_cell,
-            ctx.reads,
-            &cols.reads_aux,
-            &cols.reads_add_carry
-        ) {
-            for (j, (read, aux, carry)) in izip!(reads, reads_aux, add_carry).enumerate() {
+        // Reads from heap: block `j` is `j` blocks after the base address.
+        for (base, reads, reads_aux) in izip!(rs_base, ctx.reads, &cols.reads_aux) {
+            for (j, (read, aux)) in izip!(reads, reads_aux).enumerate() {
                 let read_array: [AB::Expr; BLOCK_FE_WIDTH] = from_fn(|k| read[k].clone());
-                let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
-                    builder,
-                    self.range_bus,
-                    base_cell.clone(),
-                    j as u32 * cell_ptr_block_stride,
-                    *carry,
-                    ctx.instruction.is_valid.clone(),
-                );
                 self.memory_bridge
-                    .read(
-                        MemoryAddress::from_cell_pointer_limbs(
-                            e,
-                            block_cell_ptr,
-                            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
-                        ),
-                        read_array,
-                        timestamp_pp(),
-                        aux,
-                    )
+                    .read(base.offset_blocks(j), read_array, timestamp_pp(), aux)
                     .eval(builder, ctx.instruction.is_valid.clone());
             }
         }

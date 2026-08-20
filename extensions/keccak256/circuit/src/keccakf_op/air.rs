@@ -2,7 +2,7 @@ use std::{borrow::Borrow, iter};
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxInput},
         MemoryAddress,
@@ -12,8 +12,7 @@ use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
-    reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
@@ -82,57 +81,45 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             )
             .eval(builder, is_valid);
 
-        // Convert the base `buffer` *byte* pointer to base AS-native u16 *cell* pointer limbs.
+        // Convert the base `buffer` *byte* pointer to the bus address of its first heap block.
         let buffer_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.buffer_ptr_limbs[i].into());
-        let buffer_base_cell_ptr = eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
-            builder,
-            self.range_bus,
-            buffer_byte_limbs,
-            local.buffer_cell_carry,
-            self.ptr_max_bits,
-            is_valid.into(),
+        let buffer_base = MemoryAddress::from_cell_pointer_limbs(
+            AB::F::from_u32(MEMORY_AS),
+            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+                builder,
+                self.range_bus,
+                buffer_byte_limbs,
+                local.buffer_cell_carry,
+                self.ptr_max_bits,
+                is_valid.into(),
+            ),
+            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
         );
-        // Cell-pointer stride (in u16 cells) between consecutive heap blocks.
-        let cell_ptr_block_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
 
         // ======== Constrain new writes of `buffer` to memory =========
         // Keccak state and memory both consume these values as packed u16 cells.
-        for (word_idx, (prev_word, post_word, base_aux, add_carry)) in izip!(
+        for (word_idx, (prev_word, post_word, base_aux)) in izip!(
             local.preimage.chunks_exact(BLOCK_FE_WIDTH),
             local.postimage.chunks_exact(BLOCK_FE_WIDTH),
-            local.buffer_word_aux,
-            local.buffer_word_add_carry
+            local.buffer_word_aux
         )
         .enumerate()
         {
             // Safety:
-            // - `buffer_base_cell_ptr` is range-checked to be a canonical cell pointer below
-            //   `2^cell_max_bits`, and each `eval_add_const_u16_limbs` range-checks the new low
-            //   limb, so the per-block cell pointer is canonical.
-            // - the memory_bridge.write at this cell pointer consists of a receive on memory bus at
-            //   a previous timestamp. The only way this bus interaction could balance is if there
-            //   was already a previous valid write there. Assuming the invariant that all previous
+            // - `buffer_base` is the block index of a cell pointer range-checked below
+            //   `2^cell_max_bits`, so adding a small block offset never wraps the field.
+            // - the memory_bridge.write at this address consists of a receive on memory bus at a
+            //   previous timestamp. The only way this bus interaction could balance is if there was
+            //   already a previous valid write there. Assuming the invariant that all previous
             //   memory accesses are valid and timestamp always moves forward, the new write must be
             //   valid as well.
-            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
-                builder,
-                self.range_bus,
-                buffer_base_cell_ptr.clone(),
-                word_idx as u32 * cell_ptr_block_stride,
-                add_carry,
-                is_valid.into(),
-            );
             let prev_data: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|i| prev_word[i].into());
             let data: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
                 .write(
-                    MemoryAddress::from_cell_pointer_limbs(
-                        AB::F::from_u32(MEMORY_AS),
-                        block_cell_ptr,
-                        AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
-                    ),
+                    buffer_base.offset_blocks(word_idx),
                     data,
                     timestamp_pp(),
                     MemoryWriteAuxInput::from_prev_data_exprs(&base_aux, prev_data),

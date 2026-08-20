@@ -2,13 +2,12 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use itertools::Itertools;
 use openvm_circuit::{
-    arch::{Postflight, PostflightError, U16Access, VmField, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
+    arch::{Postflight, PostflightError, U16Access, VmField, MEMORY_BLOCK_BYTES},
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
-    U16_BITS,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -16,9 +15,7 @@ use openvm_instructions::{
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, cell_ptr_hi_bits, u16_block_to_bytes, u32_to_ptr_limbs,
-};
+use openvm_riscv_circuit::adapters::u16_block_to_bytes;
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -28,7 +25,7 @@ use crate::{
     output::{DeferralOutputChip, DeferralOutputCols},
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        checked_pointer_offset, checked_u16_pointer, compute_aligned_pointer_carries,
+        checked_pointer_offset, checked_u16_pointer, compute_aligned_pointer_carry,
         f_commit_to_bytes, logged_u32_pointer, require_block_alignment, split_output,
         DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
@@ -304,27 +301,16 @@ fn fill_output_section<F: VmField>(
             // Byte -> cell pointer conversion carries for the `input` base pointer (read on the
             // first row) and the `output` base pointer (first write address), plus matching
             // range checks.
-            let (input_conv, input_add) = compute_aligned_pointer_carries(
+            cols.input_byte_to_cell_carry = F::from_u32(compute_aligned_pointer_carry(
                 &filler.range_checker_chip,
                 section.rs_val,
-                OUTPUT_TOTAL_MEMORY_OPS,
                 filler.address_bits,
-            );
-            cols.input_byte_to_cell_carry = F::from_u32(input_conv);
-            for (carry_col, &add_carry) in cols
-                .input_block_add_carries
-                .iter_mut()
-                .zip(input_add.iter())
-            {
-                *carry_col = F::from_u32(add_carry);
-            }
-            let (output_conv, _) = compute_aligned_pointer_carries(
+            ));
+            cols.output_byte_to_cell_carry = F::from_u32(compute_aligned_pointer_carry(
                 &filler.range_checker_chip,
                 section.rd_val,
-                1,
                 filler.address_bits,
-            );
-            cols.output_byte_to_cell_carry = F::from_u32(output_conv);
+            ));
 
             cols.sponge_inputs = initial_sponge_input;
             current_poseidon2_res = filler.poseidon2_chip.perm_and_record(
@@ -353,20 +339,9 @@ fn fill_output_section<F: VmField>(
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
             }
 
-            // Output write *cell* pointer limbs for this row, advanced limb-wise from the
-            // converted output base pointer, and the carry into the next write row.
+            // Memory-bus block index of this row's output write.
             let write_byte_ptr = section.rd_val + ((row_idx - 1) * DIGEST_SIZE) as u32;
-            let write_cell_ptr = byte_ptr_to_u16_ptr_value(write_byte_ptr);
-            let write_cell_limbs = u32_to_ptr_limbs(write_cell_ptr);
-            filler
-                .range_checker_chip
-                .add_count(write_cell_limbs[0], U16_BITS);
-            filler
-                .range_checker_chip
-                .add_count(write_cell_limbs[1], cell_ptr_hi_bits(filler.address_bits));
-            cols.write_cell_ptr_limbs = write_cell_limbs.map(F::from_u32);
-            let stride = (DIGEST_SIZE / U16_CELL_SIZE) as u32;
-            cols.write_ptr_add_carry = F::from_u32((write_cell_limbs[0] + stride) >> U16_BITS);
+            cols.write_block_index = F::from_u32(write_byte_ptr / MEMORY_BLOCK_BYTES as u32);
         }
         cols.poseidon2_res = current_poseidon2_res;
     }

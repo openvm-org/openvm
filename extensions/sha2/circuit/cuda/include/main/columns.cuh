@@ -41,11 +41,6 @@ template <typename V, typename T> struct Sha2MainMemoryCols {
     T input_cell_carry;
     T state_cell_carry;
     T dst_cell_carry;
-    // Per-block carry for adding the cell offset `i * (SHA2_READ_SIZE / U16_CELL_SIZE)` to each
-    // base cell pointer (block `i`'s carry into the high cell limb).
-    T input_add_carry[V::BLOCK_READS];
-    T state_add_carry[V::STATE_READS];
-    T write_add_carry[V::STATE_WRITES];
 };
 
 template <typename V, typename T> struct Sha2MainCols {

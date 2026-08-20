@@ -1,6 +1,5 @@
 #include "launcher.cuh"
 #include "primitives/fp_array.cuh"
-#include "primitives/histogram.cuh"
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
@@ -22,9 +21,7 @@ template <typename T> struct PersistentBoundaryCols {
     T is_valid;
     T is_dirty;
     T address_space;
-    // Range-check decomposition `leaf_label = low + 2^LEAF_LABEL_LO_BITS * high`; the merkle
-    // bus carries the recomposed scalar label (see persistent.rs).
-    T leaf_label_limbs[LEAF_LABEL_LIMBS];
+    T leaf_label;
     T initial_values[DIGEST_WIDTH];
     T final_values[DIGEST_WIDTH];
     T initial_hash[DIGEST_WIDTH];
@@ -42,10 +39,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
     size_t num_records,
     FpArray<POSEIDON2_WIDTH> *poseidon2_buffer,
     uint32_t *poseidon2_buffer_idx,
-    size_t poseidon2_capacity,
-    uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins,
-    uint32_t leaf_label_high_bits
+    size_t poseidon2_capacity
 ) {
     size_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row = RowSlice(trace + row_idx, height);
@@ -53,21 +47,17 @@ __global__ void cukernel_persistent_boundary_tracegen(
     if (row_idx < num_records) {
         BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> record = records[row_idx];
         Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
-        VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, is_valid, Fp::one());
         // Dirtiness is per *write*, tracked during execution and carried in the record.
         bool is_dirty = record.is_dirty != 0;
         COL_WRITE_VALUE(row, PersistentBoundaryCols, is_dirty, is_dirty);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
-        // The AIR range-checks both leaf-label limbs with multiplicity `is_valid = 1`.
-        uint32_t const leaf_label = record.ptr / DIGEST_WIDTH;
-        uint32_t const leaf_label_limbs[LEAF_LABEL_LIMBS] = {
-            leaf_label & ((uint32_t(1) << LEAF_LABEL_LO_BITS) - 1),
-            leaf_label >> LEAF_LABEL_LO_BITS,
-        };
-        COL_WRITE_ARRAY(row, PersistentBoundaryCols, leaf_label_limbs, leaf_label_limbs);
-        range_checker.add_count(leaf_label_limbs[0], LEAF_LABEL_LO_BITS);
-        range_checker.add_count(leaf_label_limbs[1], leaf_label_high_bits);
+        COL_WRITE_VALUE(
+            row,
+            PersistentBoundaryCols,
+            leaf_label,
+            record.ptr / DIGEST_WIDTH
+        );
 
         FpArray<DIGEST_WIDTH> init_values{};
         uint32_t addr_space_idx = record.address_space - 1;
@@ -146,9 +136,6 @@ extern "C" int _persistent_boundary_tracegen(
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
     size_t poseidon2_capacity,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    uint32_t leaf_label_high_bits,
     cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(height);
@@ -172,10 +159,7 @@ extern "C" int _persistent_boundary_tracegen(
         num_records,
         d_poseidon2_buffer,
         d_poseidon2_buffer_idx,
-        poseidon2_record_capacity,
-        d_range_checker,
-        range_checker_num_bins,
-        leaf_label_high_bits
+        poseidon2_record_capacity
     );
     return CHECK_KERNEL();
 }
