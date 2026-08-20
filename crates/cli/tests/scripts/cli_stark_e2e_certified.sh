@@ -9,7 +9,7 @@ canonical_riscv_config="$temp_dir/openvm-riscv32.toml"
 non_riscv_proof_path="$temp_dir/fibonacci-non-riscv.stark.proof"
 non_riscv_config="$temp_dir/openvm-non-riscv.toml"
 
-# The multi-program fixture omits the IO extension, but the FV verifier only
+# The multi-program fixture omits the IO extension, but the certified verifier only
 # covers the canonical RV32IM+IO configuration.
 printf '[app_vm_config.rv32i]\n[app_vm_config.rv32m]\n[app_vm_config.io]\n' \
   > "$canonical_riscv_config"
@@ -30,13 +30,13 @@ output=$(cargo openvm verify stark \
   --manifest-path tests/programs/multi/Cargo.toml \
   --example fibonacci \
   --proof "$proof_path" \
-  --fv-verified 2>&1 | tee /dev/stderr)
+  --certified 2>&1 | tee /dev/stderr)
 
-# ensure the FV verifier actually ran rather than the flag being ignored
-grep -q "FV verifier accepted the proof" <<<"$output"
+# ensure the certified verifier actually ran rather than the flag being ignored
+grep -q "Certified verifier accepted the proof" <<<"$output"
 
 # A proof generated with an additional VM extension is still a valid STARK
-# proof, but it is outside the canonical RISC-V configuration covered by the FV verifier.
+# proof, but it is outside the canonical RISC-V configuration covered by the certified verifier.
 cp "$canonical_riscv_config" "$non_riscv_config"
 printf '\n[app_vm_config.keccak]\n' >> "$non_riscv_config"
 
@@ -50,7 +50,7 @@ cargo openvm prove stark \
   --config "$non_riscv_config" \
   --proof "$non_riscv_proof_path"
 
-# Establish that rejection below comes from the FV verifier's config scope,
+# Establish that rejection below comes from the certified verifier's config scope,
 # not from ordinary STARK verification or a malformed proof.
 cargo openvm verify stark \
   --manifest-path tests/programs/multi/Cargo.toml \
@@ -61,8 +61,8 @@ if output=$(cargo openvm verify stark \
   --manifest-path tests/programs/multi/Cargo.toml \
   --example fibonacci \
   --proof "$non_riscv_proof_path" \
-  --fv-verified 2>&1); then
-  echo "FV verification unexpectedly accepted a non-RISC-V VM config" >&2
+  --certified 2>&1); then
+  echo "Certified verification unexpectedly accepted a non-RISC-V VM config" >&2
   exit 1
 fi
 printf '%s\n' "$output" >&2

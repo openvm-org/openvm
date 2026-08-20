@@ -1,4 +1,4 @@
-name: FV Verifier Tests
+name: Certified Verifier Tests
 
 on:
   workflow_call:
@@ -11,17 +11,17 @@ on:
     paths:
       - "crates/toolchain/build/**"
       - "crates/cli/**"
-      - "crates/fv-verifier/**"
+      - "crates/certified-verifier/**"
       - "crates/sdk/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/actions/sccache/**"
-      - ".github/workflows/fv-verifier.yml"
+      - ".github/workflows/certified-verifier.yml"
       - "ci/scripts/check_swirl_verifier_c.sh"
 
 concurrency:
-  group: ${{ github.workflow_ref }}-fv-verifier-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-certified-verifier-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -32,7 +32,7 @@ jobs:
   openvm-tests:
     name: OpenVM SDK and CLI
     runs-on:
-      - runs-on=${{ github.run_id }}-fv-verifier-openvm/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-certified-verifier-openvm/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -52,7 +52,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Install Lean toolchain
-        # openvm-fv-verifier's build.rs needs leanc from the toolchain that generated csrc/.
+        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
         run: |
           curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
@@ -60,32 +60,32 @@ jobs:
 
       - name: Build cargo-openvm
         run: |
-          cargo build --locked --profile fast -p cargo-openvm --features fv-verifier
+          cargo build --locked --profile fast -p cargo-openvm --features certified-verifier
           echo "${{ github.workspace }}/target/fast" >> "$GITHUB_PATH"
 
       - name: Install guest rust-src
         run: rustup component add rust-src --toolchain nightly-2026-01-18
 
-      - name: Run fv verifier tests
+      - name: Run certified verifier tests
         run: |
           cargo nextest run --cargo-profile=fast --test-threads=1 \
-            -p openvm-fv-verifier
+            -p openvm-certified-verifier
 
-      - name: Run SDK FV verifier tests
+      - name: Run SDK certified verifier tests
         working-directory: crates/sdk
         env:
           OPENVM_SKIP_DEBUG: "1"
         run: |
           cargo nextest run --cargo-profile=fast --test-threads=1 \
-            --features root-prover,fv-verifier -- test_fv_verifier
+            --features root-prover,certified-verifier -- test_certified_verifier
 
-      - name: Run CLI FV verifier stark e2e test
+      - name: Run CLI certified STARK e2e test
         working-directory: crates/cli
         env:
           SKIP_INSTALL: "1"
         run: |
-          cargo nextest run --cargo-profile=fast --test-threads=1 --features fv-verifier \
-            -E 'test(test_cli_stark_e2e_fv_verified)'
+          cargo nextest run --cargo-profile=fast --test-threads=1 --features certified-verifier \
+            -E 'test(test_cli_stark_e2e_certified)'
 
       - name: sccache stats
         if: always()

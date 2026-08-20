@@ -85,10 +85,10 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Additionally verify the STARK proof with the formally verified Swirl verifier (requires a build with the 'fv-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
+            help = "Additionally verify the STARK proof with the certified Swirl verifier extracted from its Lean formalization (requires a build with the 'certified-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
             help_heading = "OpenVM Options"
         )]
-        fv_verified: bool,
+        certified: bool,
 
         #[command(flatten)]
         cargo_args: SingleTargetCargoArgs,
@@ -198,7 +198,7 @@ impl VerifyCmd {
                 agg_vk,
                 app_baseline,
                 proof,
-                fv_verified,
+                certified,
                 cargo_args,
             } => {
                 let (manifest_path, _) =
@@ -239,17 +239,22 @@ impl VerifyCmd {
                 }
                 let vm_stark_proof = stark_proof.try_into()?;
                 Sdk::verify_proof(agg_vk, expected_baseline.clone(), &vm_stark_proof)?;
-                if *fv_verified {
-                    #[cfg(feature = "fv-verifier")]
+                if *certified {
+                    #[cfg(feature = "certified-verifier")]
                     {
-                        println!("Verifying STARK proof with the canonical RISC-V FV verifier");
-                        Sdk::verify_proof_with_fv_verifier(&expected_baseline, &vm_stark_proof)?;
-                        println!("FV verifier accepted the proof");
+                        println!(
+                            "Verifying STARK proof with the canonical RISC-V certified verifier"
+                        );
+                        Sdk::verify_proof_with_certified_verifier(
+                            &expected_baseline,
+                            &vm_stark_proof,
+                        )?;
+                        println!("Certified verifier accepted the proof");
                     }
-                    #[cfg(not(feature = "fv-verifier"))]
+                    #[cfg(not(feature = "certified-verifier"))]
                     eyre::bail!(
-                        "--fv-verified requires cargo-openvm built with the 'fv-verifier' \
-                         feature (cargo install --features fv-verifier ...)"
+                        "--certified requires cargo-openvm built with the 'certified-verifier' \
+                         feature (cargo install --features certified-verifier ...)"
                     );
                 }
             }

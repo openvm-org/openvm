@@ -2,7 +2,7 @@
 //!
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision, encodes
-//! `(vk, proof, public_values)` through `openvm-fv-verifier`, pipes the
+//! `(vk, proof, public_values)` through `openvm-certified-verifier`, pipes the
 //! three blobs to the Lean `swirl_dump_proof` binary, and asserts byte
 //! parity on the structural digests. Also covers tampered, empty, and
 //! wrong-version inputs.
@@ -13,7 +13,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use openvm_fv_verifier::{
+use openvm_certified_verifier::{
     write_proof, write_public_values, write_vk, MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_VK,
     WIRE_VERSION,
 };

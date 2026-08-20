@@ -153,7 +153,7 @@ fn find_leanc() -> Box<dyn Fn(&[&str]) -> Command + Sync> {
         });
     }
     panic!(
-        "building `openvm-fv-verifier` needs `leanc` (Lean toolchain \
+        "building `openvm-certified-verifier` needs `leanc` (Lean toolchain \
         {LEAN_TOOLCHAIN}). Install elan (https://github.com/leanprover/elan) \
          and run `elan toolchain install {LEAN_TOOLCHAIN}`, set SWIRL_LEANC \
          to a leanc binary, or set SWIRL_VERIFY_BIN to a prebuilt verifier."

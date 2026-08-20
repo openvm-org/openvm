@@ -4,7 +4,7 @@ set -euo pipefail
 
 swirl_dir="${1:?usage: check_swirl_verifier_c.sh <swirl-rbr-fv checkout>}"
 generated_dir="$swirl_dir/.lake/build/ir"
-vendored_dir="crates/fv-verifier/csrc"
+vendored_dir="crates/certified-verifier/csrc"
 
 test -d "$generated_dir"
 test -d "$vendored_dir"
