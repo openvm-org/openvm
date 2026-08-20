@@ -25,7 +25,7 @@ use openvm_riscv_circuit::Rv64ImBuilder;
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
-use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine};
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof, StarkEngine};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
@@ -146,6 +146,26 @@ fn scheduled_continuations_are_byte_identical_under_deterministic_tracegen() -> 
             "segment {idx} proof differs"
         );
     }
+    // Checked before the whole-proof comparison so a failure names the layer it
+    // came from: the traces handed to the prover, rather than anything downstream
+    // of them.
+    for (idx, (want, got)) in first
+        .per_segment
+        .iter()
+        .zip(scheduled.per_segment.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            bitcode::serialize(&want.common_main_commit).unwrap(),
+            bitcode::serialize(&got.common_main_commit).unwrap(),
+            "segment {idx} committed to different main traces"
+        );
+        assert_eq!(
+            bitcode::serialize(&want.trace_vdata).unwrap(),
+            bitcode::serialize(&got.trace_vdata).unwrap(),
+            "segment {idx} has different trace shapes or cached commitments"
+        );
+    }
     assert_eq!(
         encode(&first),
         encode(&scheduled),
@@ -252,16 +272,21 @@ fn scheduled_continuations_mean_the_same_in_default_mode() -> Result<()> {
         scheduled_instance.max_concurrent_proves()
     );
 
-    // The input envelope: what each arm actually handed the prover, per segment.
+    // What each arm handed the prover, restricted to quantities that do not depend
+    // on trace row order.
     //
-    // `common_main_commit` is the prover's own commitment to all of a segment's
-    // main traces, so comparing it commits to private trace contents without
-    // reading a device buffer or synchronizing a stream — which is why this can be
-    // an assertion rather than an instrumented comparison. `trace_vdata` adds the
-    // per-AIR shapes and cached commitments, and the boundaries pin the segment
-    // this trace was supposed to cover, which public values alone do not: the
-    // connector exposes program counters and termination but neither instruction
-    // count nor timestamps.
+    // The boundaries pin which slice of execution each segment was supposed to
+    // cover, which the public values alone do not: the connector exposes program
+    // counters and termination but neither instruction count nor timestamps. Trace
+    // heights pin the shape and the resource demand.
+    //
+    // Commitments are deliberately absent here. `common_main_commit` covers the
+    // periphery Poseidon2 trace, whose rows are emitted in concurrent-map iteration
+    // order in this mode, so it can differ between two runs of the *same* driver.
+    // Asserting it here would either flake, reporting a scheduler defect that did
+    // not happen, or pass and thereby claim the ordering problem does not exist.
+    // It is asserted under the deterministic switch instead, where row order is a
+    // function of the records.
     assert_eq!(
         serial_instance_boundaries,
         scheduled_instance.segment_boundaries(),
@@ -273,15 +298,17 @@ fn scheduled_continuations_mean_the_same_in_default_mode() -> Result<()> {
         .zip(scheduled.per_segment.iter())
         .enumerate()
     {
+        let heights = |proof: &Proof<SC>| {
+            proof
+                .trace_vdata
+                .iter()
+                .map(|air| air.as_ref().map(|vdata| vdata.log_height))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(
-            bitcode::serialize(&want.common_main_commit).unwrap(),
-            bitcode::serialize(&got.common_main_commit).unwrap(),
-            "segment {idx} committed to different main traces"
-        );
-        assert_eq!(
-            bitcode::serialize(&want.trace_vdata).unwrap(),
-            bitcode::serialize(&got.trace_vdata).unwrap(),
-            "segment {idx} has different trace shapes or cached commitments"
+            heights(want),
+            heights(got),
+            "segment {idx} has different per-AIR trace heights"
         );
     }
     Ok(())
