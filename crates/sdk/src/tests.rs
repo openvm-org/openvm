@@ -1095,12 +1095,18 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 /// segments, so the scheduler graph has a real execute chain without paying for a
 /// large proof.
 #[cfg(feature = "cuda")]
-const SCHEDULED_SEGMENTATION_MAX_MEMORY: usize = 256 << 20;
-/// Four segments, not two. The driver seeds one segment before admitting anything
-/// and fills its lookahead while proves are in flight, so a two-segment program
-/// dispatches `[P0]` and then `[P1]` alone and never holds two proves at once.
+const SCHEDULED_SEGMENTATION_MAX_MEMORY: usize = 128 << 20;
+/// More segments than the first batch's production target can absorb.
+///
+/// Four would be enough for two proves to be dispatched together, but not for
+/// segment production to still have work left by the time that batch runs: the
+/// first batch produces up to `proved + prove_lookahead + 2` segments, so with only
+/// four the producer is already finished when the first two-prove batch starts.
+/// Overlap and concurrency would then be observed in different batches, and the
+/// interesting configuration -- production advancing while two proves are resident
+/// -- would never occur.
 #[cfg(feature = "cuda")]
-const SCHEDULED_MIN_SEGMENTS: usize = 4;
+const SCHEDULED_MIN_SEGMENTS: usize = 6;
 /// A 32 GB card as `nvidia-smi` reports it: driver and CUDA context already
 /// counted, so this is the whole device rather than a workload-only remainder.
 #[cfg(feature = "cuda")]
@@ -1163,7 +1169,7 @@ fn scheduled_gpu_proves_are_admitted_onto_distinct_streams() -> Result<()> {
     tracing::info!(
         segments = proof.per_segment.len(),
         max_concurrent_proves = record.max_concurrent_proves,
-        prove_batch_queues = ?record.prove_batch_queues,
+        prove_batches = ?record.prove_batches,
         "scheduled GPU run"
     );
     assert!(
@@ -1177,23 +1183,61 @@ fn scheduled_gpu_proves_are_admitted_onto_distinct_streams() -> Result<()> {
         record.max_concurrent_proves
     );
 
+    // Half one: proves dispatched together could run concurrently at all, because
+    // they hold different device queues. This says nothing about whether anything
+    // else advanced meanwhile.
     let concurrent: Vec<_> = record
-        .prove_batch_queues
+        .prove_batches
         .iter()
-        .filter(|batch| batch.len() >= 2)
+        .filter(|batch| batch.queues.len() >= 2)
         .collect();
     assert!(
         !concurrent.is_empty(),
         "no batch held two proves, so a distinct-stream assertion would be vacuous"
     );
-    for batch in concurrent {
-        let streams: HashSet<u64> = batch.iter().map(|(_, stream)| *stream).collect();
+    for batch in &concurrent {
+        let streams: HashSet<u64> = batch.queues.iter().map(|(_, stream)| *stream).collect();
         assert_eq!(
             streams.len(),
-            batch.len(),
+            batch.queues.len(),
             "proves dispatched together shared a CUDA stream and so serialized: {batch:?}"
         );
     }
+
+    // Half two: segment production actually advanced while proves were still
+    // running. Distinct queues permit concurrency; this is what shows it happened.
+    // `still_running_after_production` is sampled before the join, so a non-zero
+    // value means those proves had not completed when production stopped -- which
+    // rules out production merely following a finished prove.
+    let overlapped: Vec<_> = record
+        .prove_batches
+        .iter()
+        .filter(|batch| batch.produced_while_proving > 0)
+        .collect();
+    assert!(
+        !overlapped.is_empty(),
+        "the producer never advanced inside a prove window, so the rvr path streams \
+         without overlapping"
+    );
+    assert!(
+        overlapped
+            .iter()
+            .any(|batch| batch.still_running_after_production > 0),
+        "production always finished after every prove had completed, so nothing \
+         overlapped: {overlapped:?}"
+    );
+    // The configuration M4-2 will measure: production advancing while two proves
+    // are resident, not merely while one is.
+    assert!(
+        record
+            .prove_batches
+            .iter()
+            .any(|batch| batch.queues.len() >= 2
+                && batch.produced_while_proving > 0
+                && batch.still_running_after_production >= 2),
+        "no batch had production advancing while two proves were still running: {:?}",
+        record.prove_batches
+    );
 
     verify_segments(&prover.vm().engine, &app_vk, &proof.per_segment)?;
     Ok(())

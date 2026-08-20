@@ -29,8 +29,9 @@ use openvm_circuit::{
     arch::{
         cuda::postflight::GpuPostflightProgram, drive_scheduled, execution_mode::Segment,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationProverFn, ContinuationVmProof,
-        ExitCode, GenerationError, MeteredSegmentProducer, ProvingKeyResidency, ScheduledRunRecord,
-        SegmentDriver, SegmentSchedulerConfig, Streams, VirtualMachineError, VmInstance, VmState,
+        ExitCode, GenerationError, MeteredSegmentProducer, ProveBatchRecord, ProvingKeyResidency,
+        ScheduledRunRecord, SegmentDriver, SegmentSchedulerConfig, Streams, VirtualMachineError,
+        VmInstance, VmState,
     },
     system::memory::{merkle::public_values::UserPublicValuesProof, online::GuestMemory},
 };
@@ -528,8 +529,8 @@ impl<'a> SegmentExecutor<'a> {
 struct GpuSegmentDriver<'a> {
     executor: SegmentExecutor<'a>,
     pool: &'a [ProveSlot],
-    /// Per dispatched batch, each segment index with the stream that proved it.
-    queues: Mutex<Vec<Vec<(usize, u64)>>>,
+    /// One entry per dispatched batch, in dispatch order.
+    batches: Mutex<Vec<ProveBatchRecord>>,
 }
 
 impl SegmentDriver for GpuSegmentDriver<'_> {
@@ -553,17 +554,12 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
             self.pool.len()
         );
         let shared_pk = self.executor.instance.vm.pk();
-        self.queues
-            .lock()
-            .expect("prove queues are recorded without panicking")
-            .push(
-                batch
-                    .iter()
-                    .enumerate()
-                    .map(|(slot, (idx, _))| (*idx, self.pool[slot].queue_id()))
-                    .collect(),
-            );
-        let (results, produced) = std::thread::scope(|scope| {
+        let queues = batch
+            .iter()
+            .enumerate()
+            .map(|(slot, (idx, _))| (*idx, self.pool[slot].queue_id()))
+            .collect();
+        let (results, produced, still_running) = std::thread::scope(|scope| {
             let handles = batch
                 .into_iter()
                 .enumerate()
@@ -585,6 +581,10 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
             // segment production runs here rather than after the join. This is the
             // producer/prove overlap.
             let produced = while_proving();
+            // Sampled before the join: how many proves this batch still had in
+            // flight at the moment production stopped. Non-zero is what separates
+            // overlapping work from work that merely followed.
+            let still_running = handles.iter().filter(|h| !h.is_finished()).count();
             let results = handles
                 .into_iter()
                 .map(|handle| {
@@ -593,7 +593,7 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
                         .unwrap_or_else(|payload| resume_unwind(payload))
                 })
                 .collect::<Vec<_>>();
-            (results, produced)
+            (results, produced, still_running)
         });
         let proofs = results
             .into_iter()
@@ -606,7 +606,16 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
             .collect::<Result<Vec<_>, VirtualMachineError>>()?;
         // Reported only after the join, so a producer failure never leaves proves
         // running unobserved.
-        Ok((proofs, produced?))
+        let produced = produced?;
+        self.batches
+            .lock()
+            .expect("prove batches are recorded without panicking")
+            .push(ProveBatchRecord {
+                queues,
+                produced_while_proving: produced.len(),
+                still_running_after_production: still_running,
+            });
+        Ok((proofs, produced))
     }
 }
 
@@ -743,14 +752,14 @@ fn prove_scheduled(
     let mut driver = GpuSegmentDriver {
         executor: SegmentExecutor::new(&mut *instance, prepared)?,
         pool,
-        queues: Mutex::new(Vec::new()),
+        batches: Mutex::new(Vec::new()),
     };
     let run = drive_scheduled(scheduler, &mut driver, &mut source)?;
     source.finish()?;
 
     let GpuSegmentDriver {
         mut executor,
-        queues,
+        batches,
         ..
     } = driver;
     executor.validate_endpoints()?;
@@ -758,14 +767,14 @@ fn prove_scheduled(
     #[cfg(feature = "metrics")]
     let metrics = std::mem::take(&mut executor.metrics);
     drop(executor);
-    let prove_batch_queues = queues
+    let prove_batches = batches
         .into_inner()
-        .expect("prove queues are recorded without panicking");
+        .expect("prove batches are recorded without panicking");
 
     instance.set_scheduled_run(ScheduledRunRecord {
         max_concurrent_proves: run.max_concurrent_proves,
         segment_boundaries: boundaries(&run.segments),
-        prove_batch_queues,
+        prove_batches,
     });
     #[cfg(feature = "metrics")]
     metrics.emit();

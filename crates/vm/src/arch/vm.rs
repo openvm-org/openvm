@@ -1835,6 +1835,31 @@ impl<SC: StarkProtocolConfig> Default for ProvingKeyResidency<SC> {
     }
 }
 
+/// What one dispatched batch of proves did.
+///
+/// The two halves answer different questions and must not be conflated. `queues`
+/// answers "could these proves have run concurrently at all", which per-prove
+/// device queues decide. `produced_while_proving` and
+/// `still_running_after_production` answer "did other work actually advance while
+/// they were outstanding", which is what producer/prove overlap means.
+#[derive(Debug)]
+pub struct ProveBatchRecord {
+    /// Segment index paired with an identifier for the device queue its prove was
+    /// enqueued on.
+    ///
+    /// Two entries reporting the same queue means their work serialized. That
+    /// still yields correct proofs, so no other check sees it; this is what makes
+    /// it observable. Empty for backends without device queues.
+    pub queues: Vec<(usize, u64)>,
+    /// Segments the producer discovered between this batch being dispatched and
+    /// being joined.
+    pub produced_while_proving: usize,
+    /// How many of this batch's proves had not yet finished when the producer
+    /// stopped. Non-zero is the evidence that the two overlapped rather than
+    /// merely being adjacent.
+    pub still_running_after_production: usize,
+}
+
 /// What the last continuation run did, recorded by whichever driver ran it.
 ///
 /// These are observations, not results: nothing in the proof depends on them. They
@@ -1846,13 +1871,8 @@ pub struct ScheduledRunRecord {
     pub max_concurrent_proves: usize,
     /// `(instret_start, num_insns)` per segment, in segment order.
     pub segment_boundaries: Vec<(u64, u64)>,
-    /// Per dispatched batch, the segment indices proved together, each paired with
-    /// an identifier for the device queue its prove was enqueued on.
-    ///
-    /// Two proves in one batch reporting the same queue means their work
-    /// serialized. That still yields correct proofs, so no other check sees it;
-    /// this is what makes it observable. Empty for backends without device queues.
-    pub prove_batch_queues: Vec<Vec<(usize, u64)>>,
+    /// One entry per dispatched batch, in dispatch order.
+    pub prove_batches: Vec<ProveBatchRecord>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
@@ -2162,7 +2182,9 @@ where
         self.scheduled_run = ScheduledRunRecord {
             max_concurrent_proves: run.max_concurrent_proves,
             segment_boundaries: segment_boundaries(&run.segments),
-            prove_batch_queues: Vec::new(),
+            // The interpreter driver has no device queues to report, and its
+            // producer/prove overlap is not instrumented here.
+            prove_batches: Vec::new(),
         };
         Ok(ContinuationVmProof {
             per_segment: run.proofs,
