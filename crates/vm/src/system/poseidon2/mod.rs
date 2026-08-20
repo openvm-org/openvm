@@ -9,7 +9,10 @@
 //! internal leaves of a Merkle tree but **not** as the leaf hash because `compress` does not
 //! add any padding.
 
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
@@ -34,6 +37,28 @@ pub mod trace;
 
 pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
+
+/// Whether periphery Poseidon2 trace rows are ordered by their input rather than
+/// by the order records happened to land in the concurrent map.
+static DETERMINISTIC_TRACEGEN: AtomicBool = AtomicBool::new(false);
+
+/// Orders periphery Poseidon2 trace rows by input, making the trace — and so the
+/// proof — a function of the records alone.
+///
+/// Off by default: the ordering is otherwise whatever concurrent insertion
+/// produced, so two runs over identical records can generate different traces.
+/// This exists so a test can compare proofs at all; it is not a fix for the
+/// default path, and turning it on changes the proof a given run produces.
+///
+/// The switch is process-wide, so a test that sets it must not share a process
+/// with one that assumes the default.
+pub fn set_deterministic_tracegen(enabled: bool) {
+    DETERMINISTIC_TRACEGEN.store(enabled, Ordering::Relaxed);
+}
+
+pub fn deterministic_tracegen() -> bool {
+    DETERMINISTIC_TRACEGEN.load(Ordering::Relaxed)
+}
 
 #[derive(Chip)]
 #[chip(where = "F: VmField")]

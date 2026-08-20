@@ -3,11 +3,17 @@ use std::borrow::BorrowMut;
 use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::AirProvingContext, StarkProtocolConfig, Val,
+    p3_air::BaseAir,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::AirProvingContext,
+    StarkProtocolConfig, Val,
 };
 
-use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
+use super::{
+    columns::*, deterministic_tracegen, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH,
+};
 use crate::arch::VmField;
 
 impl<SC: StarkProtocolConfig, const SBOX_REGISTERS: usize> Chip<(), CpuBackend<SC>>
@@ -26,16 +32,31 @@ where
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
-        #[cfg(feature = "parallel")]
-        let records_iter = self.records.par_iter();
-        #[cfg(not(feature = "parallel"))]
-        let records_iter = self.records.iter();
-        let (actual_inputs, actual_multiplicities): (Vec<_>, Vec<_>) = records_iter
-            .map(|r| {
-                let (input, mult) = r.pair();
-                (*input, mult.load(std::sync::atomic::Ordering::Relaxed))
-            })
-            .unzip();
+        let (actual_inputs, actual_multiplicities): (Vec<_>, Vec<_>) = if deterministic_tracegen() {
+            let mut records = self
+                .records
+                .iter()
+                .map(|r| {
+                    let (input, mult) = r.pair();
+                    (*input, mult.load(std::sync::atomic::Ordering::Relaxed))
+                })
+                .collect::<Vec<_>>();
+            // Keys are distinct, so ordering by the canonical representation is a
+            // total order and leaves no tie for insertion order to break.
+            records.sort_unstable_by_key(|(input, _)| input.map(|f| f.as_canonical_u32()));
+            records.into_iter().unzip()
+        } else {
+            #[cfg(feature = "parallel")]
+            let records_iter = self.records.par_iter();
+            #[cfg(not(feature = "parallel"))]
+            let records_iter = self.records.iter();
+            records_iter
+                .map(|r| {
+                    let (input, mult) = r.pair();
+                    (*input, mult.load(std::sync::atomic::Ordering::Relaxed))
+                })
+                .unzip()
+        };
         inputs.extend(actual_inputs);
         multiplicities.extend(actual_multiplicities);
         inputs.resize(height, [Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]);
