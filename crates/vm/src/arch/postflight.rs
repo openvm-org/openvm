@@ -97,7 +97,7 @@ where
 /// in chronological order; predecessor indexes resolve the value immediately
 /// before each timed access without reconstructing mutable RAM.
 pub struct Postflight<'a, F> {
-    program: &'a Program<F>,
+    program: &'a Program,
     history: &'a PreflightHistory,
     memory_config: MemoryConfig,
     exit_code: Option<u32>,
@@ -121,7 +121,7 @@ impl PostflightError {
 
 impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new(
-        program: &'a Program<F>,
+        program: &'a Program,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
         exit_code: Option<u32>,
@@ -138,7 +138,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
     }
 
     pub(crate) fn new_prepared(
-        program: &'a Program<F>,
+        program: &'a Program,
         program_index: &PostflightProgramIndex,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
@@ -156,7 +156,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
 
     #[instrument(name = "postflight", skip_all)]
     fn new_inner(
-        program: &'a Program<F>,
+        program: &'a Program,
         program_index: &PostflightProgramIndex,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
@@ -181,12 +181,15 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
                 .0;
             let opcode = instruction.opcode;
             validate_step(history, program_event_index, opcode, exit_code)?;
-            if opcode == SystemOpcode::TERMINATE.global_opcode()
-                && exit_code != Some(instruction.c.as_canonical_u32())
-            {
-                return Err(PostflightError::new(
-                    "TERMINATE exit code does not match the fetched instruction",
-                ));
+            if opcode == SystemOpcode::TERMINATE.global_opcode() {
+                let expected_exit_code = instruction.c.checked_as_u32().ok_or_else(|| {
+                    PostflightError::new("TERMINATE exit code must be non-negative")
+                })?;
+                if exit_code != Some(expected_exit_code) {
+                    return Err(PostflightError::new(
+                        "TERMINATE exit code does not match the fetched instruction",
+                    ));
+                }
             }
             let opcode = u32::try_from(opcode.as_usize())
                 .map_err(|_| PostflightError::new("instruction opcode exceeds u32::MAX"))?;
@@ -264,7 +267,7 @@ impl<'a, F: PrimeField32> Postflight<'a, F> {
             .map_or(0, |range| range.len() as u64)
     }
 
-    pub fn instruction(&self, step: PostflightStep) -> &Instruction<F> {
+    pub fn instruction(&self, step: PostflightStep) -> &Instruction {
         let pc = self.pc(step);
         debug_assert!(pc >= self.program.pc_base);
         debug_assert!(pc

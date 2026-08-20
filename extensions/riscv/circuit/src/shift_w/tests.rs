@@ -169,7 +169,7 @@ fn create_right_arithmetic_harness(tester: &VmChipTestBuilder<F>) -> RightArithm
 fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: ShiftWOpcode,
     b: Option<[u8; REGISTER_NUM_LIMBS]>,
@@ -194,7 +194,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 fn execute_boundary_shifts<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: ShiftWOpcode,
 ) {

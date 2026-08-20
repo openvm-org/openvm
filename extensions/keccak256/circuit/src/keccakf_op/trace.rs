@@ -163,10 +163,10 @@ fn replay_step<F: PrimeField32>(
     pointer_max_bits: usize,
 ) -> Result<KeccakfReplay, PostflightError> {
     let instruction = postflight.instruction(step);
-    if instruction.b != F::ZERO
-        || instruction.c != F::ZERO
-        || instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
+    if !instruction.b.is_zero()
+        || !instruction.c.is_zero()
+        || instruction.d.as_u32() != REGISTER_AS
+        || instruction.e.as_u32() != MEMORY_AS
     {
         return Err(PostflightError::new(
             "KECCAKF instruction has invalid operands",
@@ -175,7 +175,7 @@ fn replay_step<F: PrimeField32>(
 
     let pc = postflight.pc(step);
     let timestamp = postflight.timestamp(step);
-    let rd_ptr = instruction.a.as_canonical_u32();
+    let rd_ptr = instruction.a.as_u32();
     if rd_ptr & 1 != 0 {
         return Err(PostflightError::new(
             "KECCAKF register pointer must be two-byte aligned",

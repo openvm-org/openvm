@@ -22,19 +22,21 @@ struct JalLuiPreCompute {
 impl JalLuiExecutor {
     /// Return (IS_JAL, ENABLED)
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
-        inst: &Instruction<F>,
+        pc: u32,
+        inst: &Instruction,
         data: &mut JalLuiPreCompute,
     ) -> Result<(bool, bool), StaticProgramError> {
         let local_opcode =
             JalLuiOpcode::from_usize(inst.opcode.local_opcode_idx(JalLuiOpcode::CLASS_OFFSET));
         let is_jal = local_opcode == JAL;
-        let signed_imm = get_signed_imm(is_jal, inst.c);
+        let signed_imm =
+            get_signed_imm(is_jal, inst.c).ok_or(StaticProgramError::InvalidInstruction(pc))?;
 
         *data = JalLuiPreCompute {
             signed_imm,
-            a: inst.a.as_canonical_u32() as u8,
+            a: inst.a.as_u32() as u8,
         };
         let enabled = !inst.f.is_zero();
         Ok((is_jal, enabled))
@@ -71,27 +73,27 @@ where
     #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
-        _pc: u32,
-        inst: &Instruction<F>,
+        pc: u32,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
-        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
     }
 
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
-        _pc: u32,
-        inst: &Instruction<F>,
+        pc: u32,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
-        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
     }
 }
@@ -108,8 +110,8 @@ where
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
-        _pc: u32,
-        inst: &Instruction<F>,
+        pc: u32,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -117,7 +119,7 @@ where
     {
         let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
 
@@ -125,8 +127,8 @@ where
     fn metered_handler<Ctx>(
         &self,
         chip_idx: usize,
-        _pc: u32,
-        inst: &Instruction<F>,
+        pc: u32,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -134,7 +136,7 @@ where
     {
         let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
 }

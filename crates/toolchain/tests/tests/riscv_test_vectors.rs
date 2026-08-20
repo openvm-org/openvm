@@ -34,12 +34,12 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                 let elf = decode_elf(&path)?;
                 let exe = VmExe::from_elf(
                     elf,
-                    Transpiler::<F>::default()
+                    Transpiler::default()
                         .with_extension(Rv64ITranspilerExtension)
                         .with_extension(Rv64MTranspilerExtension)
                         .with_extension(Rv64IoTranspilerExtension),
                 )?;
-                let executor = VmExecutor::new(config.clone())?;
+                let executor = VmExecutor::<F, _>::new(config.clone())?;
                 let instance = executor.instance(&exe)?;
                 #[allow(unused_variables)]
                 let state = instance.execute(vec![])?;
@@ -97,7 +97,7 @@ fn test_rv64im_riscv_vector_prove() -> Result<()> {
             let elf = decode_elf(&path)?;
             let exe = VmExe::from_elf(
                 elf,
-                Transpiler::<F>::default()
+                Transpiler::default()
                     .with_extension(Rv64ITranspilerExtension)
                     .with_extension(Rv64MTranspilerExtension)
                     .with_extension(Rv64IoTranspilerExtension),

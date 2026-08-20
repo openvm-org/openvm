@@ -135,7 +135,7 @@ fn xorin_test_pointers(
 fn set_and_execute<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     opcode: XorinOpcode,
     buffer_length: Option<usize>,
@@ -511,7 +511,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 fn cuda_set_and_execute(
     tester: &mut GpuChipTestBuilder,
     executor: &mut XorinVmExecutor,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     len: Option<usize>,
     input_ptr_offset: Option<usize>,
@@ -655,7 +655,7 @@ fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_le
     let buffer_ptr = 0x100u32;
     let input_ptr = 0x200u32;
     let len = KECCAK_RATE_BYTES;
-    let xorin = Instruction::<F>::from_usize(
+    let xorin = Instruction::from_usize(
         XorinOpcode::XORIN.global_opcode(),
         [
             buffer_reg,

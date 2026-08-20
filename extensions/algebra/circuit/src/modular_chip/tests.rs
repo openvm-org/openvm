@@ -186,7 +186,7 @@ mod addsub_tests {
     fn set_and_execute_addsub<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut ModularExecutor<BLOCKS>,
-        preflight: &mut TestPreflight<F>,
+        preflight: &mut TestPreflight,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
@@ -625,7 +625,7 @@ mod muldiv_tests {
     fn set_and_execute_muldiv<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut ModularExecutor<BLOCKS>,
-        preflight: &mut TestPreflight<F>,
+        preflight: &mut TestPreflight,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
@@ -919,7 +919,7 @@ mod is_equal_tests {
     fn set_and_execute_is_equal<const NUM_LANES: usize, const TOTAL_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>,
-        preflight: &mut TestPreflight<F>,
+        preflight: &mut TestPreflight,
         rng: &mut StdRng,
         modulus: &BigUint,
         modulus_limbs: [F; TOTAL_LIMBS],
@@ -1253,7 +1253,7 @@ mod is_equal_tests {
         let b_ptr = 0x200u32;
         let c_ptr = 0x300u32;
 
-        let setup: Instruction<F> = Instruction::from_usize(
+        let setup: Instruction = Instruction::from_usize(
             VmOpcode::from_usize(opcode_base + ModularArithmeticOpcode::SETUP_ISEQ as usize),
             [
                 setup_rd,
@@ -1263,7 +1263,7 @@ mod is_equal_tests {
                 MEMORY_AS as usize,
             ],
         );
-        let is_eq: Instruction<F> = Instruction::from_usize(
+        let is_eq: Instruction = Instruction::from_usize(
             VmOpcode::from_usize(opcode_base + ModularArithmeticOpcode::IS_EQ as usize),
             [
                 is_eq_rd,

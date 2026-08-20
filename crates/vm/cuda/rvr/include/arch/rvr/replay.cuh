@@ -6,6 +6,7 @@
 #include "system/memory/params.cuh"
 
 static constexpr uint32_t REPLAY_THREADS = 256;
+static constexpr uint32_t INSTRUCTION_OPERAND_MAX = (1u << 29) - 1;
 
 struct ReplayPreviousValue {
     uint32_t timestamp;
@@ -35,6 +36,17 @@ static_assert(replay_canonical_register_pointer(0));
 static_assert(replay_canonical_register_pointer(31u * 8u));
 static_assert(!replay_canonical_register_pointer(2));
 static_assert(!replay_canonical_register_pointer(32u * 8u));
+
+static constexpr __host__ __device__ bool replay_valid_phantom_instruction(
+    RvrReplayInstruction const &instruction,
+    uint32_t phantom_opcode
+) {
+    return instruction.words[0] == phantom_opcode &&
+           instruction.words[1] <= INSTRUCTION_OPERAND_MAX &&
+           instruction.words[2] <= INSTRUCTION_OPERAND_MAX && instruction.words[3] <= UINT16_MAX &&
+           instruction.words[4] <= UINT16_MAX && instruction.words[5] == 0 &&
+           instruction.words[6] == 0 && instruction.words[7] == 0;
+}
 
 static __device__ __forceinline__ RvrReplayInstruction const *resolve_replay_instruction(
     DeviceBufferConstView<RvrReplayInstruction> instructions,

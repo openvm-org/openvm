@@ -11,7 +11,6 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::StarkEngine;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::Rv64ImPreflightGpuTracegen;
 use crate::{adapters::REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder};
@@ -20,7 +19,7 @@ fn register(index: usize) -> usize {
     index * REGISTER_NUM_LIMBS
 }
 
-fn addi(rd: usize, rs1: usize, immediate: usize) -> Instruction<BabyBear> {
+fn addi(rd: usize, rs1: usize, immediate: usize) -> Instruction {
     Instruction::from_usize(
         BaseAluImmOpcode::ADDI.global_opcode(),
         [

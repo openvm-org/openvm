@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use openvm_instructions::{
     exe::VmExe,
-    instruction::Instruction,
+    instruction::{Instruction, InstructionOperand},
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, VmOpcode,
 };
@@ -18,7 +18,10 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
-    system::program::{trace::generate_cached_trace, ProgramAir, ProgramBus, ProgramChip},
+    system::program::{
+        trace::{generate_cached_trace, instruction_operand_to_field},
+        ProgramAir, ProgramBus, ProgramChip,
+    },
     utils::test_cpu_engine,
 };
 
@@ -31,7 +34,7 @@ pub(crate) const SUB: VmOpcode = VmOpcode::from_usize(0x201);
 pub(crate) const JAL: VmOpcode = VmOpcode::from_usize(0x230);
 pub(crate) const BNE: VmOpcode = VmOpcode::from_usize(0x221);
 
-fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
+fn interaction_test(program: Program, execution: Vec<u32>) {
     let mut execution_frequencies = vec![0; program.len()];
     for pc_idx in execution {
         execution_frequencies[pc_idx as usize] += 1;
@@ -70,14 +73,14 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
             program_cells.extend([
                 BabyBear::from_u32(frequency),
                 BabyBear::from_usize(index * (DEFAULT_PC_STEP as usize)),
-                instruction.opcode.to_field(),
-                instruction.a,
-                instruction.b,
-                instruction.c,
-                instruction.d,
-                instruction.e,
-                instruction.f,
-                instruction.g,
+                BabyBear::from_usize(instruction.opcode.as_usize()),
+                instruction_operand_to_field(instruction.a),
+                instruction_operand_to_field(instruction.b),
+                instruction_operand_to_field(instruction.c),
+                instruction_operand_to_field(instruction.d),
+                instruction_operand_to_field(instruction.e),
+                instruction_operand_to_field(instruction.f),
+                instruction_operand_to_field(instruction.g),
             ]);
         }
     }
@@ -98,6 +101,26 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
             vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
         )
         .expect("Verification failed");
+}
+
+#[test]
+fn instruction_operand_lowering_preserves_signed_domain_boundaries() {
+    assert_eq!(
+        instruction_operand_to_field::<BabyBear>(InstructionOperand::from_i32(
+            InstructionOperand::MIN,
+        )),
+        -BabyBear::from_u32(1 << 29)
+    );
+    assert_eq!(
+        instruction_operand_to_field::<BabyBear>(InstructionOperand::from_i32(
+            InstructionOperand::MAX,
+        )),
+        BabyBear::from_u32((1 << 29) - 1)
+    );
+    assert_ne!(
+        instruction_operand_to_field::<BabyBear>(InstructionOperand::from_i32(-1)),
+        instruction_operand_to_field::<BabyBear>(InstructionOperand::from_i32(1))
+    );
 }
 
 #[test]
@@ -178,12 +201,12 @@ fn test_program_negative() {
         program_rows.extend(vec![
             BabyBear::from_u32(execution_frequencies[pc_idx]),
             BabyBear::from_usize(pc_idx * DEFAULT_PC_STEP as usize),
-            instruction.opcode.to_field(),
-            instruction.a,
-            instruction.b,
-            instruction.c,
-            instruction.d,
-            instruction.e,
+            BabyBear::from_usize(instruction.opcode.as_usize()),
+            instruction_operand_to_field(instruction.a),
+            instruction_operand_to_field(instruction.b),
+            instruction_operand_to_field(instruction.c),
+            instruction_operand_to_field(instruction.d),
+            instruction_operand_to_field(instruction.e),
         ]);
     }
     let width = 8;

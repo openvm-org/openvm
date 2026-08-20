@@ -26,10 +26,10 @@ struct LessThanPreCompute {
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreExecutor<NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut LessThanPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
@@ -41,14 +41,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanCoreExecutor<NUM_LI
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
+        if d.as_u32() != REGISTER_AS || e.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         *data = LessThanPreCompute {
-            rs2_ptr: c.as_canonical_u32() as u8,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            rs2_ptr: c.as_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok(local_opcode == LessThanOpcode::SLTU)
     }
@@ -82,7 +82,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
@@ -94,7 +94,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -120,7 +120,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -137,7 +137,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

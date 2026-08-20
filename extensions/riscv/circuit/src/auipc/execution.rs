@@ -19,21 +19,21 @@ struct AuiPcPreCompute {
 }
 
 impl AuipcExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut AuiPcPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, c: imm, d, .. } = inst;
-        if d.as_canonical_u32() != REGISTER_AS {
+        if d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let imm = imm.as_canonical_u32();
+        let imm = imm.as_u32();
         let data: &mut AuiPcPreCompute = data.borrow_mut();
         *data = AuiPcPreCompute {
             imm,
-            a: a.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
         };
         Ok(())
     }
@@ -57,7 +57,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut AuiPcPreCompute = data.borrow_mut();
@@ -69,7 +69,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -94,7 +94,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -111,7 +111,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

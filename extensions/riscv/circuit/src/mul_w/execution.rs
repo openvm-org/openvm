@@ -24,24 +24,24 @@ struct MulWPreCompute {
 }
 
 impl MulWCoreExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut MulWPreCompute,
     ) -> Result<(), StaticProgramError> {
         assert_eq!(
             MulWOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulWOpcode::MULW
         );
-        if inst.d.as_canonical_u32() != REGISTER_AS {
+        if inst.d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = MulWPreCompute {
-            a: inst.a.as_canonical_u32() as u8,
-            b: inst.b.as_canonical_u32() as u8,
-            c: inst.c.as_canonical_u32() as u8,
+            a: inst.a.as_u32() as u8,
+            b: inst.b.as_u32() as u8,
+            c: inst.c.as_u32() as u8,
         };
         Ok(())
     }
@@ -62,7 +62,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -77,7 +77,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -102,7 +102,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -119,7 +119,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

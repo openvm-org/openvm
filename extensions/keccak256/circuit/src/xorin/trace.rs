@@ -30,9 +30,7 @@ impl XorinVmFiller {
         row_slice: &mut [F],
     ) -> Result<(), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != MEMORY_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
             return Err(PostflightError::new(
                 "XORIN instruction has invalid address spaces",
             ));
@@ -40,9 +38,9 @@ impl XorinVmFiller {
 
         let from_pc = postflight.pc(step);
         let start_timestamp = postflight.timestamp(step);
-        let rd_ptr = instruction.a.as_canonical_u32();
-        let rs1_ptr = instruction.b.as_canonical_u32();
-        let rs2_ptr = instruction.c.as_canonical_u32();
+        let rd_ptr = instruction.a.as_u32();
+        let rs1_ptr = instruction.b.as_u32();
+        let rs2_ptr = instruction.c.as_u32();
         for pointer in [rd_ptr, rs1_ptr, rs2_ptr] {
             if pointer & 1 != 0 {
                 return Err(PostflightError::new(

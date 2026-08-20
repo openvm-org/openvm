@@ -3,12 +3,14 @@
 use std::{ffi::c_void, io::Write, iter::repeat_with};
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
-use openvm_instructions::{riscv::REGISTER_BYTES, LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    instruction::Instruction, riscv::REGISTER_BYTES, LocalOpcode, SystemOpcode,
+};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::Rv64Phantom;
 use rand::Rng;
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrInstruction, RvrRuntimeExtension};
+use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrRuntimeExtension};
 
 use crate::instruction::{decode_reg, Reg};
 
@@ -118,19 +120,19 @@ impl Default for Rv64PhantomExtension {
 }
 
 impl RvrExtension for Rv64PhantomExtension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }
-        let phantom = Rv64Phantom::from_repr((insn.c & 0xffff) as u16)?;
+        let phantom = Rv64Phantom::from_repr(u16::try_from(insn.c.as_u32()).ok()?)?;
         let instr: Box<dyn ExtInstr> = match phantom {
             Rv64Phantom::HintInput => Box::new(HintInputInstr),
             Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
-                ptr_reg: decode_reg(insn.a),
-                len_reg: decode_reg(insn.b),
+                ptr_reg: decode_reg(insn.a.as_u32()),
+                len_reg: decode_reg(insn.b.as_u32()),
             }),
             Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
-                num_words_reg: decode_reg(insn.a),
+                num_words_reg: decode_reg(insn.a.as_u32()),
             }),
         };
         Some(LiftedInstr::Body(InstrAt {
@@ -253,20 +255,17 @@ mod tests {
     use std::{collections::VecDeque, ptr::null_mut};
 
     use openvm_circuit::arch::HintStream;
-    use openvm_instructions::{instruction::Instruction, VmOpcode};
-    use p3_baby_bear::BabyBear;
+    use openvm_instructions::PhantomDiscriminant;
     use rand::{rngs::StdRng, RngCore, SeedableRng};
     use rvr_openvm_ir::{MemWidth, PageAddressSpace};
+    use rvr_openvm_lift::{opcode::lift_instruction, ExtensionRegistry};
     use test_case::test_case;
 
     use super::*;
     use crate::i::Rv64IExtension;
 
-    fn phantom_instruction(phantom: Rv64Phantom) -> RvrInstruction {
-        RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
-            VmOpcode::from_usize(SystemOpcode::PHANTOM.global_opcode_usize()),
-            [8, 16, phantom as usize, 0, 0, 1, 0],
-        ))
+    fn phantom_instruction(phantom: Rv64Phantom) -> Instruction {
+        Instruction::phantom(PhantomDiscriminant(phantom as u16), 8u8, 16u8, 0)
     }
 
     #[derive(Default)]
@@ -367,9 +366,11 @@ mod tests {
 
     fn emit_phantom(phantom: Rv64Phantom) -> (bool, Vec<String>) {
         let instruction = phantom_instruction(phantom);
-        let lifted = Rv64PhantomExtension
-            .try_lift(&instruction, 0x100)
-            .expect("RV64 phantom should lift");
+        let mut extensions = ExtensionRegistry::new();
+        extensions.register(Rv64PhantomExtension);
+        let lifted = lift_instruction(&instruction, 0x100, &extensions)
+            .expect("phantom instruction should be valid")
+            .expect("phantom extension should lift");
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
             panic!("expected body instruction");
         };

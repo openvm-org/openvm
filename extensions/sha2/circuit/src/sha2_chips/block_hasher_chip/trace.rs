@@ -9,8 +9,8 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    Sha2BlockHasherChip, Sha2BlockHasherRoundColsRefMut, Sha2BlockHasherVmConfig, Sha2Config,
-    INNER_OFFSET,
+    replay_sha2_from_postflight, Sha2BlockHasherChip, Sha2BlockHasherRoundColsRefMut,
+    Sha2BlockHasherVmConfig, Sha2Config, INNER_OFFSET,
 };
 
 struct Sha2BlockReplay {
@@ -39,7 +39,7 @@ where
     let replay_rows = steps
         .par_iter()
         .map(|&step| {
-            crate::replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
+            replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
                 .map(Sha2BlockReplay::from)
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -58,10 +58,7 @@ where
     let mut replay_rows = Vec::new();
     for postflight in postflights {
         for &step in postflight.steps(C::OPCODE.global_opcode()) {
-            replay_rows.push(Sha2BlockReplay::from(crate::replay_sha2_from_postflight::<
-                F,
-                C,
-            >(
+            replay_rows.push(Sha2BlockReplay::from(replay_sha2_from_postflight::<F, C>(
                 postflight,
                 step,
                 chip.pointer_max_bits,

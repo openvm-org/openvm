@@ -26,20 +26,20 @@ pub(super) struct BitwiseLogicPreCompute {
 
 impl<const LIMB_BITS: usize> BitwiseLogicCoreExecutor<{ REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
-    pub(super) fn pre_compute_impl<F: PrimeField32>(
+    pub(super) fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut BitwiseLogicPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != REGISTER_AS {
+        if d.as_u32() != REGISTER_AS || e.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BitwiseLogicPreCompute {
-            rs2_ptr: c.as_canonical_u32() as u8,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            rs2_ptr: c.as_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok(())
     }
@@ -76,7 +76,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -91,7 +91,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -118,7 +118,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -135,7 +135,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

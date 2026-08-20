@@ -39,8 +39,6 @@ use openvm_riscv_circuit::preflight::{
     PostflightAccessRegistry, PostflightAccessSchedule, PostflightAccessSpan,
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt, Rv64ImPreflightGpuTracegen};
-#[cfg(feature = "rvr")]
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::prover::{AirProvingContext, ProvingContext};
 use strum::EnumCount;
 
@@ -72,8 +70,8 @@ enum ModularReplay<const BLOCKS: usize> {
 }
 
 #[cfg(feature = "rvr")]
-fn validate_modular_is_eq_destinations<F: PrimeField32>(
-    program: &Program<F>,
+fn validate_modular_is_eq_destinations(
+    program: &Program,
     num_moduli: usize,
 ) -> Result<(), GpuPostflightError> {
     if let Some(slot) = super::modular_is_eq_x0_destination(program, num_moduli) {
@@ -587,8 +585,8 @@ pub struct AlgebraPreflightGpuTracegen<'a> {
 impl<'a> AlgebraPreflightGpuTracegen<'a> {
     #[cfg(feature = "rvr")]
     #[doc(hidden)]
-    pub fn validate_postflight_program<F: PrimeField32>(
-        program: &Program<F>,
+    pub fn validate_postflight_program(
+        program: &Program,
         modular: &ModularExtension,
     ) -> Result<(), GpuPostflightError> {
         validate_modular_is_eq_destinations(program, modular.supported_moduli.len())
@@ -782,8 +780,8 @@ impl<'a> AlgebraPreflightGpuTracegen<'a> {
     /// immutable program metadata; execution still writes only checkpoints and
     /// irreducible postimages.
     #[cfg(all(test, feature = "rvr"))]
-    pub fn upload_postflight_program<T: PrimeField32>(
-        program: &Program<T>,
+    pub fn upload_postflight_program(
+        program: &Program,
         memory_config: &MemoryConfig,
         modular: &ModularExtension,
         fp2: Option<&Fp2Extension>,
@@ -1186,14 +1184,14 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64ModularHybridBuilder
 
     fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        program: &Program<F>,
+        program: &Program,
     ) -> Result<Self::Prepared, GenerationError> {
         prepare_gpu_postflight(vm, program)
     }
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        _host_program: &Program<F>,
+        _host_program: &Program,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
@@ -1252,14 +1250,14 @@ impl PostflightTracegen<GpuBabyBearPoseidon2Engine> for Rv64ModularWithFp2Hybrid
 
     fn prepare_postflight(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        program: &Program<F>,
+        program: &Program,
     ) -> Result<Self::Prepared, GenerationError> {
         prepare_gpu_postflight(vm, program)
     }
 
     fn generate_proving_ctx(
         vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, Self>,
-        _host_program: &Program<F>,
+        _host_program: &Program,
         program: &Self::Prepared,
         output: &PreflightOutput,
     ) -> Result<ProvingContext<GpuBackend>, GenerationError> {

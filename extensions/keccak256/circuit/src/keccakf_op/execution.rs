@@ -29,10 +29,10 @@ struct KeccakfPreCompute {
 }
 
 impl KeccakfExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut KeccakfPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -45,13 +45,13 @@ impl KeccakfExecutor {
             ..
         } = inst;
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = KeccakfPreCompute {
-            a: a.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
         };
 
         Ok(())
@@ -71,7 +71,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -86,7 +86,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -108,7 +108,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -125,7 +125,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

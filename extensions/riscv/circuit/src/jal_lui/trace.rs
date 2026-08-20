@@ -2,6 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{fill_trace_rows, Postflight, PostflightError},
+    system::program::trace::instruction_operand_to_field,
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::LocalOpcode;
@@ -35,13 +36,14 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let instruction = postflight.instruction(step);
             let is_jal = local_opcode == JalLuiOpcode::JAL;
-            let signed_imm = get_signed_imm(is_jal, instruction.c);
+            let signed_imm = get_signed_imm(is_jal, instruction.c)
+                .ok_or_else(|| PostflightError::new("JAL/LUI instruction has invalid immediate"))?;
             let (rd_data, _) = CondRdWriteAdapterFiller::replay(
                 postflight,
                 step,
                 &chip.mem_helper.as_borrowed(),
                 adapter_row.borrow_mut(),
-                |from_pc, _| {
+                |from_pc| {
                     let (next_pc, output) = run_jal_lui(is_jal, from_pc, signed_imm);
                     (output, next_pc)
                 },
@@ -55,7 +57,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let imm_low_4 = if is_jal {
                 0
             } else {
-                (instruction.c.as_canonical_u32() & 0xf) as u8
+                (instruction.c.as_u32() & 0xf) as u8
             };
 
             chip.inner
@@ -77,7 +79,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                     .add_count(imm_low_4 as u32, LUI_IMM_LOW_BITS);
             }
 
-            core_row.imm = instruction.c;
+            core_row.imm = instruction_operand_to_field(instruction.c);
             core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
             core_row.imm_low_4 = F::from_u8(imm_low_4);
             core_row.is_jal = F::from_bool(is_jal);

@@ -149,7 +149,7 @@ fn create_harness(
 fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
     b: Option<[u32; REGISTER_NUM_LIMBS]>,
@@ -222,7 +222,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 fn set_and_execute_special_cases<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: DivRemWOpcode,
 ) {

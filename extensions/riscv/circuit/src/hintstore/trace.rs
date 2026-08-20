@@ -111,29 +111,27 @@ fn replay_header<'postflight, 'history, F: PrimeField32>(
             "hint-store replay received an unsupported opcode",
         ));
     }
-    if instruction.c.as_canonical_u32() != 0
-        || instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-        || instruction.f.as_canonical_u32() != 0
-        || instruction.g.as_canonical_u32() != 0
+    if instruction.c.as_u32() != 0
+        || instruction.d.as_u32() != REGISTER_AS
+        || instruction.e.as_u32() != MEMORY_AS
+        || instruction.f.as_u32() != 0
+        || instruction.g.as_u32() != 0
     {
         return Err(PostflightError::new(
             "hint-store instruction has invalid fixed operands",
         ));
     }
 
-    let mem_ptr_ptr = u32::from(checked_register_pointer(instruction.b.as_canonical_u32())?);
+    let mem_ptr_ptr = u32::from(checked_register_pointer(instruction.b.as_u32())?);
     let num_words_ptr = if is_single {
-        if instruction.a.as_canonical_u32() != 0 {
+        if instruction.a.as_u32() != 0 {
             return Err(PostflightError::new(
                 "HINT_STORED must not specify a word-count register",
             ));
         }
         None
     } else {
-        Some(u32::from(checked_register_pointer(
-            instruction.a.as_canonical_u32(),
-        )?))
+        Some(u32::from(checked_register_pointer(instruction.a.as_u32())?))
     };
 
     let from_pc = postflight.pc(step);

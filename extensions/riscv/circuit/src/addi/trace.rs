@@ -27,7 +27,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let immediate = postflight.instruction(step).c.as_canonical_u32();
+        let immediate = postflight.instruction(step).c.as_u32();
         let imm_low11 = (immediate & 0x7ff) as u16;
         let imm_sign = ((immediate >> 11) & 1) as u16;
         let (rs1, rd) = BaseAluImmU16AdapterFiller::replay(
@@ -72,7 +72,7 @@ pub fn generate_w_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let immediate = postflight.instruction(step).c.as_canonical_u32();
+        let immediate = postflight.instruction(step).c.as_u32();
         let imm_low11 = (immediate & 0x7ff) as u16;
         let imm_sign = ((immediate >> 11) & 1) as u16;
         let (rs1, rd) = adapter.replay(

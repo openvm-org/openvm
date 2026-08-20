@@ -7,6 +7,8 @@ use std::{
 
 use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(test)]
+use openvm_instructions::instruction::InstructionOperand;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
@@ -15,6 +17,8 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(test)]
+use crate::arch::execution_mode::ExecutionCtx;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
 use crate::{
@@ -131,14 +135,14 @@ where
     /// Creates an interpreter for pure or preflight execution.
     pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
+        exe: &VmExe,
     ) -> Result<Self, StaticProgramError>
     where
         F: PrimeField32,
         E: Executor<F>,
     {
         let program = &exe.program;
-        let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
+        let pre_compute_max_size = get_pre_compute_max_size::<F, _>(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
@@ -159,7 +163,7 @@ where
                 |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
-                        if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
+                        if get_system_opcode_handler::<Ctx>(pc, inst, pre_compute)?.is_some() {
                             Ok(terminate_execute_tco_handler)
                         } else {
                             // unwrap because get_pre_compute_instructions would have errored
@@ -232,7 +236,7 @@ where
     /// Creates an interpreter for metered execution.
     pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
+        exe: &VmExe,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
@@ -240,7 +244,7 @@ where
         E: MeteredExecutor<F>,
     {
         let program = &exe.program;
-        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
+        let pre_compute_max_size = get_metered_pre_compute_max_size::<F, _>(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
@@ -263,7 +267,7 @@ where
                 |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
-                        if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
+                        if get_system_opcode_handler::<Ctx>(pc, inst, pre_compute)?.is_some() {
                             Ok(terminate_execute_tco_handler)
                         } else {
                             // unwrap because get_pre_compute_instructions would have errored
@@ -295,18 +299,15 @@ where
     }
 }
 
-pub(crate) fn alloc_pre_compute_buf<F>(
-    program: &Program<F>,
-    pre_compute_max_size: usize,
-) -> AlignedBuf {
+pub(crate) fn alloc_pre_compute_buf(program: &Program, pre_compute_max_size: usize) -> AlignedBuf {
     let base_idx = get_pc_index(program.pc_base);
     let padded_program_len = base_idx + program.instructions_and_debug_infos.len();
     let buf_len = padded_program_len * pre_compute_max_size;
     AlignedBuf::uninit(buf_len, pre_compute_max_size)
 }
 
-pub(crate) fn split_pre_compute_buf<'a, F>(
-    program: &Program<F>,
+pub(crate) fn split_pre_compute_buf<'a>(
+    program: &Program,
     pre_compute_buf: &'a mut AlignedBuf,
     pre_compute_max_size: usize,
 ) -> Vec<&'a mut [u8]> {
@@ -432,7 +433,7 @@ unsafe fn unreachable_tco_handler<CTX>(
 }
 
 pub(crate) fn get_pre_compute_max_size<F, E: Executor<F>>(
-    program: &Program<F>,
+    program: &Program,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
     program
@@ -458,7 +459,7 @@ pub(crate) fn get_pre_compute_max_size<F, E: Executor<F>>(
 }
 
 pub(crate) fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
-    program: &Program<F>,
+    program: &Program,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
     program
@@ -483,7 +484,7 @@ pub(crate) fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
         .next_power_of_two()
 }
 
-fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
+fn system_opcode_pre_compute_size(inst: &Instruction) -> Option<usize> {
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         return Some(size_of::<TerminatePreCompute>());
     }
@@ -492,7 +493,7 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
 
 #[cfg(not(feature = "tco"))]
 pub(crate) fn get_pre_compute_instructions<F, Ctx, E>(
-    program: &Program<F>,
+    program: &Program,
     inventory: &ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
@@ -518,7 +519,7 @@ where
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_pre_compute_instruction {inst:?}");
                 let pc = i as u32 * DEFAULT_PC_STEP;
-                if let Some(handler) = get_system_opcode_handler(inst, buf) {
+                if let Some(handler) = get_system_opcode_handler(pc, inst, buf)? {
                     PreComputeInstruction {
                         handler,
                         pre_compute: buf.as_ptr(),
@@ -548,7 +549,7 @@ where
 
 #[cfg(not(feature = "tco"))]
 pub(crate) fn get_metered_pre_compute_instructions<F, Ctx, E>(
-    program: &Program<F>,
+    program: &Program,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
@@ -574,7 +575,7 @@ where
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_metered_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
-                if let Some(handler) = get_system_opcode_handler(inst, buf) {
+                if let Some(handler) = get_system_opcode_handler(pc, inst, buf)? {
                     PreComputeInstruction {
                         handler,
                         pre_compute: buf.as_ptr(),
@@ -607,16 +608,20 @@ where
         .collect::<Result<Vec<_>, _>>()
 }
 
-fn get_system_opcode_handler<F: PrimeField32, Ctx: ExecutionCtxTrait>(
-    inst: &Instruction<F>,
+fn get_system_opcode_handler<Ctx: ExecutionCtxTrait>(
+    pc: u32,
+    inst: &Instruction,
     buf: &mut [u8],
-) -> Option<ExecuteFunc<Ctx>> {
+) -> Result<Option<ExecuteFunc<Ctx>>, StaticProgramError> {
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
-        pre_compute.exit_code = inst.c.as_canonical_u32();
-        return Some(terminate_execute_impl);
+        pre_compute.exit_code = inst
+            .c
+            .checked_as_u32()
+            .ok_or(StaticProgramError::InvalidInstruction(pc))?;
+        return Ok(Some(terminate_execute_impl));
     }
-    None
+    Ok(None)
 }
 
 /// Errors if exit code is either error or terminated with non-successful exit code.
@@ -640,5 +645,32 @@ pub(super) fn check_termination(
     match did_terminate {
         true => Ok(()),
         false => Err(ExecutionError::DidNotTerminate),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminate_rejects_negative_exit_code() {
+        let inst = Instruction {
+            opcode: SystemOpcode::TERMINATE.global_opcode(),
+            c: InstructionOperand::from_i32(-1),
+            ..Default::default()
+        };
+        let mut pre_compute = TerminatePreCompute { exit_code: 0 };
+        // SAFETY: `pre_compute` is live, initialized, and correctly aligned for the full slice.
+        let buf = unsafe {
+            std::slice::from_raw_parts_mut(
+                (&mut pre_compute as *mut TerminatePreCompute).cast(),
+                size_of::<TerminatePreCompute>(),
+            )
+        };
+
+        assert!(matches!(
+            get_system_opcode_handler::<ExecutionCtx>(0, &inst, buf),
+            Err(StaticProgramError::InvalidInstruction(0))
+        ));
     }
 }

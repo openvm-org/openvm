@@ -1,10 +1,11 @@
 use openvm_decoder::instruction_formats::RType;
 use openvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use openvm_instructions::{
-    instruction::Instruction, riscv::REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
+    instruction::{Instruction, InstructionOperand},
+    riscv::REGISTER_NUM_LIMBS,
+    LocalOpcode, VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -24,8 +25,8 @@ pub enum WeierstrassOpcode {
 #[derive(Default)]
 pub struct EccTranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for EccTranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -55,13 +56,13 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                 };
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
-                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
-                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs2),
-                    F::ONE, // d_as = 1
-                    F::TWO, // e_as = 2
-                    F::ZERO,
-                    F::ZERO,
+                    InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
+                    InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    InstructionOperand::ONE, // d_as = 1
+                    InstructionOperand::TWO, // e_as = 2
+                    InstructionOperand::ZERO,
+                    InstructionOperand::ZERO,
                 ))
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {

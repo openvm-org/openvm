@@ -40,7 +40,7 @@ use crate::{
         DEFAULT_APP_L_SKIP,
     },
     prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
-    DeferralInput, Sdk, StdIn, F,
+    DeferralInput, Sdk, StdIn,
 };
 
 cfg_if::cfg_if! {
@@ -357,7 +357,7 @@ fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
 ///   * `evm-verify`: EVM proof via `sdk.prove_evm`, verified against the halo2 verifier
 fn prove_and_verify_e2e(
     sdk: &Sdk,
-    exe: Arc<VmExe<F>>,
+    exe: Arc<VmExe>,
     stdin: StdIn,
     def_inputs: &[DeferralInput],
 ) -> Result<()> {

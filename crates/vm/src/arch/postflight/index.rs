@@ -5,7 +5,7 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::p3_field::PrimeField32;
 use rustc_hash::FxHashMap;
 
 use super::{
@@ -26,7 +26,7 @@ pub struct PostflightProgramIndex {
 }
 
 impl PostflightProgramIndex {
-    pub(crate) fn new<F>(program: &Program<F>) -> Result<Self, PostflightError> {
+    pub(crate) fn new(program: &Program) -> Result<Self, PostflightError> {
         let mut num_rows = 0u32;
         let dense_rows = program
             .instructions_and_debug_infos
@@ -131,8 +131,8 @@ pub(super) fn memory_starts(
     Ok(starts)
 }
 
-pub(super) fn resolve_program_slot<F: Field>(
-    program: &Program<F>,
+pub(super) fn resolve_program_slot(
+    program: &Program,
     history: &PreflightHistory,
     program_index: usize,
 ) -> Result<usize, PostflightError> {
@@ -180,8 +180,8 @@ pub(super) fn validate_step(
     Ok(())
 }
 
-pub(super) fn validate_endpoint<F: Field>(
-    program: &Program<F>,
+pub(super) fn validate_endpoint(
+    program: &Program,
     history: &PreflightHistory,
     exit_code: Option<u32>,
 ) -> Result<(), PostflightError> {
@@ -200,11 +200,11 @@ pub(super) fn validate_endpoint<F: Field>(
     Ok(())
 }
 
-fn resolve_instruction<'a, F: Field>(
-    program: &'a Program<F>,
+fn resolve_instruction<'a>(
+    program: &'a Program,
     history: &PreflightHistory,
     program_index: usize,
-) -> Result<&'a Instruction<F>, PostflightError> {
+) -> Result<&'a Instruction, PostflightError> {
     let slot = resolve_program_slot(program, history, program_index)?;
     Ok(&program.instructions_and_debug_infos[slot]
         .as_ref()

@@ -50,7 +50,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 fn handler<Ctx>(
                     &self,
                     pc: u32,
-                    inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    inst: &::openvm_circuit::arch::instructions::instruction::Instruction,
                     data: &mut [u8],
                 ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
@@ -76,7 +76,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     fn pre_compute<Ctx>(
                         &self,
                         pc: u32,
-                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction,
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
@@ -148,7 +148,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 fn handler<Ctx>(
                     &self,
                     pc: u32,
-                    instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    instruction: &::openvm_circuit::arch::instructions::instruction::Instruction,
                     data: &mut [u8],
                 ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
@@ -184,7 +184,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     fn pre_compute<Ctx>(
                         &self,
                         pc: u32,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction,
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
@@ -238,7 +238,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     &self,
                     chip_idx: usize,
                     pc: u32,
-                    inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    inst: &::openvm_circuit::arch::instructions::instruction::Instruction,
                     data: &mut [u8],
                 ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
@@ -261,7 +261,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         &self,
                         chip_idx: usize,
                         pc: u32,
-                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction,
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
@@ -333,7 +333,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     &self,
                     chip_idx: usize,
                     pc: u32,
-                    instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    instruction: &::openvm_circuit::arch::instructions::instruction::Instruction,
                     data: &mut [u8],
                 ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
@@ -362,7 +362,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         &self,
                         chip_idx: usize,
                         pc: u32,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction,
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where

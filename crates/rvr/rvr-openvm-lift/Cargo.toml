@@ -15,6 +15,3 @@ libloading.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-
-[dev-dependencies]
-p3-baby-bear.workspace = true

@@ -84,16 +84,14 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
             "unsupported vector-heap read count {NUM_READS}"
         )));
     }
-    if instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-    {
+    if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
         return Err(PostflightError::new(
             "vector-heap instruction uses invalid address spaces",
         ));
     }
-    if (NUM_READS == 1 && instruction.c.as_canonical_u32() != 0)
-        || instruction.f.as_canonical_u32() != 0
-        || instruction.g.as_canonical_u32() != 0
+    if (NUM_READS == 1 && instruction.c.as_u32() != 0)
+        || instruction.f.as_u32() != 0
+        || instruction.g.as_u32() != 0
     {
         return Err(PostflightError::new(
             "vector-heap instruction has nonzero unused operands",
@@ -102,12 +100,12 @@ fn project_step<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
 
     let rs_ptrs = std::array::from_fn(|index| {
         if index == 0 {
-            instruction.b.as_canonical_u32()
+            instruction.b.as_u32()
         } else {
-            instruction.c.as_canonical_u32()
+            instruction.c.as_u32()
         }
     });
-    let rd_ptr = instruction.a.as_canonical_u32();
+    let rd_ptr = instruction.a.as_u32();
     let mut replay = postflight.replay(step);
 
     let mut rs_vals = [0u32; NUM_READS];

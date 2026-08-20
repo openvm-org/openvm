@@ -48,14 +48,14 @@ pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
 #[derive(Clone)]
-pub struct TestPreflightExecution<F> {
-    pub program: Program<F>,
+pub struct TestPreflightExecution {
+    pub program: Program,
     pub history: PreflightHistory,
 }
 
 #[derive(Clone, Default)]
-pub struct TestPreflight<F> {
-    pub executions: Vec<TestPreflightExecution<F>>,
+pub struct TestPreflight {
+    pub executions: Vec<TestPreflightExecution>,
 }
 
 type TestTraceGenerator<F, C> =
@@ -69,7 +69,7 @@ pub struct TestChipHarness<F, E, A, C> {
     pub executor: E,
     pub air: A,
     pub chip: C,
-    pub preflight: TestPreflight<F>,
+    pub preflight: TestPreflight,
     pub generate_trace: TestTraceGenerator<F, C>,
     pub generate_batch_trace: Option<TestBatchTraceGenerator<F, C>>,
     pub rows_used: TestTraceRows<F>,
@@ -81,7 +81,7 @@ pub struct TestChipHarness<F, E, A, C> {
 pub(crate) fn execute_test_preflight<F, E>(
     _memory_config: &MemoryConfig,
     executor: &E,
-    program: &Program<F>,
+    program: &Program,
     state: VmState<GuestMemory>,
 ) -> PreflightOutput
 where
@@ -130,7 +130,7 @@ where
 pub(crate) fn execute_test_preflight<F, E>(
     memory_config: &MemoryConfig,
     executor: &E,
-    program: &Program<F>,
+    program: &Program,
     state: VmState<GuestMemory>,
 ) -> PreflightOutput
 where
@@ -211,15 +211,15 @@ pub trait TestBuilder<F: PrimeField32> {
     fn execute<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
-        preflight: &mut TestPreflight<F>,
-        instruction: &Instruction<F>,
+        preflight: &mut TestPreflight,
+        instruction: &Instruction,
     );
 
     fn execute_with_pc<E: Executor<F> + Clone>(
         &mut self,
         executor: &mut E,
-        preflight: &mut TestPreflight<F>,
-        instruction: &Instruction<F>,
+        preflight: &mut TestPreflight,
+        instruction: &Instruction,
         initial_pc: u32,
     );
 
