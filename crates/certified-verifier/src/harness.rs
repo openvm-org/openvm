@@ -2,7 +2,7 @@
 //!
 //! Exposes:
 //!
-//! - [`run_fv_verifier`] writes an already-framed byte stream to the verifier.
+//! - [`run_certified_verifier`] writes an already-framed byte stream to the verifier.
 //! - [`run_swirl_verify`] frames and writes a `(vk, proof, public values)` triple.
 //! - [`verifier_error_from_exit_code`] — mirror of the Lean-side
 //!   `Swirl.Protocol.Noninteractive.exitCode` table.
@@ -36,7 +36,7 @@ pub fn swirl_verify_bin() -> PathBuf {
 ///
 /// Returns [`io::ErrorKind::Other`] when the child exited via a signal
 /// (no numeric exit code available).
-pub fn run_fv_verifier(bytes: &[u8]) -> io::Result<i32> {
+pub fn run_certified_verifier(bytes: &[u8]) -> io::Result<i32> {
     let bin = swirl_verify_bin();
     let bin = bin.as_path();
     let mut child = Command::new(bin)
