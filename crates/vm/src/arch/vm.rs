@@ -2227,7 +2227,14 @@ impl SegmentProducer {
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let ctx = vm.build_metered_ctx(exe).with_suspend_on_segment(true);
-        let instance = vm.metered_instance(exe)?.into_owned();
+        // SAFETY: `into_owned` erases the borrow of the `ExecutorInventory` whose
+        // executors the pre-compute buffer points into, so that inventory must
+        // outlive the instance. `VmExecutor` holds it in an `Arc` for as long as
+        // the `VirtualMachine` lives, and the producer built here is a local of
+        // `prove_continuations_scheduled`: it is consumed by `finish` before that
+        // function returns, and dropped by every early return, so it cannot
+        // outlive the `vm` borrow it was built from.
+        let instance = unsafe { vm.metered_instance(exe)?.into_owned() };
         let vm_state = instance.create_initial_vm_state(input);
         Ok(Self {
             instance,
