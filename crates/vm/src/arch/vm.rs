@@ -1854,6 +1854,16 @@ pub struct ProveBatchRecord {
     /// stopped. Non-zero is the evidence that the two overlapped rather than
     /// merely being adjacent.
     pub still_running_after_production: usize,
+    /// Segment index paired with how long that segment's own prove took, in
+    /// milliseconds.
+    ///
+    /// Wall time of the individual prove, not of the batch: entries overlap in
+    /// real time, so these do not sum to the batch's duration. Recorded because
+    /// a batched prove is otherwise unattributable per segment — the driver
+    /// returns every proof at once, and a span layer keyed by span name sums
+    /// concurrent proves into one number. Empty for backends that do not time
+    /// their proves.
+    pub prove_ms: Vec<(usize, u64)>,
 }
 
 /// What the last continuation run did, recorded by whichever driver ran it.

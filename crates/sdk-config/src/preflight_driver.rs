@@ -9,7 +9,8 @@
 #[cfg(feature = "rvr")]
 use std::sync::{Arc, OnceLock};
 #[cfg(feature = "metrics")]
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 use std::{panic::resume_unwind, sync::Mutex};
 
 #[cfg(not(feature = "rvr"))]
@@ -576,12 +577,15 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
                     // share a stream.
                     let slot = &self.pool[slot];
                     scope.spawn(move || {
-                        (
-                            idx,
-                            slot.engine
-                                .prove(slot.pk(shared_pk), ctx)
-                                .map_err(|error| error.to_string()),
-                        )
+                        // Timed inside the thread, so this is the individual
+                        // prove's wall rather than the batch's. Concurrent
+                        // entries overlap and do not sum to the batch duration.
+                        let started = Instant::now();
+                        let proof = slot
+                            .engine
+                            .prove(slot.pk(shared_pk), ctx)
+                            .map_err(|error| error.to_string());
+                        (idx, proof, started.elapsed())
                     })
                 })
                 .collect::<Vec<_>>();
@@ -603,9 +607,13 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
                 .collect::<Vec<_>>();
             (results, produced, still_running)
         });
+        let prove_ms = results
+            .iter()
+            .map(|(idx, _, elapsed)| (*idx, elapsed.as_millis() as u64))
+            .collect();
         let proofs = results
             .into_iter()
-            .map(|(idx, proof)| match proof {
+            .map(|(idx, proof, _)| match proof {
                 Ok(proof) => Ok((idx, proof)),
                 Err(error) => Err(VirtualMachineError::Generation(GenerationError::Proving(
                     error,
@@ -622,6 +630,7 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
                 queues,
                 produced_while_proving: produced.len(),
                 still_running_after_production: still_running,
+                prove_ms,
             });
         Ok((proofs, produced))
     }
