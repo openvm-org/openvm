@@ -186,6 +186,7 @@ fn scheduled_continuations_mean_the_same_in_default_mode() -> Result<()> {
     assert_eq!(serial.per_segment.len(), EXPECTED_SEGMENTS);
     let serial_payload = verify_segments(&serial_instance.vm.engine, &vk, &serial.per_segment)
         .map_err(|error| eyre::eyre!("serial segment proofs must verify: {error}"))?;
+    let serial_instance_boundaries = serial_instance.segment_boundaries().to_vec();
     drop(serial_instance);
 
     let (mut scheduled_instance, _, _) = multi_segment_instance()?;
@@ -250,5 +251,38 @@ fn scheduled_continuations_mean_the_same_in_default_mode() -> Result<()> {
         "the budget admits two resident proves, so two must have run together; saw {}",
         scheduled_instance.max_concurrent_proves()
     );
+
+    // The input envelope: what each arm actually handed the prover, per segment.
+    //
+    // `common_main_commit` is the prover's own commitment to all of a segment's
+    // main traces, so comparing it commits to private trace contents without
+    // reading a device buffer or synchronizing a stream — which is why this can be
+    // an assertion rather than an instrumented comparison. `trace_vdata` adds the
+    // per-AIR shapes and cached commitments, and the boundaries pin the segment
+    // this trace was supposed to cover, which public values alone do not: the
+    // connector exposes program counters and termination but neither instruction
+    // count nor timestamps.
+    assert_eq!(
+        serial_instance_boundaries,
+        scheduled_instance.segment_boundaries(),
+        "segment boundaries must not depend on the driver"
+    );
+    for (idx, (want, got)) in serial
+        .per_segment
+        .iter()
+        .zip(scheduled.per_segment.iter())
+        .enumerate()
+    {
+        assert_eq!(
+            bitcode::serialize(&want.common_main_commit).unwrap(),
+            bitcode::serialize(&got.common_main_commit).unwrap(),
+            "segment {idx} committed to different main traces"
+        );
+        assert_eq!(
+            bitcode::serialize(&want.trace_vdata).unwrap(),
+            bitcode::serialize(&got.trace_vdata).unwrap(),
+            "segment {idx} has different trace shapes or cached commitments"
+        );
+    }
     Ok(())
 }

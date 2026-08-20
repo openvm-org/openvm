@@ -1,6 +1,6 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
-    borrow::{Borrow, BorrowMut},
+    borrow::{Borrow, BorrowMut, Cow},
     iter::repeat_n,
     ptr::NonNull,
 };
@@ -41,7 +41,7 @@ use crate::{
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
 pub struct InterpretedInstance<'a, Ctx> {
-    system_config: &'a SystemConfig,
+    system_config: Cow<'a, SystemConfig>,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
     #[allow(dead_code)]
@@ -171,7 +171,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            system_config: inventory.config(),
+            system_config: Cow::Borrowed(inventory.config()),
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
@@ -185,7 +185,31 @@ where
     }
 
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
-        VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
+        VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        )
+    }
+
+    /// Detaches this instance from the [`ExecutorInventory`] that created it, so it
+    /// can outlive a borrow of the VM that owns the inventory.
+    ///
+    /// Mirrors [`RvrMeteredInstance::into_owned`](crate::arch::rvr::RvrMeteredInstance::into_owned).
+    pub fn into_owned(self) -> InterpretedInstance<'static, Ctx> {
+        InterpretedInstance {
+            system_config: Cow::Owned(self.system_config.into_owned()),
+            pre_compute_buf: self.pre_compute_buf,
+            #[cfg(not(feature = "tco"))]
+            pre_compute_insns: self.pre_compute_insns,
+            #[cfg(feature = "tco")]
+            pre_compute_max_size: self.pre_compute_max_size,
+            #[cfg(feature = "tco")]
+            handlers: self.handlers,
+            pc_start: self.pc_start,
+            init_memory: self.init_memory,
+        }
     }
 
     /// # Safety
@@ -278,7 +302,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            system_config: inventory.config(),
+            system_config: Cow::Borrowed(inventory.config()),
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
@@ -300,8 +324,12 @@ impl InterpretedInstance<'_, ExecutionCtx> {
         &self,
         inputs: impl Into<Streams>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
-        let vm_state =
-            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
+        let vm_state = VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        );
         self.execute_from_state(vm_state)
     }
 
@@ -311,8 +339,12 @@ impl InterpretedInstance<'_, ExecutionCtx> {
         inputs: impl Into<Streams>,
         num_insns: u64,
     ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
-        let vm_state =
-            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
+        let vm_state = VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        );
         self.execute_from_state_for(vm_state, num_insns)
     }
 

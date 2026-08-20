@@ -1845,6 +1845,12 @@ where
     scheduled_driver: Option<ScheduledContinuationDriver<E, VB>>,
     /// High-water mark of proves dispatched together by the last scheduled run.
     max_concurrent_proves: usize,
+    /// `(instret_start, num_insns)` per segment of the last run, in segment order.
+    ///
+    /// Recorded by both drivers so a correctness test can check that scheduling
+    /// handed the prover the same boundaries. Copying a pair of integers per
+    /// segment costs nothing next to proving one.
+    segment_boundaries: Vec<(u64, u64)>,
 }
 
 impl<E, VB> VmInstance<E, VB>
@@ -1869,6 +1875,7 @@ where
             segment_scheduler: None,
             scheduled_driver: None,
             max_concurrent_proves: 0,
+            segment_boundaries: Vec::new(),
         })
     }
 
@@ -1880,6 +1887,11 @@ where
     /// scheduled run has happened.
     pub fn max_concurrent_proves(&self) -> usize {
         self.max_concurrent_proves
+    }
+
+    /// `(instret_start, num_insns)` per segment of the last run, in segment order.
+    pub fn segment_boundaries(&self) -> &[(u64, u64)] {
+        &self.segment_boundaries
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
@@ -1982,6 +1994,7 @@ where
         let metered_instance = vm.metered_instance(&self.exe)?;
         let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
         let prepared = VB::prepare_postflight(vm, &self.exe.program)?;
+        let boundaries = segment_boundaries(&segments);
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
@@ -2015,6 +2028,7 @@ where
             final_memory_top_tree,
         );
         self.state = Some(to_state);
+        self.segment_boundaries = boundaries;
         Ok(ContinuationVmProof {
             per_segment: proofs,
             user_public_values,
@@ -2055,6 +2069,7 @@ where
         let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
         let prepared = VB::prepare_postflight(vm, &self.exe.program)?;
 
+        let boundaries = segment_boundaries(&segments);
         let mut graph = segment_graph(segments.len(), scheduler).map_err(scheduling_error)?;
         let mut contexts: Vec<Option<ProvingContext<E::PB>>> = std::iter::repeat_with(|| None)
             .take(segments.len())
@@ -2121,6 +2136,7 @@ where
             }
         }
         self.max_concurrent_proves = max_concurrent_proves;
+        self.segment_boundaries = boundaries;
 
         let to_state = state.expect("the execute chain produced a final state");
         let per_segment = proofs
@@ -2141,6 +2157,13 @@ where
             user_public_values,
         })
     }
+}
+
+fn segment_boundaries(segments: &[Segment]) -> Vec<(u64, u64)> {
+    segments
+        .iter()
+        .map(|segment| (segment.instret_start, segment.num_insns))
+        .collect()
 }
 
 fn scheduling_error(error: impl std::fmt::Display) -> VirtualMachineError {
