@@ -1,6 +1,6 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
-    borrow::{Borrow, BorrowMut, Cow},
+    borrow::{Borrow, BorrowMut},
     iter::repeat_n,
     ptr::NonNull,
 };
@@ -42,7 +42,7 @@ use crate::{
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
 pub struct InterpretedInstance<'a, Ctx> {
-    system_config: Cow<'a, SystemConfig>,
+    system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
     #[allow(dead_code)]
@@ -77,8 +77,16 @@ unsafe impl<Ctx> Sync for PreComputeInstruction<Ctx> {}
 /// The pre-compute buffer stores executor-owned referents as opaque bytes, so the
 /// unconditional impls above say nothing about them: they describe the allocation
 /// container, not what it points at. These assert the property the buffer cannot,
-/// for the in-tree referents, so a change that makes one of them non-shareable
-/// fails here rather than in a future threaded caller.
+/// so a change that makes a referent non-shareable fails here rather than in a
+/// future threaded caller.
+///
+/// The in-tree payloads that carry a referent are, by enumeration:
+/// `PhantomPreCompute` (`*const dyn PhantomSubExecutor`), `DeferralCallPrecompute`
+/// (`&DeferralFn`), and `FieldExpressionPreCompute`, `EcAddNePreCompute` and
+/// `EcDoublePreCompute` (all `&FieldExpressionProgram`). The first two are asserted
+/// here; `FieldExpressionProgram` is asserted in `openvm-mod-circuit-builder`,
+/// which this crate does not depend on. Payloads whose pointers are encoded as
+/// integers, or that live outside this repository, are not covered by either.
 fn _pre_compute_referents_are_shareable() {
     fn assert_send_sync<T: ?Sized + Send + Sync>() {}
     assert_send_sync::<dyn PhantomSubExecutor>();
@@ -183,7 +191,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            system_config: Cow::Borrowed(inventory.config()),
+            system_config: inventory.config(),
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
@@ -203,48 +211,6 @@ where
             self.pc_start,
             inputs,
         )
-    }
-
-    /// Erases the borrow of the [`ExecutorInventory`] that created this instance.
-    ///
-    /// Crate-internal, and `unsafe`, because it cannot be made sound by
-    /// documentation: the returned type promises `'static` and the compiler stops
-    /// tracking the one thing that still matters.
-    ///
-    /// This is **not** the same conversion as
-    /// [`RvrMeteredInstance::into_owned`](crate::arch::rvr::RvrMeteredInstance::into_owned).
-    /// That type's lifetime guards only its `Cow<SystemConfig>`, and taking it by
-    /// value owns the sole borrowed field. Here the lifetime also guards
-    /// `pre_compute_buf`, per the NOTE on this struct.
-    ///
-    /// # Safety
-    ///
-    /// The returned instance borrows nothing, but it has not stopped *pointing*:
-    /// `pre_compute_buf` holds references and raw pointers into executors the
-    /// inventory owns — `*const dyn PhantomSubExecutor`, `&DeferralFn` and
-    /// `&FieldExpressionProgram` among them — and the instruction handlers
-    /// dereference them on every step.
-    ///
-    /// The caller must guarantee that the `ExecutorInventory` which populated the
-    /// buffer outlives the returned value. Dropping it first is undefined
-    /// behaviour; the value does not have to cross a thread for that to bite.
-    ///
-    /// Sending the returned value to another thread additionally requires every
-    /// embedded referent to be `Sync` and unmutated, which the type does not
-    /// express — see the assertions below for what is known of the in-tree ones.
-    pub(crate) unsafe fn into_owned(self) -> InterpretedInstance<'static, Ctx> {
-        InterpretedInstance {
-            system_config: Cow::Owned(self.system_config.into_owned()),
-            pre_compute_buf: self.pre_compute_buf,
-            #[cfg(not(feature = "tco"))]
-            pre_compute_insns: self.pre_compute_insns,
-            #[cfg(feature = "tco")]
-            pre_compute_max_size: self.pre_compute_max_size,
-            #[cfg(feature = "tco")]
-            handlers: self.handlers,
-            pc_start: self.pc_start,
-            init_memory: self.init_memory,
-        }
     }
 
     /// # Safety
@@ -337,7 +303,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            system_config: Cow::Borrowed(inventory.config()),
+            system_config: inventory.config(),
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,

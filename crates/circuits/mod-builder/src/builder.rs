@@ -264,6 +264,18 @@ pub struct FieldExpressionProgram {
     setup_values: Vec<BigUint>,
 }
 
+/// Interpreter pre-compute payloads store `&FieldExpressionProgram` — the algebra
+/// executor and both Weierstrass ones do — and the interpreter may be stepped while
+/// proving runs on other threads. Sharing that reference across threads is only
+/// sound while this stays `Sync`, and nothing in the pre-compute interface would
+/// catch it becoming otherwise: the referent is erased into an opaque byte buffer.
+/// `openvm-circuit` cannot assert this itself, because it does not depend on this
+/// crate.
+fn _field_expression_program_is_shareable() {
+    fn assert_send_sync<T: ?Sized + Send + Sync>() {}
+    assert_send_sync::<FieldExpressionProgram>();
+}
+
 impl FieldExpressionProgram {
     pub fn new(builder: ExprBuilder, needs_setup: bool) -> Self {
         Self::new_with_setup_values(builder, needs_setup, vec![])

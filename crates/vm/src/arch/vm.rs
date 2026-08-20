@@ -2199,22 +2199,34 @@ where
 /// `suspend_on_segment` changes only when execution returns to this loop, not
 /// where the boundaries fall.
 ///
-/// The instance is detached from the VM that created it, so holding it here does
-/// not borrow the VM the execute chain needs mutably.
+/// It retains the executor inventory rather than borrowing the VM, so the execute
+/// chain can still take the VM mutably while this is held.
 ///
-/// It is stepped only from the driver thread. `InterpretedInstance` keeps raw
-/// pointers into its own `pre_compute_buf` (see the NOTE at its definition), and
-/// whether detaching it is sound across threads has not been established; keep it
-/// on one thread until it has been.
+/// It is stepped only from the driver thread. Retaining the inventory establishes
+/// that the referents encoded in the pre-compute buffer stay alive and unmutated;
+/// it does **not** establish that they are `Sync`, which the executor traits do not
+/// require. Moving this to another thread needs that separately.
 #[cfg(not(feature = "rvr"))]
-struct SegmentProducer {
+struct SegmentProducer<X> {
+    /// Declared first so it is dropped before `_inventory`: the pre-compute buffer
+    /// points into executors that inventory owns.
     instance: InterpretedInstance<'static, MeteredCtx>,
     state: Option<VmExecState<GuestMemory, MeteredCtx>>,
     yielded: usize,
+    /// Keeps the executors the pre-compute buffer points into alive, at their
+    /// addresses, and unmutated, for exactly as long as `instance`.
+    ///
+    /// Holding a second `Arc` to the inventory is what makes those three
+    /// properties structural rather than a rule a caller has to follow: the
+    /// allocation cannot be freed while this is live, `Arc::get_mut` refuses to
+    /// hand out `&mut` while the count exceeds one, so the executor vector cannot
+    /// be pushed to, cleared, or moved from, and moving an `Arc` never moves what
+    /// it points at.
+    _inventory: Arc<ExecutorInventory<X>>,
 }
 
 #[cfg(not(feature = "rvr"))]
-impl SegmentProducer {
+impl<X: 'static> SegmentProducer<X> {
     fn new<E, VB>(
         vm: &VirtualMachine<E, VB>,
         exe: &VmExe<Val<E::SC>>,
@@ -2222,24 +2234,28 @@ impl SegmentProducer {
     ) -> Result<Self, VirtualMachineError>
     where
         E: StarkEngine,
-        VB: VmBuilder<E>,
+        VB: VmBuilder<E, VmConfig: VmExecutionConfig<Val<E::SC>, Executor = X>>,
         Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+        X: MeteredExecutor<Val<E::SC>>,
     {
         let ctx = vm.build_metered_ctx(exe).with_suspend_on_segment(true);
-        // SAFETY: `into_owned` erases the borrow of the `ExecutorInventory` whose
-        // executors the pre-compute buffer points into, so that inventory must
-        // outlive the instance. `VmExecutor` holds it in an `Arc` for as long as
-        // the `VirtualMachine` lives, and the producer built here is a local of
-        // `prove_continuations_scheduled`: it is consumed by `finish` before that
-        // function returns, and dropped by every early return, so it cannot
-        // outlive the `vm` borrow it was built from.
-        let instance = unsafe { vm.metered_instance(exe)?.into_owned() };
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let inventory = vm.executor().inventory.clone();
+        // SAFETY: the interpreter borrows the inventory because its pre-compute
+        // data points into the executors that inventory owns. That borrow is
+        // recreated from the `Arc` allocation, which the returned value keeps a
+        // count on, and `instance` is declared before `_inventory` so it is
+        // dropped first. Moving the `Arc` does not move its allocation. This is
+        // the same construction `PreflightInterpretedInstance` uses.
+        let inventory_ref = unsafe { &*Arc::as_ptr(&inventory) };
+        let instance =
+            InterpretedInstance::new_metered(inventory_ref, exe, &executor_idx_to_air_idx)?;
         let vm_state = instance.create_initial_vm_state(input);
         Ok(Self {
             instance,
             state: Some(VmExecState::new(vm_state, ctx)),
             yielded: 0,
+            _inventory: inventory,
         })
     }
 
