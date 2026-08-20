@@ -367,6 +367,9 @@ fn fill_output_section<F: VmField>(
     for pair in output_commit_rcs.chunks_exact(2) {
         filler.bitwise_lookup_chip.request_range(pair[0], pair[1]);
     }
+    let output_len_rc =
+        CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_lt_aux);
+    filler.bitwise_lookup_chip.request_range(output_len_rc, 0);
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]

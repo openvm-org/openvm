@@ -79,6 +79,10 @@ pub struct DeferralOutputCols<T> {
     // output_commit.
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 
+    // Auxiliary columns to ensure the canonicity of the output_len byte
+    // decomposition.
+    pub output_len_lt_aux: CanonicityAuxCols<T>,
+
     // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
@@ -215,6 +219,17 @@ where
                 .send_range(bytes[0], bytes[1])
                 .eval(builder, local.is_first);
         }
+        // Without this, byte encodings of `output_len + k * p` (e.g. `p + 8`) would alias
+        // `output_len` in the composed field element compared against `section_idx` below.
+        let output_len_rc = CanonicitySubAir.assert_canonicity(
+            builder,
+            &local.output_len,
+            &local.output_len_lt_aux,
+            local.is_first.into(),
+        );
+        self.bitwise_bus
+            .send_range(output_len_rc, AB::Expr::ZERO)
+            .eval(builder, local.is_first);
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
@@ -278,7 +293,9 @@ where
             }
         }
 
-        // We also constrain output_len to be under 2^address_bits.
+        // We also constrain output_len to be under 2^address_bits. At address_bits = 32 the
+        // shift is 1 and this is only a redundant byte check; the canonicity constraint above
+        // provides the injective bound on the composed value.
         self.bitwise_bus
             .send_range(
                 local.output_len[F_NUM_BYTES - 1] * limb_shift,

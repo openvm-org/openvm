@@ -142,6 +142,22 @@ where
     E: Executor<F> + Clone,
     T: TestBuilder<F>,
 {
+    let output_len = rng.random_range(0..=4) * DIGEST_SIZE;
+    set_and_execute_output_with_len(tester, executor, preflight, rng, num_deferrals, output_len)
+}
+
+fn set_and_execute_output_with_len<E, T>(
+    tester: &mut T,
+    executor: &mut E,
+    preflight: &mut TestPreflight,
+    rng: &mut StdRng,
+    num_deferrals: usize,
+    output_len: usize,
+) -> Instruction
+where
+    E: Executor<F> + Clone,
+    T: TestBuilder<F>,
+{
     let [rd, rs] = gen_distinct_register_pointers(rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
@@ -149,7 +165,6 @@ where
 
     let mut input_commit = [0u8; COMMIT_NUM_BYTES];
     rng.fill_bytes(&mut input_commit);
-    let output_len = rng.random_range(0..=4) * DIGEST_SIZE;
     let mut output_raw = vec![0u8; output_len];
     rng.fill_bytes(&mut output_raw);
     let result = make_result(deferral_idx, input_commit, output_raw);
@@ -359,6 +374,74 @@ fn rand_deferral_output_test() {
         .finalize()
         .simple_test()
         .expect("Verification failed");
+}
+
+#[test]
+fn deferral_output_non_canonical_len_negative_test() {
+    use std::borrow::BorrowMut;
+
+    use openvm_stark_backend::{
+        p3_matrix::{
+            dense::{DenseMatrix, RowMajorMatrix},
+            Matrix,
+        },
+        utils::disable_debug_builder,
+    };
+
+    use super::DeferralOutputCols;
+
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
+    let CpuHarnessBundle {
+        mut harness,
+        bitwise,
+        count,
+        poseidon2,
+    } = create_cpu_harness(&tester, NUM_DEFERRALS);
+
+    init_streams(&mut tester, NUM_DEFERRALS);
+    // One section of exactly DIGEST_SIZE bytes, so the composed output_len is 8.
+    set_and_execute_output_with_len(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        NUM_DEFERRALS,
+        DIGEST_SIZE,
+    );
+
+    // `[0x09, 0x00, 0x00, 0x78]` encodes `p + 8`, which composes to the same field element
+    // `8` as the genuine length: all constraints on the composed value still hold, and the
+    // output_len canonicity constraint must reject the aliased byte encoding.
+    let aliased_len = [0x09u32, 0x00, 0x00, 0x78].map(F::from_u32);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let width = trace.width();
+        let mut values = std::mem::take(&mut trace.values);
+        // Both rows of the section carry output_len (constrained equal within a section).
+        for row in 0..2 {
+            let cols: &mut DeferralOutputCols<F> =
+                values[row * width..(row + 1) * width].borrow_mut();
+            cols.output_len = aliased_len;
+        }
+        let cols: &mut DeferralOutputCols<F> = values[..width].borrow_mut();
+        // Best-effort canonicity witness: marker on the (big-endian) top byte, where the
+        // aliased byte 0x78 equals p's top byte so diff_val = 0 satisfies the polynomial
+        // constraints; the 8-bit range check on diff_val - 1 = -1 is what must fail.
+        cols.output_len_lt_aux.diff_marker = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+        cols.output_len_lt_aux.diff_val = F::ZERO;
+        *trace = RowMajorMatrix::new(values, width);
+    };
+
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(count)
+        .load_periphery(poseidon2)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
