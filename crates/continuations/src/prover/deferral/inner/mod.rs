@@ -20,7 +20,7 @@ use crate::{
         deferral::inner::{DeferralInnerCircuit, DeferralInnerTraceGen},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_all_required, trace_heights_tracing_info},
     SC,
 };
 
@@ -111,7 +111,7 @@ where
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(DeferralInnerCircuit::new(Arc::new(verifier_circuit)));
-        let (pk, vk) = engine.keygen(&circuit.airs());
+        let (pk, vk) = keygen_all_required(&engine, &circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))

@@ -22,7 +22,7 @@ use crate::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_all_required, trace_heights_tracing_info},
     CommitBytes, RootSC, VkCommitBytes, SC,
 };
 
@@ -121,7 +121,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
             memory_dimensions,
             num_user_pvs,
         ));
-        let (pk, vk) = engine.keygen(&circuit.airs());
+        let (pk, vk) = keygen_all_required(&engine, &circuit.airs());
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),

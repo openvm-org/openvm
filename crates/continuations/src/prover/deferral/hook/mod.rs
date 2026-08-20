@@ -20,7 +20,7 @@ use crate::{
         deferral::hook::{DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_all_required, trace_heights_tracing_info},
     CommitBytes, VkCommitBytes, SC,
 };
 
@@ -104,7 +104,7 @@ where
             Arc::new(verifier_circuit),
             internal_recursive_vk_commit,
         ));
-        let (pk, vk) = engine.keygen(&circuit.airs());
+        let (pk, vk) = keygen_all_required(&engine, &circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
 
         Self {
