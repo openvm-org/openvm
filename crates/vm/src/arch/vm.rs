@@ -89,7 +89,9 @@ use super::{
     hint_stream::HintStream,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
-    segment_scheduler::{drive_scheduled, SegmentDriver, SegmentSchedulerConfig, SegmentSource},
+    segment_scheduler::{
+        drive_scheduled, ProvedBatch, SegmentDriver, SegmentSchedulerConfig, SegmentSource,
+    },
     AirInventoryError, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
     ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
@@ -1829,12 +1831,6 @@ impl<SC: StarkProtocolConfig> Clone for ProvingKeyResidency<SC> {
     }
 }
 
-impl<SC: StarkProtocolConfig> Default for ProvingKeyResidency<SC> {
-    fn default() -> Self {
-        Self::Shared
-    }
-}
-
 /// What one dispatched batch of proves did.
 ///
 /// The two halves answer different questions and must not be conflated. `queues`
@@ -2262,7 +2258,7 @@ where
         &self,
         batch: Vec<(usize, Self::Ctx)>,
         while_proving: &mut dyn FnMut() -> Result<Vec<Segment>, VirtualMachineError>,
-    ) -> Result<(Vec<(usize, Self::Proof)>, Vec<Segment>), VirtualMachineError> {
+    ) -> Result<ProvedBatch<Self::Proof>, VirtualMachineError> {
         prove_segments_concurrently(&*self.vm, batch, while_proving)
     }
 }

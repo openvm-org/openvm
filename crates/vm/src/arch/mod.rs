@@ -53,8 +53,8 @@ pub use rvr::{
     PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
 };
 pub use segment_scheduler::{
-    drive_scheduled, Budget, ResourceProfile, ScheduledRun, SegmentDriver, SegmentNode,
-    SegmentSchedulerConfig, SegmentSource, DEFAULT_PROVE_LOOKAHEAD, EXECUTE_GPU_BYTES,
+    drive_scheduled, Budget, ProvedBatch, ResourceProfile, ScheduledRun, SegmentDriver,
+    SegmentNode, SegmentSchedulerConfig, SegmentSource, DEFAULT_PROVE_LOOKAHEAD, EXECUTE_GPU_BYTES,
     PROVE_MARGINAL_GPU_BYTES, SHARED_GPU_BASE_BYTES,
 };
 pub use state::*;

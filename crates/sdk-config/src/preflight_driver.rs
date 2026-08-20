@@ -29,9 +29,9 @@ use openvm_circuit::{
     arch::{
         cuda::postflight::GpuPostflightProgram, drive_scheduled, execution_mode::Segment,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationProverFn, ContinuationVmProof,
-        ExitCode, GenerationError, MeteredSegmentProducer, ProveBatchRecord, ProvingKeyResidency,
-        ScheduledRunRecord, SegmentDriver, SegmentSchedulerConfig, Streams, VirtualMachineError,
-        VmInstance, VmState,
+        ExitCode, GenerationError, MeteredSegmentProducer, ProveBatchRecord, ProvedBatch,
+        ProvingKeyResidency, ScheduledRunRecord, SegmentDriver, SegmentSchedulerConfig, Streams,
+        VirtualMachineError, VmInstance, VmState,
     },
     system::memory::{merkle::public_values::UserPublicValuesProof, online::GuestMemory},
 };
@@ -554,7 +554,7 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
         &self,
         batch: Vec<(usize, Self::Ctx)>,
         while_proving: &mut dyn FnMut() -> Result<Vec<Segment>, VirtualMachineError>,
-    ) -> Result<(Vec<(usize, Self::Proof)>, Vec<Segment>), VirtualMachineError> {
+    ) -> Result<ProvedBatch<Self::Proof>, VirtualMachineError> {
         assert!(
             batch.len() <= self.pool.len(),
             "admission let in {} proves but only {} streams exist to run them on",

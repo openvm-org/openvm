@@ -168,8 +168,12 @@ pub trait SegmentDriver {
         &self,
         batch: Vec<(usize, Self::Ctx)>,
         while_proving: &mut dyn FnMut() -> Result<Vec<Segment>, VirtualMachineError>,
-    ) -> Result<(Vec<(usize, Self::Proof)>, Vec<Segment>), VirtualMachineError>;
+    ) -> Result<ProvedBatch<Self::Proof>, VirtualMachineError>;
 }
+
+/// What one call to [`SegmentDriver::prove_batch`] returns: the batch's proofs
+/// paired with their segment indices, and whatever the producer yielded meanwhile.
+pub type ProvedBatch<P> = (Vec<(usize, P)>, Vec<Segment>);
 
 /// Yields the metered segmentation, ideally as it is discovered rather than only
 /// once the whole program has been segmented.
