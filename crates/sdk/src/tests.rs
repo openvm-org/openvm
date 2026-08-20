@@ -1090,3 +1090,111 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
 
     Ok(())
 }
+
+/// Segmentation ceiling low enough that a modest input still splits into several
+/// segments, so the scheduler graph has a real execute chain without paying for a
+/// large proof.
+#[cfg(feature = "cuda")]
+const SCHEDULED_SEGMENTATION_MAX_MEMORY: usize = 256 << 20;
+/// Four segments, not two. The driver seeds one segment before admitting anything
+/// and fills its lookahead while proves are in flight, so a two-segment program
+/// dispatches `[P0]` and then `[P1]` alone and never holds two proves at once.
+#[cfg(feature = "cuda")]
+const SCHEDULED_MIN_SEGMENTS: usize = 4;
+/// A 32 GB card as `nvidia-smi` reports it: driver and CUDA context already
+/// counted, so this is the whole device rather than a workload-only remainder.
+#[cfg(feature = "cuda")]
+const SCHEDULED_DEVICE_GPU_BYTES: u64 = 32_768 << 20;
+
+/// Two proves admitted together must run on different CUDA streams.
+///
+/// Seating two proves is not the same as running them concurrently. Every prove
+/// built from one engine receives a clone of that engine's device, sharing a
+/// single `Arc<CudaStream>`, and their kernel work then runs in issue order rather
+/// than together. That shape stays functionally correct — disjoint buffers, total
+/// stream order — so the proof it produces is indistinguishable from a concurrent
+/// one and every proof-level check passes straight through it, while delivering
+/// the throughput of a single prover. The stream each prove was enqueued on is
+/// therefore the only thing that separates real concurrency from seating, which is
+/// why this asserts on stream identity and not on overlap in time.
+#[cfg(feature = "cuda")]
+#[test]
+fn scheduled_gpu_proves_are_admitted_onto_distinct_streams() -> Result<()> {
+    use std::collections::HashSet;
+
+    use openvm_circuit::arch::SegmentSchedulerConfig;
+    use openvm_sdk_config::SdkVmGpuBuilder;
+
+    use crate::prover::{vm::new_local_prover, AppProver};
+
+    setup_tracing();
+    let (app_params, agg_params, _) = get_params();
+    let mut app_config = AppConfig::riscv64(app_params);
+    app_config
+        .app_vm_config
+        .as_mut()
+        .set_segmentation_max_memory(SCHEDULED_SEGMENTATION_MAX_MEMORY);
+    let sdk = Sdk::builder()
+        .app_config(app_config)
+        .agg_params(agg_params)
+        .build()?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let app_vm_pk = &sdk.app_pk().app_vm_pk;
+    let app_vk = app_vm_pk.vm_pk.get_vk();
+
+    let mut instance = new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe)?;
+    instance.set_segment_scheduler(Some(SegmentSchedulerConfig::for_device(
+        SCHEDULED_DEVICE_GPU_BYTES,
+    )));
+    let mut prover = AppProver::new_from_instance(instance, app_vk.clone());
+
+    let mut stdin = StdIn::default();
+    stdin.write(&(1u64 << 17));
+    let proof = prover.prove(stdin)?;
+
+    let record = prover.instance().scheduled_run();
+    // Emitted so the artifact carries the stream handles themselves, not just the
+    // fact that an assertion about them held.
+    tracing::info!(
+        segments = proof.per_segment.len(),
+        max_concurrent_proves = record.max_concurrent_proves,
+        prove_batch_queues = ?record.prove_batch_queues,
+        "scheduled GPU run"
+    );
+    assert!(
+        proof.per_segment.len() >= SCHEDULED_MIN_SEGMENTS,
+        "the workload must span several segments for this to mean anything, got {}",
+        proof.per_segment.len()
+    );
+    assert!(
+        record.max_concurrent_proves >= 2,
+        "two proves must have been dispatched together, high-water mark was {}",
+        record.max_concurrent_proves
+    );
+
+    let concurrent: Vec<_> = record
+        .prove_batch_queues
+        .iter()
+        .filter(|batch| batch.len() >= 2)
+        .collect();
+    assert!(
+        !concurrent.is_empty(),
+        "no batch held two proves, so a distinct-stream assertion would be vacuous"
+    );
+    for batch in concurrent {
+        let streams: HashSet<u64> = batch.iter().map(|(_, stream)| *stream).collect();
+        assert_eq!(
+            streams.len(),
+            batch.len(),
+            "proves dispatched together shared a CUDA stream and so serialized: {batch:?}"
+        );
+    }
+
+    verify_segments(&prover.vm().engine, &app_vk, &proof.per_segment)?;
+    Ok(())
+}
