@@ -5460,6 +5460,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-continuations",
  "openvm-cuda-backend",
+ "openvm-cuda-common",
  "openvm-deferral-circuit",
  "openvm-recursion-circuit",
  "openvm-sdk-config",

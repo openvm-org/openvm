@@ -1112,6 +1112,481 @@ const SCHEDULED_MIN_SEGMENTS: usize = 6;
 #[cfg(feature = "cuda")]
 const SCHEDULED_DEVICE_GPU_BYTES: u64 = 32_768 << 20;
 
+/// The order-insensitive envelope one segment's proof attests to.
+///
+/// Every field is read from the *returned proof*, never from driver internals or
+/// device memory. That is what makes this instrument safe by construction rather
+/// than by a flag someone could flip: comparing `ProvingContext` would force D2H
+/// copies and a stream fence, so this never looks at one. There is no code path by
+/// which this can execute inside a measured arm — it is a `#[test]` that consumes
+/// proofs a campaign has already finished producing.
+///
+/// Commitments are deliberately absent. `common_main_commit` is one aggregate over
+/// all traces, including the periphery Poseidon2 trace whose row order is
+/// insertion-history dependent, so comparing it across arms either flakes — naming
+/// a scheduler defect that did not happen — or passes and thereby implies the
+/// ordering problem does not exist.
+#[cfg(feature = "cuda")]
+#[derive(Debug, PartialEq, Eq)]
+struct SegmentEnvelope {
+    initial_pc: u32,
+    final_pc: u32,
+    exit_code: u32,
+    is_terminate: bool,
+    initial_memory_root: [u32; 8],
+    final_memory_root: [u32; 8],
+    /// Per-AIR log trace heights: shape and resource demand, order-insensitive.
+    log_heights: Vec<Option<usize>>,
+}
+
+#[cfg(feature = "cuda")]
+fn segment_envelopes(
+    proofs: &[openvm_stark_backend::proof::Proof<crate::SC>],
+) -> Vec<SegmentEnvelope> {
+    use std::borrow::Borrow;
+
+    use openvm_circuit::{
+        arch::{CONNECTOR_AIR_ID, MERKLE_AIR_ID},
+        system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs},
+    };
+    use openvm_stark_backend::p3_field::PrimeField32;
+
+    proofs
+        .iter()
+        .map(|proof| {
+            let connector: &VmConnectorPvs<F> =
+                proof.public_values[CONNECTOR_AIR_ID].as_slice().borrow();
+            let merkle: &MemoryMerklePvs<F, 8> =
+                proof.public_values[MERKLE_AIR_ID].as_slice().borrow();
+            let digest = |d: &[F; 8]| {
+                let mut out = [0u32; 8];
+                for (slot, value) in out.iter_mut().zip(d.iter()) {
+                    *slot = value.as_canonical_u32();
+                }
+                out
+            };
+            SegmentEnvelope {
+                initial_pc: connector.initial_pc.as_canonical_u32(),
+                final_pc: connector.final_pc.as_canonical_u32(),
+                exit_code: connector.exit_code.as_canonical_u32(),
+                is_terminate: connector.is_terminate.as_canonical_u32() != 0,
+                initial_memory_root: digest(&merkle.initial_root),
+                final_memory_root: digest(&merkle.final_root),
+                log_heights: proof
+                    .trace_vdata
+                    .iter()
+                    .map(|air| air.as_ref().map(|vdata| vdata.log_height))
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+/// Builds the scheduled-GPU fixture: enough segments that two proves are admitted
+/// together and segment production still has work left while they run.
+#[cfg(feature = "cuda")]
+fn scheduled_gpu_fixture() -> Result<(
+    Arc<crate::keygen::AppProvingKey<SdkVmConfig>>,
+    Arc<VmExe<F>>,
+    StdIn,
+)> {
+    let (app_params, agg_params, _) = get_params();
+    let mut app_config = AppConfig::riscv64(app_params);
+    app_config
+        .app_vm_config
+        .as_mut()
+        .set_segmentation_max_memory(SCHEDULED_SEGMENTATION_MAX_MEMORY);
+    let sdk = Sdk::builder()
+        .app_config(app_config)
+        .agg_params(agg_params)
+        .build()?;
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut stdin = StdIn::default();
+    stdin.write(&(1u64 << 17));
+    Ok((sdk.app_pk().clone().into(), exe, stdin))
+}
+
+/// I3-A — driver boundary fidelity on GPU. Correctness-only; never measured.
+///
+/// The scheduled driver must hand each segment the same slice of execution the
+/// serial driver does. Boundaries pin which slice; the connector and merkle public
+/// values pin where execution started and ended and what memory it started and
+/// ended on; trace heights pin the shape. All order-insensitive, all read from
+/// returned proofs.
+///
+/// Claim scope: boundary fidelity only. This does NOT prove byte-output identity —
+/// GPU grinding keeps the first `atomicCAS` winner, so identical inputs cannot
+/// imply identical bytes — and it does NOT cover post-checkpoint interference,
+/// which is I3-C.
+#[cfg(feature = "cuda")]
+#[test]
+fn scheduled_gpu_presents_the_serial_input_envelope() -> Result<()> {
+    use openvm_circuit::arch::SegmentSchedulerConfig;
+    use openvm_sdk_config::SdkVmGpuBuilder;
+
+    use crate::prover::{vm::new_local_prover, AppProver};
+
+    setup_tracing();
+    let (app_pk, exe, stdin) = scheduled_gpu_fixture()?;
+    let app_vm_pk = &app_pk.app_vm_pk;
+    let app_vk = app_vm_pk.vm_pk.get_vk();
+
+    // Separate instances per arm. Proving twice on one instance does not reproduce
+    // that instance's own first proof, so sharing one would compare carry-over
+    // state rather than the two drivers.
+    let serial_instance =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe.clone())?;
+    assert!(
+        serial_instance.segment_scheduler().is_none(),
+        "the serial driver must be the default"
+    );
+    let mut serial_prover = AppProver::new_from_instance(serial_instance, app_vk.clone());
+    let serial = serial_prover.prove(stdin.clone())?;
+    let serial_boundaries = serial_prover.instance().segment_boundaries().to_vec();
+    let serial_envelopes = segment_envelopes(&serial.per_segment);
+    drop(serial_prover);
+
+    let mut scheduled_instance =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe)?;
+    scheduled_instance.set_segment_scheduler(Some(SegmentSchedulerConfig::for_device(
+        SCHEDULED_DEVICE_GPU_BYTES,
+    )));
+    let mut scheduled_prover = AppProver::new_from_instance(scheduled_instance, app_vk);
+    let scheduled = scheduled_prover.prove(stdin)?;
+    let scheduled_boundaries = scheduled_prover.instance().segment_boundaries().to_vec();
+    let scheduled_envelopes = segment_envelopes(&scheduled.per_segment);
+    let max_concurrent = scheduled_prover.instance().max_concurrent_proves();
+
+    tracing::info!(
+        segments = serial.per_segment.len(),
+        max_concurrent_proves = max_concurrent,
+        ?serial_boundaries,
+        ?scheduled_boundaries,
+        "I3-A envelope comparison"
+    );
+
+    // Without two resident proves this compares the scheduled driver to itself in
+    // serial clothing, and would pass however broken concurrency was.
+    assert!(
+        serial.per_segment.len() >= SCHEDULED_MIN_SEGMENTS,
+        "need several segments for this to mean anything, got {}",
+        serial.per_segment.len()
+    );
+    assert!(
+        max_concurrent >= 2,
+        "two proves must have run together or this comparison is vacuous; saw {max_concurrent}"
+    );
+
+    assert_eq!(
+        serial_boundaries, scheduled_boundaries,
+        "segment boundaries must not depend on the driver"
+    );
+    assert_eq!(
+        serial_envelopes.len(),
+        scheduled_envelopes.len(),
+        "segment count must not depend on the driver"
+    );
+    for (idx, (want, got)) in serial_envelopes
+        .iter()
+        .zip(scheduled_envelopes.iter())
+        .enumerate()
+    {
+        assert_eq!(want, got, "segment {idx} envelope differs between drivers");
+    }
+
+    // Negative control: the comparison must be capable of failing. A perturbed
+    // input has to move the envelope, or `assert_eq` above proves nothing.
+    let mut other_stdin = StdIn::default();
+    other_stdin.write(&(1u64 << 16));
+    let other_instance = new_local_prover::<E, SdkVmGpuBuilder>(
+        SdkVmGpuBuilder,
+        app_vm_pk,
+        scheduled_prover.instance().exe().clone(),
+    )?;
+    let mut other_prover = AppProver::new_from_instance(other_instance, app_vm_pk.vm_pk.get_vk());
+    let other = other_prover.prove(other_stdin)?;
+    let other_envelopes = segment_envelopes(&other.per_segment);
+    assert_ne!(
+        serial_envelopes, other_envelopes,
+        "NEGATIVE CONTROL FAILED: a different input produced an identical envelope, so \
+         the envelope does not actually discriminate and every assertion above is vacuous"
+    );
+    tracing::info!("I3-A negative control: a different input moved the envelope");
+    Ok(())
+}
+
+/// I3-B — semantic output equivalence on GPU.
+///
+/// Both arms verify, and each arm's user-public-values Merkle proof is checked
+/// against *that arm's own* verified final memory root — not byte-compared, and
+/// not checked against the other arm's root, which a scheduled run could otherwise
+/// pass by borrowing.
+///
+/// Known limit, stated rather than papered over: `VmConnectorPvs` exposes only
+/// initial/final PC, exit code and termination. `num_insns` and timestamps are
+/// absent, so a different valid private execution with identical public endpoints
+/// would pass this check. I3-A's boundary envelope is what closes that gap; I3-B
+/// alone does not.
+#[cfg(feature = "cuda")]
+#[test]
+fn scheduled_gpu_means_the_same_as_serial() -> Result<()> {
+    use openvm_circuit::arch::{hasher::poseidon2::vm_poseidon2_hasher, SegmentSchedulerConfig};
+    use openvm_sdk_config::SdkVmGpuBuilder;
+
+    use crate::prover::{vm::new_local_prover, AppProver};
+
+    setup_tracing();
+    let (app_pk, exe, stdin) = scheduled_gpu_fixture()?;
+    let app_vm_pk = &app_pk.app_vm_pk;
+    let app_vk = app_vm_pk.vm_pk.get_vk();
+    let memory_dimensions = app_vm_pk
+        .vm_config
+        .as_ref()
+        .memory_config
+        .memory_dimensions();
+    let hasher = vm_poseidon2_hasher();
+
+    let serial_instance =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe.clone())?;
+    let mut serial_prover = AppProver::new_from_instance(serial_instance, app_vk.clone());
+    let serial = serial_prover.prove(stdin.clone())?;
+    let serial_payload = verify_segments(
+        &serial_prover.instance().vm.engine,
+        &app_vk,
+        &serial.per_segment,
+    )
+    .map_err(|error| eyre::eyre!("serial segment proofs must verify: {error}"))?;
+    drop(serial_prover);
+
+    let mut scheduled_instance =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe)?;
+    scheduled_instance.set_segment_scheduler(Some(SegmentSchedulerConfig::for_device(
+        SCHEDULED_DEVICE_GPU_BYTES,
+    )));
+    let mut scheduled_prover = AppProver::new_from_instance(scheduled_instance, app_vk.clone());
+    let scheduled = scheduled_prover.prove(stdin)?;
+    let scheduled_payload = verify_segments(
+        &scheduled_prover.instance().vm.engine,
+        &app_vk,
+        &scheduled.per_segment,
+    )
+    .map_err(|error| eyre::eyre!("scheduled segment proofs must verify: {error}"))?;
+    let max_concurrent = scheduled_prover.instance().max_concurrent_proves();
+    assert!(
+        max_concurrent >= 2,
+        "two proves must have run together or this compares serial to serial; saw {max_concurrent}"
+    );
+
+    assert_eq!(
+        serial_payload.exe_commit, scheduled_payload.exe_commit,
+        "executable commitment must not depend on the driver"
+    );
+    assert_eq!(
+        serial_payload.final_memory_root, scheduled_payload.final_memory_root,
+        "final memory root must not depend on the driver"
+    );
+    assert_eq!(
+        serial.user_public_values.public_values, scheduled.user_public_values.public_values,
+        "user public values must not depend on the driver"
+    );
+
+    // Each arm against its own root.
+    serial
+        .user_public_values
+        .verify(&hasher, memory_dimensions, serial_payload.final_memory_root)
+        .map_err(|error| eyre::eyre!("serial public values must verify: {error}"))?;
+    scheduled
+        .user_public_values
+        .verify(
+            &hasher,
+            memory_dimensions,
+            scheduled_payload.final_memory_root,
+        )
+        .map_err(|error| eyre::eyre!("scheduled public values must verify: {error}"))?;
+
+    // Negative control: the public-values check must be capable of rejecting. A
+    // corrupted root has to fail, or "it verified" carries no information.
+    let mut wrong_root = scheduled_payload.final_memory_root;
+    wrong_root[0] += <F as openvm_stark_backend::p3_field::PrimeCharacteristicRing>::ONE;
+    assert!(
+        scheduled
+            .user_public_values
+            .verify(&hasher, memory_dimensions, wrong_root)
+            .is_err(),
+        "NEGATIVE CONTROL FAILED: the public-values proof verified against a corrupted \
+         memory root, so verifying against the correct one proves nothing"
+    );
+    tracing::info!("I3-B negative control: a corrupted memory root was rejected");
+    Ok(())
+}
+
+/// I3-C — post-checkpoint interference on GPU.
+///
+/// I3-A and I3-B compare *drivers*. This compares *concurrency inside the
+/// scheduled driver*, which is the only thing that observes the channels neither
+/// of those touches: scheduled proves run on separate host threads that share a
+/// cloned `GpuDevice` and the process-global `MEMORY_MANAGER`. Both arms here are
+/// the scheduled driver, in one process, differing only in whether the budget
+/// admits one prove or two — so a difference implicates concurrency and nothing
+/// else.
+///
+/// Byte-identity is deliberately not asserted: GPU grinding keeps the first
+/// `atomicCAS` winner, so identical inputs cannot imply identical output bytes on
+/// this backend. What is asserted is that the concurrent run's segment envelope
+/// and verified semantics are those of the width-1 run.
+#[cfg(feature = "cuda")]
+#[test]
+fn concurrency_does_not_perturb_the_scheduled_gpu_replay() -> Result<()> {
+    use openvm_circuit::arch::{Budget, SegmentSchedulerConfig, PROVE_MARGINAL_GPU_BYTES};
+    use openvm_sdk_config::SdkVmGpuBuilder;
+
+    use crate::prover::{vm::new_local_prover, AppProver};
+
+    setup_tracing();
+    let (app_pk, exe, stdin) = scheduled_gpu_fixture()?;
+    let app_vm_pk = &app_pk.app_vm_pk;
+    let app_vk = app_vm_pk.vm_pk.get_vk();
+
+    // Width pinned by construction, so the two arms differ in concurrency alone and
+    // not in however much memory the card happens to have.
+    let width =
+        |n: u64| SegmentSchedulerConfig::new(Budget::new(PROVE_MARGINAL_GPU_BYTES * n, 0, 0));
+
+    let mut one_at_a_time =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe.clone())?;
+    one_at_a_time.set_segment_scheduler(Some(width(1)));
+    let mut serial_prover = AppProver::new_from_instance(one_at_a_time, app_vk.clone());
+    let sequential = serial_prover.prove(stdin.clone())?;
+    let sequential_envelopes = segment_envelopes(&sequential.per_segment);
+    let sequential_concurrent = serial_prover.instance().max_concurrent_proves();
+    let sequential_boundaries = serial_prover.instance().segment_boundaries().to_vec();
+    drop(serial_prover);
+
+    let mut two_at_a_time =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe)?;
+    two_at_a_time.set_segment_scheduler(Some(width(2)));
+    let mut concurrent_prover = AppProver::new_from_instance(two_at_a_time, app_vk.clone());
+    let concurrent = concurrent_prover.prove(stdin)?;
+    let concurrent_envelopes = segment_envelopes(&concurrent.per_segment);
+    let concurrent_concurrent = concurrent_prover.instance().max_concurrent_proves();
+    let concurrent_boundaries = concurrent_prover.instance().segment_boundaries().to_vec();
+
+    tracing::info!(
+        width_one_max_concurrent = sequential_concurrent,
+        width_two_max_concurrent = concurrent_concurrent,
+        "I3-C replay: same driver, concurrency is the only difference"
+    );
+
+    // The two arms must actually differ in concurrency, or this is one arm twice.
+    assert_eq!(
+        sequential_concurrent, 1,
+        "the width-1 arm must never have held two proves at once"
+    );
+    assert!(
+        concurrent_concurrent >= 2,
+        "NEGATIVE CONTROL FAILED: the width-2 arm never held two proves at once, so this \
+         compares a sequential run to a sequential run and observes no interference \
+         channel at all; saw {concurrent_concurrent}"
+    );
+
+    verify_segments(
+        &concurrent_prover.instance().vm.engine,
+        &app_vk,
+        &concurrent.per_segment,
+    )
+    .map_err(|error| eyre::eyre!("concurrent segment proofs must verify: {error}"))?;
+
+    assert_eq!(
+        sequential_boundaries, concurrent_boundaries,
+        "segment boundaries must not depend on how many proves are resident"
+    );
+    assert_eq!(
+        sequential_envelopes, concurrent_envelopes,
+        "the concurrent replay diverged from the one-at-a-time replay, which means \
+         proves interfered through the shared device or the global memory manager"
+    );
+    Ok(())
+}
+
+/// The `PerProve` proving-key residency arm, actually run.
+///
+/// It is compiled but every end-to-end run so far used `Shared`, so its N+1
+/// residency was reasoned and not measured. M4-2 has to report the device-memory
+/// marginal each way, and whether two residents fit under a 32 GiB budget depends
+/// on which arm is used, so this measures it rather than deriving it.
+#[cfg(feature = "cuda")]
+#[test]
+fn per_prove_pk_residency_costs_a_key_per_prove() -> Result<()> {
+    use openvm_circuit::arch::{
+        Budget, ProvingKeyResidency, SegmentSchedulerConfig, PROVE_MARGINAL_GPU_BYTES,
+    };
+    use openvm_cuda_common::memory_manager::device_memory_used;
+    use openvm_sdk_config::SdkVmGpuBuilder;
+
+    use crate::prover::{vm::new_local_prover, AppProver};
+
+    setup_tracing();
+    let (app_pk, exe, stdin) = scheduled_gpu_fixture()?;
+    let app_vm_pk = &app_pk.app_vm_pk;
+    let app_vk = app_vm_pk.vm_pk.get_vk();
+    let config = SegmentSchedulerConfig::new(Budget::new(PROVE_MARGINAL_GPU_BYTES * 2, 0, 0));
+
+    let run = |residency: ProvingKeyResidency<crate::SC>| -> Result<(usize, usize, usize)> {
+        let mut instance =
+            new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe.clone())?;
+        instance.set_segment_scheduler(Some(config));
+        instance.set_prove_pk_residency(residency);
+        let before = device_memory_used();
+        let mut prover = AppProver::new_from_instance(instance, app_vk.clone());
+        let proof = prover.prove(stdin.clone())?;
+        let after = device_memory_used();
+        let concurrent = prover.instance().max_concurrent_proves();
+        assert!(
+            concurrent >= 2,
+            "the pool must have held two proves for a per-prove key to cost anything; saw \
+             {concurrent}"
+        );
+        verify_segments(&prover.instance().vm.engine, &app_vk, &proof.per_segment)
+            .map_err(|error| eyre::eyre!("segment proofs must verify: {error}"))?;
+        Ok((before, after, concurrent))
+    };
+
+    let (shared_before, shared_after, shared_concurrent) = run(ProvingKeyResidency::Shared)?;
+    let (per_before, per_after, per_concurrent) =
+        run(ProvingKeyResidency::PerProve(app_vm_pk.vm_pk.clone()))?;
+
+    let mib = |bytes: usize| bytes as f64 / (1024.0 * 1024.0);
+    let shared_resident = shared_after.saturating_sub(shared_before);
+    let per_resident = per_after.saturating_sub(per_before);
+    tracing::info!(
+        shared_before_mib = mib(shared_before),
+        shared_after_mib = mib(shared_after),
+        shared_resident_mib = mib(shared_resident),
+        shared_max_concurrent = shared_concurrent,
+        per_prove_before_mib = mib(per_before),
+        per_prove_after_mib = mib(per_after),
+        per_prove_resident_mib = mib(per_resident),
+        per_prove_max_concurrent = per_concurrent,
+        "PerProve vs Shared device-memory marginal (nvidia-smi semantics: cudaMemGetInfo)"
+    );
+
+    // Both arms must produce a verifying proof — measured above — and the PerProve
+    // arm must actually cost more, or it is not doing what its name says.
+    assert!(
+        per_resident > shared_resident,
+        "NEGATIVE CONTROL FAILED: PerProve residency cost no more device memory than \
+         Shared ({} MiB vs {} MiB), so either the per-slot keys were never transported \
+         or this measurement cannot see them",
+        mib(per_resident),
+        mib(shared_resident)
+    );
+    Ok(())
+}
+
 /// Two proves admitted together must run on different CUDA streams.
 ///
 /// Seating two proves is not the same as running them concurrently. Every prove

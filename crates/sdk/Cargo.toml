@@ -13,6 +13,11 @@ autoexamples = false
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cuda-backend = { workspace = true, optional = true }
+# Named only so the CUDA correctness tests can read real device memory via
+# `memory_manager::device_memory_used` (cudaMemGetInfo, i.e. nvidia-smi
+# semantics). Already in the graph transitively through openvm-cuda-backend, so
+# this adds no build cost — cuda-backend simply does not re-export it.
+openvm-cuda-common = { workspace = true, optional = true }
 
 openvm-build = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -102,6 +107,7 @@ jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 
 cuda = [
     "dep:openvm-cuda-backend",
+    "dep:openvm-cuda-common",
     "openvm-circuit/cuda",
     "openvm-sdk-config/cuda",
     "openvm-continuations/cuda",
