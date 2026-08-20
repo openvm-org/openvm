@@ -20,7 +20,7 @@ use crate::{
         inner::{InnerCircuit, InnerTraceGen, ProofsType, VerifierCircuitType},
         Circuit,
     },
-    prover::trace_heights_tracing_info,
+    prover::{keygen_all_required, trace_heights_tracing_info},
     SC,
 };
 
@@ -131,7 +131,7 @@ where
             def_hook_cached_commit.map(|d| d.into()),
             verifier_type,
         ));
-        let (pk, vk) = engine.keygen(&circuit.airs());
+        let (pk, vk) = keygen_all_required(&engine, &circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if verifier_type == VerifierCircuitType::InternalRecursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
