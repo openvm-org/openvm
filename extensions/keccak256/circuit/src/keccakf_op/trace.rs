@@ -19,8 +19,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, compute_pointer_carry, ptr_to_field_u16_limbs,
-    try_bytes_to_u32, u16_block_to_bytes,
+    add_block_index_range_checks, byte_ptr_to_u16_ptr_value, bytes_to_u16_block,
+    ptr_to_field_u16_limbs, try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
@@ -106,13 +106,8 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
             timestamp += 1;
         }
 
-        // Byte -> cell pointer conversion carry, plus the matching `cell_hi` range-check count,
-        // mirroring the AIR's per-valid-row multiplicity.
-        local.buffer_cell_carry = F::from_u32(compute_pointer_carry(
-            range_checker,
-            replay.buffer_ptr,
-            self.pointer_max_bits,
-        ));
+        // Block-index range-check counts, mirroring the AIR's per-valid-row multiplicity.
+        add_block_index_range_checks(range_checker, replay.buffer_ptr, self.pointer_max_bits);
     }
 }
 

@@ -48,10 +48,6 @@ pub struct XorinMemoryCols<T> {
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     // Only store write timestamp auxiliaries; previous data comes from preimage_buffer_bytes.
     pub buffer_bytes_write_base_aux: [MemoryBaseAuxCols<T>; KECCAK_RATE_MEM_OPS],
-    /// Carry for converting the base `buffer`/`input` *byte* pointers to AS-native u16 *cell*
-    /// pointer limbs.
-    pub buffer_cell_carry: T,
-    pub input_cell_carry: T,
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

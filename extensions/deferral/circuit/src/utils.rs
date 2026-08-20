@@ -2,11 +2,8 @@ use std::array::from_fn;
 
 use itertools::Itertools;
 use openvm_circuit::arch::{PostflightError, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES};
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::riscv::BYTE_BITS;
-use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, compute_pointer_carry, u16_block_to_bytes, BYTE_PTR_ALIGN_BITS,
-};
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr_value, u16_block_to_bytes};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
@@ -68,21 +65,6 @@ pub(crate) fn checked_pointer_offset(
             u32::try_from(offset).map_err(|_| PostflightError::new("memory offset exceeds u32"))?,
         )
         .ok_or_else(|| PostflightError::new(message))
-}
-
-/// Computes the byte->cell conversion carry of one block-aligned heap pointer, registering
-/// range-check counts that mirror the adapter AIRs: the block-alignment check on the low pointer
-/// byte and the conversion's high-limb check.
-pub(crate) fn compute_aligned_pointer_carry(
-    range_checker: &VariableRangeCheckerChip,
-    byte_ptr: u32,
-    byte_ptr_max_bits: usize,
-) -> u32 {
-    range_checker.add_count(
-        (byte_ptr & u8::MAX as u32) / MEMORY_BLOCK_BYTES as u32,
-        BYTE_PTR_ALIGN_BITS,
-    );
-    compute_pointer_carry(range_checker, byte_ptr, byte_ptr_max_bits)
 }
 
 pub const fn num_byte_memory_ops(total_bytes: usize) -> usize {

@@ -11,13 +11,13 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
-    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -252,17 +252,15 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // Convert the `input` base *byte* pointer to the bus address of its first heap block.
         let input_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.input_ptr_limbs[i].into());
-        let input_base = MemoryAddress::from_cell_pointer_limbs(
+        let input_base = MemoryAddress::new(
             AB::Expr::from_u32(MEMORY_AS),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 input_byte_limbs,
-                *local.mem.input_cell_carry,
                 self.ptr_max_bits,
                 (*local.instruction.is_enabled).into(),
             ),
-            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
         );
         for i in 0..C::BLOCK_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
@@ -280,17 +278,15 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // Convert the `state` base *byte* pointer to the bus address of its first heap block.
         let state_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.state_ptr_limbs[i].into());
-        let state_base = MemoryAddress::from_cell_pointer_limbs(
+        let state_base = MemoryAddress::new(
             AB::Expr::from_u32(MEMORY_AS),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 state_byte_limbs,
-                *local.mem.state_cell_carry,
                 self.ptr_max_bits,
                 (*local.instruction.is_enabled).into(),
             ),
-            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
         );
         for i in 0..C::STATE_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
@@ -315,17 +311,15 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // Convert the `dst` base *byte* pointer to the bus address of its first heap block.
         let dst_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.dst_ptr_limbs[i].into());
-        let dst_base = MemoryAddress::from_cell_pointer_limbs(
+        let dst_base = MemoryAddress::new(
             AB::Expr::from_u32(MEMORY_AS),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 dst_byte_limbs,
-                *local.mem.dst_cell_carry,
                 self.ptr_max_bits,
                 (*local.instruction.is_enabled).into(),
             ),
-            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
         );
         for i in 0..C::STATE_WRITES {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =

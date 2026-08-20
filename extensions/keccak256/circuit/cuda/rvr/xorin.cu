@@ -303,14 +303,9 @@ __global__ void xorin_replay_tracegen(
             from.timestamp + XORIN_REGISTER_READS + 2 * num_blocks + i
         );
     }
-    // Byte -> cell pointer conversion carries, plus matching range-check counts. Mirrors
-    // `xorin/trace.rs`.
-    XORIN_WRITE(
-        mem_oc.buffer_cell_carry, compute_pointer_carry(range_checker, buffer_ptr, pointer_max_bits)
-    );
-    XORIN_WRITE(
-        mem_oc.input_cell_carry, compute_pointer_carry(range_checker, input_ptr, pointer_max_bits)
-    );
+    // Block-index range-check counts for both base pointers. Mirrors `xorin/trace.rs`.
+    add_block_index_range_checks(range_checker, buffer_ptr, pointer_max_bits);
+    add_block_index_range_checks(range_checker, input_ptr, pointer_max_bits);
 }
 
 extern "C" int _xorin_replay_tracegen(

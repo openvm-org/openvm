@@ -180,11 +180,8 @@ __global__ void keccakf_op_replay_tracegen(
             from.timestamp + 1 + i
         );
     }
-    // Byte -> cell pointer conversion carry, plus the matching range-check count (mirrors
-    // KeccakfOpChip::fill_trace_inputs).
-    KECCAKF_OP_WRITE(
-        buffer_cell_carry, compute_pointer_carry(range_checker, buffer_ptr, pointer_max_bits)
-    );
+    // Block-index range-check counts (mirrors KeccakfOpChip::fill_trace_inputs).
+    add_block_index_range_checks(range_checker, buffer_ptr, pointer_max_bits);
 }
 
 extern "C" int _keccakf_op_replay_tracegen(

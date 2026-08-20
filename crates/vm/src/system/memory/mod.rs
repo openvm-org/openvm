@@ -92,25 +92,6 @@ impl<S, T> MemoryAddress<S, T> {
     }
 }
 
-impl<S, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
-    /// Builds a bus address from little-endian 16-bit limbs of a block-aligned AS-native cell
-    /// pointer. The caller must constrain the limbs to be canonical and the low limb to be
-    /// divisible by [`BLOCK_FE_WIDTH`].
-    #[inline(always)]
-    pub fn from_cell_pointer_limbs<U: Into<T>>(
-        address_space: S,
-        [lo, hi]: [T; 2],
-        block_width_inverse: U,
-    ) -> Self {
-        let pointer = lo * block_width_inverse.into()
-            + hi * T::from_u32(1 << (16 - MEMORY_BLOCK_INDEX_SHIFT));
-        Self {
-            address_space,
-            pointer,
-        }
-    }
-}
-
 impl<S: Clone, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
     /// Returns the address `blocks` memory-bus blocks after `self`.
     #[inline(always)]

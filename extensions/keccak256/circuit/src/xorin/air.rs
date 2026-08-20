@@ -17,12 +17,12 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -185,23 +185,23 @@ impl XorinVmAir {
     ) -> (AB::Expr, MemoryAddress<AB::Expr, AB::Expr>) {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
-        let mem = &local.mem_oc;
-        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
 
-        // Convert the base `buffer` *byte* pointer to the bus address of its first heap block.
+        // Convert the base `buffer` *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment. `len = 0` is a no-op whose pointers are don't-care
+        // values, so the checks are gated on the first block being active; every block access
+        // below is likewise padding-gated, leaving the base addresses unused in that case.
+        let has_blocks = is_enabled * not(local.sponge.is_padding_bytes[0]);
         let buffer_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.buffer_ptr_limbs[i].into());
-        let buffer_base = MemoryAddress::from_cell_pointer_limbs(
+        let buffer_base = MemoryAddress::new(
             AB::Expr::from_u32(MEMORY_AS),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 buffer_byte_limbs,
-                mem.buffer_cell_carry,
                 self.ptr_max_bits,
-                is_enabled.into(),
+                has_blocks.clone(),
             ),
-            block_width_inverse,
         );
 
         // Constrain read of buffer bytes
@@ -239,20 +239,19 @@ impl XorinVmAir {
             timestamp += not(is_padding);
         }
 
-        // Convert the base `input` *byte* pointer to the bus address of its first heap block.
+        // Convert the base `input` *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
         let input_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.instruction.input_ptr_limbs[i].into());
-        let input_base = MemoryAddress::from_cell_pointer_limbs(
+        let input_base = MemoryAddress::new(
             AB::Expr::from_u32(MEMORY_AS),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 input_byte_limbs,
-                mem.input_cell_carry,
                 self.ptr_max_bits,
-                is_enabled.into(),
+                has_blocks,
             ),
-            block_width_inverse,
         );
 
         // Constrain read of input_bytes

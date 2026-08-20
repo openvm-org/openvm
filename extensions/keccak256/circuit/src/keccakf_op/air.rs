@@ -12,12 +12,12 @@ use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
-    p3_field::{Field, PrimeCharacteristicRing},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -81,20 +81,19 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             )
             .eval(builder, is_valid);
 
-        // Convert the base `buffer` *byte* pointer to the bus address of its first heap block.
+        // Convert the base `buffer` *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
         let buffer_byte_limbs: [AB::Expr; 2] =
             std::array::from_fn(|i| local.buffer_ptr_limbs[i].into());
-        let buffer_base = MemoryAddress::from_cell_pointer_limbs(
+        let buffer_base = MemoryAddress::new(
             AB::F::from_u32(MEMORY_AS),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 buffer_byte_limbs,
-                local.buffer_cell_carry,
                 self.ptr_max_bits,
                 is_valid.into(),
             ),
-            AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse(),
         );
 
         // ======== Constrain new writes of `buffer` to memory =========

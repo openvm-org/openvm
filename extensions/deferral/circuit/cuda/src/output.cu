@@ -80,12 +80,6 @@ template <typename T> struct DeferralOutputCols {
     // non-last rows, compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
 
-    // Carry for converting the input byte pointer to memory-cell pointer limbs.
-    T input_byte_to_cell_carry;
-
-    // Carry for converting the output byte pointer on the first row.
-    T output_byte_to_cell_carry;
-
     // Memory-bus block index written by this section row.
     T write_block_index;
 };

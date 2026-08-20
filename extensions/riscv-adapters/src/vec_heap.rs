@@ -26,7 +26,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    compute_pointer_carry, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block,
+    add_block_index_range_checks, eval_byte_ptr_limbs_to_block_index, expand_to_block,
     ptr_to_field_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
@@ -59,10 +59,6 @@ pub struct VecHeapAdapterCols<
     pub rs_val: [[T; PTR_U16_LIMBS]; NUM_READS],
     /// Low 32 bits of rd register as little-endian 16-bit *byte*-pointer limbs.
     pub rd_val: [T; PTR_U16_LIMBS],
-
-    /// Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
-    pub rs_cell_carry: [T; NUM_READS],
-    pub rd_cell_carry: T,
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T>,
@@ -108,19 +104,9 @@ impl<const NUM_READS: usize, const BLOCKS: usize> VecHeapAdapterFiller<NUM_READS
     ) {
         let cols: &mut VecHeapAdapterCols<F, NUM_READS, BLOCKS, BLOCKS> = adapter_row.borrow_mut();
 
-        // Byte -> cell pointer conversion carry columns, plus the matching range-check counts,
-        // for each base pointer.
-        for (&byte_ptr, conv_col) in izip!(
-            input.rs_vals.iter().chain(once(&input.rd_val)),
-            cols.rs_cell_carry
-                .iter_mut()
-                .chain(once(&mut cols.rd_cell_carry)),
-        ) {
-            *conv_col = F::from_u32(compute_pointer_carry(
-                range_checker,
-                byte_ptr,
-                self.pointer_max_bits,
-            ));
+        // Register the block-index range-check counts for each base pointer.
+        for &byte_ptr in input.rs_vals.iter().chain(once(&input.rd_val)) {
+            add_block_index_range_checks(range_checker, byte_ptr, self.pointer_max_bits);
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS + BLOCKS;
@@ -246,34 +232,29 @@ impl<
 
         let byte_ptr_max_bits = self.pointer_max_bits;
         let e = AB::F::from_u32(MEMORY_AS);
-        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
-
-        // Convert each base *byte* pointer to the bus address of its first heap block.
+        // Convert each base *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
         let rs_base: [MemoryAddress<AB::F, AB::Expr>; NUM_READS] = from_fn(|i| {
-            MemoryAddress::from_cell_pointer_limbs(
+            MemoryAddress::new(
                 e,
-                eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+                eval_byte_ptr_limbs_to_block_index::<AB>(
                     builder,
                     self.range_bus,
                     cols.rs_val[i].map(Into::into),
-                    cols.rs_cell_carry[i],
                     byte_ptr_max_bits,
                     ctx.instruction.is_valid.clone(),
                 ),
-                block_width_inverse,
             )
         });
-        let rd_base = MemoryAddress::from_cell_pointer_limbs(
+        let rd_base = MemoryAddress::new(
             e,
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 cols.rd_val.map(Into::into),
-                cols.rd_cell_carry,
                 byte_ptr_max_bits,
                 ctx.instruction.is_valid.clone(),
             ),
-            block_width_inverse,
         );
 
         // Reads from heap: block `j` is `j` blocks after the base address.

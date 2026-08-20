@@ -502,21 +502,10 @@ __global__ void deferral_output_replay_tracegen(
         sponge_inputs[1] = Fp(output_len);
         COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
 
-        // Convert the heap `input` (rs_val) and `output` (rd_val) base byte pointers to AS-native
-        // u16 cell pointer limbs and emit the matching range-check counts. Mirrors the first-row
-        // branch of the host `DeferralOutputFiller`.
-        COL_WRITE_VALUE(
-            row,
-            DeferralOutputCols,
-            input_byte_to_cell_carry,
-            Fp(compute_aligned_pointer_carry(range_checker, input_ptr, address_bits))
-        );
-        COL_WRITE_VALUE(
-            row,
-            DeferralOutputCols,
-            output_byte_to_cell_carry,
-            Fp(compute_aligned_pointer_carry(range_checker, output_ptr, address_bits))
-        );
+        // Block-index range-check counts for the heap `input` (rs_val) and `output` (rd_val)
+        // base byte pointers. Mirrors the first-row branch of the host `DeferralOutputFiller`.
+        add_block_index_range_checks(range_checker, input_ptr, address_bits);
+        add_block_index_range_checks(range_checker, output_ptr, address_bits);
 
         // The write block index is unconstrained on the first row (its constraints are gated by
         // `is_write_row`); match the host trace, which leaves it zero.
@@ -554,11 +543,6 @@ __global__ void deferral_output_replay_tracegen(
         COL_WRITE_ARRAY(aux, MemoryWriteAuxColsDef, prev_data, packed_previous);
         mem_helper.fill(aux, write_previous.timestamp,
                         from.timestamp + 7 + section_idx - 1);
-
-        // Pointer-conversion carries are only populated on the first row; match the host trace,
-        // which leaves them zero on write rows.
-        COL_WRITE_VALUE(row, DeferralOutputCols, input_byte_to_cell_carry, Fp::zero());
-        COL_WRITE_VALUE(row, DeferralOutputCols, output_byte_to_cell_carry, Fp::zero());
 
         // Memory-bus block index of this row's output write. Mirrors the write-row branch of the
         // host `DeferralOutputFiller`.

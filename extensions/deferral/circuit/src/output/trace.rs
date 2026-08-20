@@ -15,7 +15,7 @@ use openvm_instructions::{
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::{add_block_index_range_checks, u16_block_to_bytes};
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -25,9 +25,9 @@ use crate::{
     output::{DeferralOutputChip, DeferralOutputCols},
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        checked_pointer_offset, checked_u16_pointer, compute_aligned_pointer_carry,
-        f_commit_to_bytes, logged_u32_pointer, require_block_alignment, split_output,
-        DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        checked_pointer_offset, checked_u16_pointer, f_commit_to_bytes, logged_u32_pointer,
+        require_block_alignment, split_output, DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -298,19 +298,15 @@ fn fill_output_section<F: VmField>(
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
             }
 
-            // Byte -> cell pointer conversion carries for the `input` base pointer (read on the
-            // first row) and the `output` base pointer (first write address), plus matching
-            // range checks.
-            cols.input_byte_to_cell_carry = F::from_u32(compute_aligned_pointer_carry(
-                &filler.range_checker_chip,
-                section.rs_val,
-                filler.address_bits,
-            ));
-            cols.output_byte_to_cell_carry = F::from_u32(compute_aligned_pointer_carry(
-                &filler.range_checker_chip,
-                section.rd_val,
-                filler.address_bits,
-            ));
+            // Block-index range-check counts for the `input` base pointer (read on the first
+            // row) and the `output` base pointer (first write address).
+            for byte_ptr in [section.rs_val, section.rd_val] {
+                add_block_index_range_checks(
+                    &filler.range_checker_chip,
+                    byte_ptr,
+                    filler.address_bits,
+                );
+            }
 
             cols.sponge_inputs = initial_sponge_input;
             current_poseidon2_res = filler.poseidon2_chip.perm_and_record(

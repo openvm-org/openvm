@@ -20,8 +20,6 @@ struct IsEqualModU16AdapterCols {
     T rs_val[NUM_READS][PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
-    // Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
-    T rs_cell_carry[NUM_READS];
     T rd_ptr;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
@@ -306,10 +304,8 @@ __global__ void modular_is_eq_replay_tracegen(
             rs_prev_timestamp[read],
             from.timestamp + static_cast<uint32_t>(read)
         );
-        // Byte -> cell conversion carry, with the matching range-check count. Mirrors the host
-        // filler in algebra's trace.rs.
-        row[offsetof(AdapterCols, rs_cell_carry) + read] =
-            Fp(compute_pointer_carry(range_checker, rs_val[read], pointer_max_bits));
+        // Block-index range-check counts. Mirrors the host filler in algebra's trace.rs.
+        add_block_index_range_checks(range_checker, rs_val[read], pointer_max_bits);
         for (size_t block = 0; block < BLOCKS; block++) {
             size_t aux_index = read * BLOCKS + block;
             memory_aux.fill(

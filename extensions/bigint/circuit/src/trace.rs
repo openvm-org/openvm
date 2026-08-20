@@ -25,7 +25,7 @@ use openvm_riscv_adapters::{
     VecHeapAdapterCols, VecHeapBranchU16AdapterCols, VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
-    adapters::{compute_pointer_carry, ptr_to_u16_limbs, U16_BITS},
+    adapters::{add_block_index_range_checks, ptr_to_u16_limbs, U16_BITS},
     AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
     LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
@@ -205,18 +205,10 @@ fn replay_alu_u16<F: PrimeField32, M>(
     }
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
-    for (i, &pointer) in rs_vals.iter().enumerate() {
-        adapter_row.rs_cell_carry[i] = F::from_u32(compute_pointer_carry(
-            range_checker,
-            pointer,
-            pointer_max_bits,
-        ));
+    for &pointer in &rs_vals {
+        add_block_index_range_checks(range_checker, pointer, pointer_max_bits);
     }
-    adapter_row.rd_cell_carry = F::from_u32(compute_pointer_carry(
-        range_checker,
-        rd_val,
-        pointer_max_bits,
-    ));
+    add_block_index_range_checks(range_checker, rd_val, pointer_max_bits);
     for (access, cols) in write_accesses.iter().zip(&mut adapter_row.writes_aux) {
         cols.set_prev_data(access.previous_value.map(F::from_u16));
         mem_helper.fill(access.previous_timestamp, access.timestamp, cols.as_mut());
@@ -304,18 +296,10 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     }
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
-    for (i, &pointer) in rs_vals.iter().enumerate() {
-        adapter_row.rs_cell_carry[i] = F::from_u32(compute_pointer_carry(
-            range_checker,
-            pointer,
-            pointer_max_bits,
-        ));
+    for &pointer in &rs_vals {
+        add_block_index_range_checks(range_checker, pointer, pointer_max_bits);
     }
-    adapter_row.rd_cell_carry = F::from_u32(compute_pointer_carry(
-        range_checker,
-        rd_val,
-        pointer_max_bits,
-    ));
+    add_block_index_range_checks(range_checker, rd_val, pointer_max_bits);
     for (access, cols) in write_accesses.iter().zip(&mut adapter_row.writes_aux) {
         cols.set_prev_data(access.previous_value.map(F::from_u16));
         mem_helper.fill(access.previous_timestamp, access.timestamp, cols.as_mut());
@@ -393,15 +377,8 @@ fn replay_branch<F: PrimeField32, M>(
     };
     replay.finish(next_pc)?;
 
-    for (pointer, conv_col) in rs_vals
-        .into_iter()
-        .zip(adapter_row.rs_cell_carry.iter_mut())
-    {
-        *conv_col = F::from_u32(compute_pointer_carry(
-            range_checker,
-            pointer,
-            pointer_max_bits,
-        ));
+    for pointer in rs_vals {
+        add_block_index_range_checks(range_checker, pointer, pointer_max_bits);
     }
     for (access, cols) in read_accesses.iter().zip(
         adapter_row

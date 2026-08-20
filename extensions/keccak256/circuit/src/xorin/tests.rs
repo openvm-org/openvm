@@ -340,6 +340,16 @@ fn run_xorin_chip_negative_test(prank: impl Fn(&mut XorinVmCols<F>)) {
 }
 
 #[test]
+fn xorin_unaligned_buffer_ptr_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        // An unaligned heap pointer must be rejected by the block-index quotient range check:
+        // `(byte_lo + 6) / 8` is not a 13-bit integer in the field, so no witness can redirect
+        // the access to an aliased block index.
+        cols.instruction.buffer_ptr_limbs[0] += F::from_u32(6);
+    });
+}
+
+#[test]
 fn xorin_wrong_output_negative_test() {
     run_xorin_chip_negative_test(|cols| {
         cols.sponge.postimage_buffer_bytes[0] += F::ONE;

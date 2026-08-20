@@ -34,9 +34,6 @@ pub struct KeccakfOpCols<T> {
     /// Auxiliary columns for timestamp checking of the writes to `buffer`. The writes are done one
     /// word at a time, and each write requires a separate previous timestamp.
     pub buffer_word_aux: [MemoryBaseAuxCols<T>; KECCAK_WIDTH_MEM_OPS],
-    /// Carry for converting the base `buffer` *byte* pointer to AS-native u16 *cell* pointer
-    /// limbs.
-    pub buffer_cell_carry: T,
 }
 
 pub const NUM_KECCAKF_OP_COLS: usize = size_of::<KeccakfOpCols<u8>>();

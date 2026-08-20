@@ -208,9 +208,6 @@ template <typename T> struct DeferralCallAdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_input_acc_aux[DIGEST_F_MEMORY_OPS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_output_acc_aux[DIGEST_F_MEMORY_OPS];
 
-    // Carries for converting heap byte pointers to cell-pointer limbs.
-    T input_byte_to_cell_carry;
-    T output_byte_to_cell_carry;
 };
 
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
@@ -331,12 +328,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             (static_cast<uint32_t>(record.rs_val[1]) << BYTE_BITS) |
             (static_cast<uint32_t>(record.rs_val[2]) << (2 * BYTE_BITS)) |
             (static_cast<uint32_t>(record.rs_val[3]) << (3 * BYTE_BITS));
-        COL_WRITE_VALUE(
-            row,
-            DeferralCallAdapterCols,
-            input_byte_to_cell_carry,
-            Fp(compute_aligned_pointer_carry(range_checker, input_ptr, address_bits))
-        );
+        add_block_index_range_checks(range_checker, input_ptr, address_bits);
     }
 
     {
@@ -345,12 +337,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             (static_cast<uint32_t>(record.rd_val[1]) << BYTE_BITS) |
             (static_cast<uint32_t>(record.rd_val[2]) << (2 * BYTE_BITS)) |
             (static_cast<uint32_t>(record.rd_val[3]) << (3 * BYTE_BITS));
-        COL_WRITE_VALUE(
-            row,
-            DeferralCallAdapterCols,
-            output_byte_to_cell_carry,
-            Fp(compute_aligned_pointer_carry(range_checker, output_ptr, address_bits))
-        );
+        add_block_index_range_checks(range_checker, output_ptr, address_bits);
     }
 }
 

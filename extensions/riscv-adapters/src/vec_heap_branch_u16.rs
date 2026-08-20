@@ -20,7 +20,7 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
     PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
@@ -43,9 +43,6 @@ pub struct VecHeapBranchU16AdapterCols<T, const NUM_READS: usize, const BLOCKS_P
     pub rs_ptr: [T; NUM_READS],
     /// Low 32 bits of each source pointer register as little-endian 16-bit *byte*-pointer limbs.
     pub rs_val: [[T; PTR_U16_LIMBS]; NUM_READS],
-
-    /// Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
-    pub rs_cell_carry: [T; NUM_READS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
@@ -109,21 +106,19 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
 
         let byte_ptr_max_bits = self.pointer_max_bits;
         let e = AB::F::from_u32(MEMORY_AS);
-        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
 
-        // Convert each base *byte* pointer to the bus address of its first heap block.
+        // Convert each base *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
         let rs_base: [MemoryAddress<AB::F, AB::Expr>; NUM_READS] = from_fn(|i| {
-            MemoryAddress::from_cell_pointer_limbs(
+            MemoryAddress::new(
                 e,
-                eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+                eval_byte_ptr_limbs_to_block_index::<AB>(
                     builder,
                     self.range_bus,
                     cols.rs_val[i].map(Into::into),
-                    cols.rs_cell_carry[i],
                     byte_ptr_max_bits,
                     ctx.instruction.is_valid.clone(),
                 ),
-                block_width_inverse,
             )
         });
 

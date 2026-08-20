@@ -18,8 +18,6 @@ struct VecHeapBranchU16AdapterCols {
     // Low 32 bits of each source pointer register as u16 limbs.
     T rs_val[NUM_READS][PTR_U16_LIMBS];
 
-    // Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
-    T rs_cell_carry[NUM_READS];
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
 
@@ -58,16 +56,11 @@ template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct VecHeapBranchU16Adapt
         RowSlice row,
         VecHeapBranchU16AdapterRecord<NUM_READS, BLOCKS_PER_READ> record
     ) {
-        // Byte -> cell pointer conversion carries, plus matching range-check counts. Mirrors the
-        // host filler in vec_heap_branch_u16.rs.
+        // Block-index range-check counts for each base pointer. Mirrors the host filler in
+        // vec_heap_branch_u16.rs.
 #pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            COL_WRITE_VALUE(
-                row,
-                Cols,
-                rs_cell_carry[i],
-                compute_pointer_carry(range_checker, record.rs_vals[i], pointer_max_bits)
-            );
+            add_block_index_range_checks(range_checker, record.rs_vals[i], pointer_max_bits);
         }
 
         uint32_t timestamp = record.from_timestamp + NUM_READS + NUM_READS * BLOCKS_PER_READ;

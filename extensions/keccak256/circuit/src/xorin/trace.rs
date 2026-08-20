@@ -10,8 +10,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, compute_pointer_carry, ptr_to_field_u16_limbs,
-    try_bytes_to_u32, u16_block_to_bytes,
+    add_block_index_range_checks, byte_ptr_to_u16_ptr_value, bytes_to_u16_block,
+    ptr_to_field_u16_limbs, try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
@@ -194,17 +194,12 @@ impl XorinVmFiller {
             timestamp += 1;
         }
 
-        // Byte -> cell pointer conversion carries, plus matching range-check counts.
-        trace_row.mem_oc.buffer_cell_carry = F::from_u32(compute_pointer_carry(
-            &self.range_checker_chip,
-            buffer,
-            self.pointer_max_bits,
-        ));
-        trace_row.mem_oc.input_cell_carry = F::from_u32(compute_pointer_carry(
-            &self.range_checker_chip,
-            input,
-            self.pointer_max_bits,
-        ));
+        // Block-index range-check counts for both base pointers. `len = 0` performs no block
+        // access and leaves the don't-care pointers unchecked, matching the gated AIR checks.
+        if num_reads > 0 {
+            add_block_index_range_checks(&self.range_checker_chip, buffer, self.pointer_max_bits);
+            add_block_index_range_checks(&self.range_checker_chip, input, self.pointer_max_bits);
+        }
         Ok(())
     }
 }

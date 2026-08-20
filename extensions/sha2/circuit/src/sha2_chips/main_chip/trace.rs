@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_circuit::adapters::{compute_pointer_carry, ptr_to_u16_limbs};
+use openvm_riscv_circuit::adapters::{add_block_index_range_checks, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
@@ -149,19 +149,11 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             ptr_to_u16_limbs(replay.input_ptr),
         );
 
-        // Byte -> cell pointer conversion carries, plus matching `cell_hi` range-check counts,
-        // registered on the caller-provided range checker so error paths stay clean. `replay`
-        // holds stable copies of the pointer values, separate from the trace row.
-        for (byte_ptr, conv_col) in [
-            (replay.input_ptr, cols.mem.input_cell_carry),
-            (replay.state_ptr, cols.mem.state_cell_carry),
-            (replay.dst_ptr, cols.mem.dst_cell_carry),
-        ] {
-            *conv_col = F::from_u32(compute_pointer_carry(
-                range_checker,
-                byte_ptr,
-                self.pointer_max_bits,
-            ));
+        // Block-index range-check counts for each base heap pointer, registered on the
+        // caller-provided range checker so error paths stay clean. `replay` holds stable
+        // copies of the pointer values, separate from the trace row.
+        for byte_ptr in [replay.input_ptr, replay.state_ptr, replay.dst_ptr] {
+            add_block_index_range_checks(range_checker, byte_ptr, self.pointer_max_bits);
         }
 
         // fill in the register reads aux

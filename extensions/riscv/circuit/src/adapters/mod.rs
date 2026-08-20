@@ -3,7 +3,7 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{
         execution_mode::ExecutionCtxTrait, ExecutionError, PostflightError, VmStateMut,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::online::GuestMemory,
 };
@@ -19,7 +19,6 @@ use openvm_instructions::{
 use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::AirBuilder,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
@@ -531,92 +530,49 @@ pub fn reg_byte_ptr_to_cell_ptr_limbs_value(byte_ptr: u32) -> u32 {
     byte_ptr / MEMORY_BLOCK_BYTES as u32
 }
 
-/// Converts an aligned RV64 byte pointer given as little-endian 16-bit limbs `[byte_lo, byte_hi]`
-/// into AS-native u16 *cell* pointer limbs `[cell_lo, cell_hi]` (cell = byte / 2).
+/// Bit width of the low block-index limb: an aligned 16-bit byte limb divided by
+/// [`MEMORY_BLOCK_BYTES`] is below `2^13`.
+pub const BLOCK_INDEX_Q_BITS: usize = U16_BITS - MEMORY_BLOCK_BYTES.ilog2() as usize;
+
+/// Converts an RV64 heap byte pointer given as little-endian 16-bit limbs `[byte_lo, byte_hi]`
+/// into its memory-bus block index `byte_ptr / MEMORY_BLOCK_BYTES`, enforcing eight-byte
+/// alignment.
 ///
-/// `carry` is a witness boolean intended to equal `byte_hi & 1`. The returned limbs are the
-/// expressions
-///   cell_lo = (byte_lo + carry * 2^16) / 2,   cell_hi = (byte_hi - carry) / 2.
-/// The composed cell pointer `cell_lo + 2^16 * cell_hi` equals `byte_ptr / 2` as a field identity
-/// for *any* `carry`. The caller must already constrain `byte_lo` to be a canonical 16-bit value
-/// divisible by 8; this makes `cell_lo < 2^16` for either boolean carry. This function range-checks
-/// only `cell_hi < 2^cell_hi_bits`, where the high-limb bound is derived from `byte_ptr_max_bits`
-/// (the guest *byte* pointer width): a u16 cell is two bytes, so
-/// `cell_max_bits = byte_ptr_max_bits - U16_CELL_SIZE_BITS` and
-/// `cell_hi_bits = cell_max_bits - U16_BITS`. Since `cell_hi` is a bounded integer expression, this
-/// also forces `carry = byte_hi & 1`.
-#[allow(clippy::too_many_arguments)]
-pub fn eval_byte_ptr_limbs_to_cell_ptr_limbs<AB: InteractionBuilder>(
+/// Range-checks the quotient `q = byte_lo / MEMORY_BLOCK_BYTES` to [`BLOCK_INDEX_Q_BITS`] (13)
+/// bits, which forces `byte_lo` to be a canonical 16-bit value divisible by 8: for any other
+/// `byte_lo`, `byte_lo * inv(8)` is a field element too large to pass the check. `byte_hi` is
+/// range-checked to `byte_ptr_max_bits - U16_BITS` bits, bounding the byte pointer below
+/// `2^byte_ptr_max_bits`. The returned block index `q + byte_hi * 2^13` is then a bounded
+/// integer below `2^(byte_ptr_max_bits - 3)`, so it embeds injectively in the field.
+pub fn eval_byte_ptr_limbs_to_block_index<AB: InteractionBuilder>(
     builder: &mut AB,
     range_bus: VariableRangeCheckerBus,
     byte_limbs: [AB::Expr; 2],
-    carry: impl Into<AB::Expr>,
     byte_ptr_max_bits: usize,
     enabled: AB::Expr,
-) -> PtrLimbs<AB::Expr> {
-    let cell_hi_bits = byte_ptr_max_bits - U16_CELL_SIZE_BITS - U16_BITS;
-    let carry_e: AB::Expr = carry.into();
-    builder.when(enabled.clone()).assert_bool(carry_e.clone());
-    let inv2 = AB::F::TWO.inverse();
+) -> AB::Expr {
     let [byte_lo, byte_hi] = byte_limbs;
-    let cell_lo = (byte_lo + carry_e.clone() * AB::F::from_u32(1 << U16_BITS)) * inv2;
-    let cell_hi = (byte_hi - carry_e) * inv2;
+    let q = byte_lo * AB::F::from_usize(MEMORY_BLOCK_BYTES).inverse();
     range_bus
-        .range_check(cell_hi.clone(), cell_hi_bits)
-        .eval(builder, enabled);
-    [cell_lo, cell_hi]
-}
-
-/// Cell high-limb range-check bit width corresponding to a guest `byte_ptr_max_bits`.
-#[inline(always)]
-pub fn cell_ptr_hi_bits(byte_ptr_max_bits: usize) -> usize {
-    byte_ptr_max_bits - U16_CELL_SIZE_BITS - U16_BITS
-}
-
-/// Bit width of the range check in [`eval_byte_ptr_block_aligned`] (and its trace mirror).
-pub const BYTE_PTR_ALIGN_BITS: usize = BYTE_BITS - MEMORY_BLOCK_BYTES.ilog2() as usize;
-
-/// Constrains a byte pointer to be [`MEMORY_BLOCK_BYTES`]-aligned by range-checking
-/// `low_byte / MEMORY_BLOCK_BYTES` to [`BYTE_PTR_ALIGN_BITS`] bits. `low_byte` must already be
-/// constrained to a canonical byte; alignment only concerns its low bits, so the higher pointer
-/// limbs need no constraint.
-pub fn eval_byte_ptr_block_aligned<AB: InteractionBuilder>(
-    builder: &mut AB,
-    range_bus: VariableRangeCheckerBus,
-    low_byte: impl Into<AB::Expr>,
-    enabled: AB::Expr,
-) {
+        .range_check(q.clone(), BLOCK_INDEX_Q_BITS)
+        .eval(builder, enabled.clone());
     range_bus
-        .range_check(
-            low_byte.into() * AB::F::from_u32(MEMORY_BLOCK_BYTES as u32).inverse(),
-            BYTE_PTR_ALIGN_BITS,
-        )
+        .range_check(byte_hi.clone(), byte_ptr_max_bits - U16_BITS)
         .eval(builder, enabled);
+    q + byte_hi * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS)
 }
 
-/// Value form of [`eval_byte_ptr_limbs_to_cell_ptr_limbs`]. Returns
-/// `(carry, [cell_lo, cell_hi])` for an aligned byte pointer given as little-endian 16-bit limb
-/// values. The caller is responsible for registering the matching range-check for `cell_hi`
-/// to `hi_bits`.
-#[inline(always)]
-pub fn byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs: PtrLimbs<u32>) -> (u32, PtrLimbs<u32>) {
-    let carry = byte_limbs[1] & 1;
-    let cell_lo = (byte_limbs[0] + (carry << U16_BITS)) >> 1;
-    let cell_hi = byte_limbs[1] >> 1;
-    (carry, [cell_lo, cell_hi])
-}
-
-/// Computes the byte->cell conversion carry of a heap base pointer, registering the matching
-/// `cell_hi` range-check count.
-pub fn compute_pointer_carry(
+/// Registers the range-check counts matching [`eval_byte_ptr_limbs_to_block_index`] for one
+/// aligned heap base byte pointer.
+pub fn add_block_index_range_checks(
     range_checker: &VariableRangeCheckerChip,
     byte_ptr: u32,
     byte_ptr_max_bits: usize,
-) -> u32 {
-    let (conv_carry, base_cell) =
-        byte_ptr_limbs_to_cell_ptr_limbs_value(u32_to_ptr_limbs(byte_ptr));
-    range_checker.add_count(base_cell[1], cell_ptr_hi_bits(byte_ptr_max_bits));
-    conv_carry
+) {
+    debug_assert!(byte_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32));
+    let [byte_lo, byte_hi] = u32_to_ptr_limbs(byte_ptr);
+    range_checker.add_count(byte_lo / MEMORY_BLOCK_BYTES as u32, BLOCK_INDEX_Q_BITS);
+    range_checker.add_count(byte_hi, byte_ptr_max_bits - U16_BITS);
 }
 
 /// Expand `N` limbs to `REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for

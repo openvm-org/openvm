@@ -23,8 +23,8 @@ use openvm_instructions::{
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_circuit::adapters::{
-    eval_byte_ptr_block_aligned, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_register,
-    pack_u8_ptr_limbs, reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_block_index, expand_to_register, pack_u8_ptr_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -257,10 +257,6 @@ pub struct DeferralCallAdapterCols<T> {
     pub output_commit_and_len_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; OUTPUT_TOTAL_MEMORY_OPS],
     pub new_input_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
     pub new_output_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
-
-    /// Carries for converting heap byte pointers to cell-pointer limbs.
-    pub input_byte_to_cell_carry: T,
-    pub output_byte_to_cell_carry: T,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -346,47 +342,27 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             }
         }
 
-        // Both heap byte pointers must be memory-block (eight-byte) aligned; block zero of each
-        // access group then uses the converted base cell limbs directly.
-        eval_byte_ptr_block_aligned::<AB>(
-            builder,
-            self.range_bus,
-            cols.rs_val[0],
-            ctx.instruction.is_valid.clone(),
-        );
-        eval_byte_ptr_block_aligned::<AB>(
-            builder,
-            self.range_bus,
-            cols.rd_val[0],
-            ctx.instruction.is_valid.clone(),
-        );
-
         // Convert the heap `input`/`output` base *byte* pointers (read from registers) into the
-        // bus addresses of their first heap blocks.
-        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
-        let input_base = MemoryAddress::from_cell_pointer_limbs(
+        // bus addresses of their first heap blocks, enforcing eight-byte alignment.
+        let input_base = MemoryAddress::new(
             e.clone(),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 pack_u8_ptr_limbs(&cols.rs_val),
-                cols.input_byte_to_cell_carry,
                 self.address_bits,
                 ctx.instruction.is_valid.clone(),
             ),
-            block_width_inverse,
         );
-        let output_base = MemoryAddress::from_cell_pointer_limbs(
+        let output_base = MemoryAddress::new(
             e.clone(),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 pack_u8_ptr_limbs(&cols.rd_val),
-                cols.output_byte_to_cell_carry,
                 self.address_bits,
                 ctx.instruction.is_valid.clone(),
             ),
-            block_width_inverse,
         );
 
         // Accumulators are read then updated in the deferral address space,

@@ -36,11 +36,6 @@ template <typename V, typename T> struct Sha2MainMemoryCols {
     MemoryReadAuxCols<T> input_reads[V::BLOCK_READS];
     MemoryReadAuxCols<T> state_reads[V::STATE_READS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[V::STATE_WRITES];
-    // Carry for converting each base heap *byte* pointer (`input`, `state`, `dst`) to AS-native
-    // u16 *cell* pointer limbs.
-    T input_cell_carry;
-    T state_cell_carry;
-    T dst_cell_carry;
 };
 
 template <typename V, typename T> struct Sha2MainCols {

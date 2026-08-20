@@ -22,8 +22,8 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::{
-    eval_byte_ptr_block_aligned, eval_byte_ptr_limbs_to_cell_ptr_limbs, expand_to_register,
-    pack_u8_ptr_limbs, reg_byte_ptr_to_cell_ptr_limbs,
+    eval_byte_ptr_limbs_to_block_index, expand_to_register, pack_u8_ptr_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -33,7 +33,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-use p3_field::{Field, PrimeField32};
+use p3_field::PrimeField32;
 
 use crate::{
     canonicity::{CanonicityAuxCols, CanonicitySubAir},
@@ -92,12 +92,6 @@ pub struct DeferralOutputCols<T> {
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
     pub poseidon2_res: [T; DIGEST_SIZE],
-
-    /// Carry for converting the input byte pointer to memory-cell pointer limbs.
-    pub input_byte_to_cell_carry: T,
-
-    /// Carry for converting the output byte pointer on the first row.
-    pub output_byte_to_cell_carry: T,
 
     /// Memory-bus block index written by this section row.
     pub write_block_index: T,
@@ -353,35 +347,17 @@ where
                 output_commit_and_len,
             );
 
-        // Both heap byte pointers must be memory-block (eight-byte) aligned; block zero of the
-        // input reads and the first output write then use the converted base cell limbs directly.
-        eval_byte_ptr_block_aligned::<AB>(
-            builder,
-            self.range_bus,
-            local.rs_val[0],
-            local.is_first.into(),
-        );
-        eval_byte_ptr_block_aligned::<AB>(
-            builder,
-            self.range_bus,
-            local.rd_val[0],
-            local.is_first.into(),
-        );
-
         // Convert the `input` base *byte* pointer (read on the first row) to the bus address of
-        // its first heap block.
-        let block_width_inverse = AB::F::from_u32(BLOCK_FE_WIDTH as u32).inverse();
-        let input_base = MemoryAddress::from_cell_pointer_limbs(
+        // its first heap block, enforcing eight-byte alignment.
+        let input_base = MemoryAddress::new(
             e.clone(),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 pack_u8_ptr_limbs(&local.rs_val),
-                local.input_byte_to_cell_carry,
                 self.address_bits,
                 local.is_first.into(),
             ),
-            block_width_inverse,
         );
 
         for (chunk_idx, (data, aux)) in izip!(
@@ -406,18 +382,16 @@ where
         let is_write_row = local.is_valid - local.is_first;
 
         // Convert the `output` base *byte* pointer (read on the first row) to the bus address of
-        // the first output write block.
-        let output_base = MemoryAddress::from_cell_pointer_limbs(
+        // the first output write block, enforcing eight-byte alignment.
+        let output_base = MemoryAddress::new(
             e.clone(),
-            eval_byte_ptr_limbs_to_cell_ptr_limbs::<AB>(
+            eval_byte_ptr_limbs_to_block_index::<AB>(
                 builder,
                 self.range_bus,
                 pack_u8_ptr_limbs(&local.rd_val),
-                local.output_byte_to_cell_carry,
                 self.address_bits,
                 local.is_first.into(),
             ),
-            block_width_inverse,
         );
 
         // A first row writes no output. If the next row belongs to the same section, it is the

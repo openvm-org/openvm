@@ -37,10 +37,6 @@ struct XorinMemoryCols {
     MemoryReadAuxCols<T> input_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
     MemoryReadAuxCols<T> buffer_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
     MemoryBaseAuxCols<T> buffer_bytes_write_base_aux[keccak256::KECCAK_RATE_MEM_OPS];
-    // Carry for converting the base `buffer`/`input` *byte* pointers to AS-native u16 *cell*
-    // pointer limbs.
-    T buffer_cell_carry;
-    T input_cell_carry;
 };
 
 template <typename T>

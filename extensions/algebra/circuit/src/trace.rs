@@ -23,7 +23,9 @@ use openvm_mod_circuit_builder::FieldExpressionFiller;
 use openvm_riscv_adapters::{
     IsEqualModU16AdapterCols, VecHeapAdapterCols, VecHeapAdapterFiller, VecHeapTraceInput,
 };
-use openvm_riscv_circuit::adapters::{compute_pointer_carry, ptr_to_field_u16_limbs, U16_BITS};
+use openvm_riscv_circuit::adapters::{
+    add_block_index_range_checks, ptr_to_field_u16_limbs, U16_BITS,
+};
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
@@ -413,13 +415,13 @@ pub(crate) fn generate_modular_is_equal_trace_from_postflight<
                     rs_accesses[read].timestamp,
                     adapter_cols.rs_read_aux[read].as_mut(),
                 );
-                // Byte -> cell conversion carry, with the matching range-check count (the AIR
-                // converts each base pointer once with multiplicity `is_valid`).
-                adapter_cols.rs_cell_carry[read] = F::from_u32(compute_pointer_carry(
+                // Block-index range-check counts (the AIR converts each base pointer once
+                // with multiplicity `is_valid`).
+                add_block_index_range_checks(
                     &temporary_range_checker,
                     rs_vals[read],
                     pointer_max_bits,
-                ));
+                );
                 adapter_cols.rs_val[read] = ptr_to_field_u16_limbs(rs_vals[read]);
                 adapter_cols.rs_ptr[read] = F::from_u32(rs_ptrs[read]);
             }
