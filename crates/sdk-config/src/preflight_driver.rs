@@ -510,6 +510,14 @@ impl<'a> SegmentExecutor<'a> {
     /// Checked once the run is complete rather than per segment: streamed
     /// segmentation does not know the segment count until the last boundary, and
     /// the two forms constrain the same set of runs.
+    ///
+    /// The trade is deliberate. Validating per segment used to fail at the first
+    /// segment whose preflight disagreed with the metered segmentation; now the
+    /// remaining segments execute first and the divergence is reported afterwards.
+    /// Nothing is swallowed and no proof is returned either way — the cost is work
+    /// spent on a run that was already going to fail. Restoring the early check
+    /// requires knowing which segment is last, which a streamed producer cannot
+    /// say until it is done.
     fn validate_endpoints(&self) -> Result<(), VirtualMachineError> {
         let last = self.terminated.len().saturating_sub(1);
         for (idx, terminated) in self.terminated.iter().enumerate() {

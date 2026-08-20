@@ -138,6 +138,12 @@ pub(crate) fn register_segment(
 ///
 /// The graph decides *when* each half of a segment runs; this decides *how*. Both
 /// continuation drivers implement it, so the admission policy exists once.
+///
+/// Implemented outside this crate — the record-free CUDA driver in
+/// `openvm-sdk-config` is one — so **adding a method is a breaking change** for any
+/// implementor pinned at a different revision. Extend it with a defaulted method,
+/// or with a separate trait, rather than a bare addition. The same applies to
+/// [`SegmentSource`].
 pub trait SegmentDriver {
     /// A segment's proving input, produced by an execute and consumed by its prove.
     type Ctx;
