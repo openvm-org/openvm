@@ -6,8 +6,10 @@
 //! the proving key and that segment's proving context alone, so PROVE nodes are
 //! mutually independent and are where concurrency can come from.
 
+use openvm_scheduler::{Admission, Engine, Node, SchedulerError};
 pub use openvm_scheduler::{Budget, ResourceProfile};
-use openvm_scheduler::{Engine, Node, SchedulerError};
+
+use crate::arch::{execution_mode::Segment, VirtualMachineError};
 
 /// GPU memory a prove pass needs no matter how many proves are resident.
 ///
@@ -81,6 +83,21 @@ impl SegmentSchedulerConfig {
         let admissible = device_gpu_bytes.saturating_sub(SHARED_GPU_BASE_BYTES);
         Self::new(Budget::new(admissible, 0, 0))
     }
+
+    /// How many proves this budget admits at once.
+    ///
+    /// A backend that gives each admitted prove its own device queue sizes its
+    /// pool from this, so the pool and admission agree on the ceiling instead of
+    /// each carrying its own copy of it. Always at least one: a budget too small
+    /// for a single prove still has to run it.
+    pub fn max_resident_proves(&self) -> usize {
+        if self.prove.gpu_bytes == 0 {
+            return 1;
+        }
+        usize::try_from(self.budget.gpu_bytes / self.prove.gpu_bytes)
+            .unwrap_or(usize::MAX)
+            .max(1)
+    }
 }
 
 /// A graph with no segments in it yet.
@@ -115,4 +132,182 @@ pub(crate) fn register_segment(
         vec![SegmentNode::Execute(idx)],
         config.prove,
     ))
+}
+
+/// What a proving backend must supply for the graph to be driven against it.
+///
+/// The graph decides *when* each half of a segment runs; this decides *how*. Both
+/// continuation drivers implement it, so the admission policy exists once.
+pub trait SegmentDriver {
+    /// A segment's proving input, produced by an execute and consumed by its prove.
+    type Ctx;
+    type Proof;
+
+    /// Advances the execute chain by one segment and yields its proving context.
+    ///
+    /// Executes are a serial chain — segment `n + 1` starts from segment `n`'s
+    /// output state — so this takes the driver mutably and runs where it is
+    /// admitted, on the caller's thread.
+    fn execute(&mut self, idx: usize, segment: &Segment) -> Result<Self::Ctx, VirtualMachineError>;
+
+    /// Proves every entry of `batch` concurrently, running `while_proving` on the
+    /// calling thread meanwhile, and returns the proofs alongside whatever
+    /// `while_proving` produced.
+    ///
+    /// Each entry must be proved on its own device queue: seating two proves
+    /// together buys nothing if their work serializes behind one queue. Arranging
+    /// that is the backend's concern, which is why concurrency lives here and not
+    /// in the caller.
+    fn prove_batch(
+        &self,
+        batch: Vec<(usize, Self::Ctx)>,
+        while_proving: &mut dyn FnMut() -> Result<Vec<Segment>, VirtualMachineError>,
+    ) -> Result<(Vec<(usize, Self::Proof)>, Vec<Segment>), VirtualMachineError>;
+}
+
+/// Yields the metered segmentation, ideally as it is discovered rather than only
+/// once the whole program has been segmented.
+pub trait SegmentSource {
+    fn is_finished(&self) -> bool;
+
+    /// Advances to the next boundary and returns whatever segments that closed.
+    fn step(&mut self) -> Result<Vec<Segment>, VirtualMachineError>;
+}
+
+/// One scheduled continuation run, with the observations a correctness test needs
+/// to tell a scheduled run from a serial one.
+pub struct ScheduledRun<P> {
+    /// Proofs in segment order, which is not the order they completed in.
+    pub proofs: Vec<P>,
+    pub segments: Vec<Segment>,
+    /// High-water mark of proves dispatched together.
+    pub max_concurrent_proves: usize,
+}
+
+/// Runs one continuation proof by admitting graph nodes against `config`'s budget.
+///
+/// A segment proof is a function of the proving key and that segment's context
+/// alone, and proofs are assembled by segment index rather than completion order,
+/// so what this returns does not depend on the order the graph admits work in.
+pub fn drive_scheduled<D, S>(
+    config: &SegmentSchedulerConfig,
+    driver: &mut D,
+    source: &mut S,
+) -> Result<ScheduledRun<D::Proof>, VirtualMachineError>
+where
+    D: SegmentDriver,
+    S: SegmentSource,
+{
+    let mut graph = empty_graph(config);
+    let mut segments: Vec<Segment> = Vec::new();
+    let mut contexts: Vec<Option<D::Ctx>> = Vec::new();
+    let mut proofs: Vec<Option<D::Proof>> = Vec::new();
+    // Admitted proves wait here rather than running where they were admitted, so
+    // that everything the budget lets in at once goes to the backend together. An
+    // execute is not held: it runs where it is admitted, because it needs the
+    // driver mutably.
+    let mut waiting: Vec<(usize, D::Ctx)> = Vec::new();
+    let mut max_concurrent_proves = 0usize;
+    let mut proved = 0usize;
+    loop {
+        // Only enough to get started, or to break an idle graph. The bulk of
+        // production happens while proves are in flight, below.
+        if segments.is_empty() && !source.is_finished() {
+            let fresh = source.step()?;
+            register_segments(&mut graph, &mut segments, fresh, config)?;
+            contexts.resize_with(segments.len(), || None);
+            proofs.resize_with(segments.len(), || None);
+        }
+        match graph.admit() {
+            Admission::Admitted(nodes) => {
+                for node in nodes {
+                    match node {
+                        SegmentNode::Execute(idx) => {
+                            contexts[idx] = Some(driver.execute(idx, &segments[idx])?);
+                            // Execute holds nothing past its own run; releasing it
+                            // here is what lets its prove and the next execute in.
+                            graph.complete(&node).map_err(scheduling_error)?;
+                        }
+                        SegmentNode::Prove(idx) => {
+                            let ctx = contexts[idx]
+                                .take()
+                                .expect("a prove node is admitted only after its execute node");
+                            waiting.push((idx, ctx));
+                        }
+                    }
+                }
+            }
+            // Only a prove is ever left holding budget, so both of these mean at
+            // least one is waiting and running them is what makes progress.
+            Admission::Backpressure | Admission::Blocked => {
+                let batch = std::mem::take(&mut waiting);
+                assert!(
+                    !batch.is_empty(),
+                    "admission reports backpressure or blocked only while a prove is resident"
+                );
+                max_concurrent_proves = max_concurrent_proves.max(batch.len());
+                // How far production may run ahead while these proves work.
+                // Bounded, because each discovered segment's execute will hold a
+                // proving context until its prove consumes it.
+                let target = proved + config.prove_lookahead + 2;
+                let produced_len = segments.len();
+                let (results, fresh) = driver.prove_batch(batch, &mut || {
+                    let mut fresh = Vec::new();
+                    while !source.is_finished() && produced_len + fresh.len() < target {
+                        fresh.extend(source.step()?);
+                    }
+                    Ok(fresh)
+                })?;
+                register_segments(&mut graph, &mut segments, fresh, config)?;
+                contexts.resize_with(segments.len(), || None);
+                proofs.resize_with(segments.len(), || None);
+                for (idx, proof) in results {
+                    proofs[idx] = Some(proof);
+                    proved += 1;
+                    graph
+                        .complete(&SegmentNode::Prove(idx))
+                        .map_err(scheduling_error)?;
+                }
+            }
+            // Every registered node is done. That is only the end once the source
+            // has no more segments to register.
+            Admission::AllComplete => {
+                if source.is_finished() && segments.len() == proved {
+                    break;
+                }
+                // Idle with work still to discover: there is no prove in flight to
+                // overlap against, so produce here.
+                let fresh = source.step()?;
+                register_segments(&mut graph, &mut segments, fresh, config)?;
+                contexts.resize_with(segments.len(), || None);
+                proofs.resize_with(segments.len(), || None);
+            }
+        }
+    }
+    Ok(ScheduledRun {
+        proofs: proofs
+            .into_iter()
+            .map(|proof| proof.expect("every registered prove node ran"))
+            .collect(),
+        segments,
+        max_concurrent_proves,
+    })
+}
+
+/// Adds every segment of `fresh` to the graph and to `segments`.
+fn register_segments(
+    graph: &mut Engine<SegmentNode>,
+    segments: &mut Vec<Segment>,
+    fresh: Vec<Segment>,
+    config: &SegmentSchedulerConfig,
+) -> Result<(), VirtualMachineError> {
+    for segment in fresh {
+        register_segment(graph, segments.len(), config).map_err(scheduling_error)?;
+        segments.push(segment);
+    }
+    Ok(())
+}
+
+fn scheduling_error(error: impl std::fmt::Display) -> VirtualMachineError {
+    VirtualMachineError::Scheduling(error.to_string())
 }

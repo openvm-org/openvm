@@ -516,6 +516,19 @@ impl<'a> RvrMeteredSegmentInstance<'a> {
         }
     }
 
+    /// Detaches the compiled executor from the [`VmExecutor`](crate::arch::VmExecutor)
+    /// that created it, so it can be stepped while the VM is borrowed mutably.
+    pub fn into_owned(self) -> RvrMeteredSegmentInstance<'static> {
+        RvrMeteredSegmentInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config: Cow::Owned(self.inner.system_config.into_owned()),
+                initial_image: self.inner.initial_image,
+                runtime_hooks: self.inner.runtime_hooks,
+                compiled: self.inner.compiled,
+            },
+        }
+    }
+
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.inner.create_initial_vm_state(inputs)
     }
