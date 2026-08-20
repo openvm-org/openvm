@@ -9,7 +9,7 @@ use openvm_circuit::{
         fill_trace_rows, Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH,
         MEMORY_BLOCK_BYTES,
     },
-    system::memory::MemoryAuxColsFactory,
+    system::{memory::MemoryAuxColsFactory, program::trace::instruction_operand_to_field},
     utils::next_power_of_two_or_zero,
 };
 use openvm_instructions::{
@@ -103,12 +103,8 @@ fn validate_heap_span(pointer: u32, pointer_max_bits: usize) -> Result<(), Postf
     Ok(())
 }
 
-fn validate_alu_instruction<F: PrimeField32>(
-    instruction: &Instruction<F>,
-) -> Result<(), PostflightError> {
-    if instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-    {
+fn validate_alu_instruction(instruction: &Instruction) -> Result<(), PostflightError> {
+    if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
         return Err(invalid("int256 ALU instruction has invalid address spaces"));
     }
     Ok(())
@@ -170,11 +166,8 @@ fn replay_alu_u16<F: PrimeField32, M>(
 ) -> Result<AluReplay<u16, INT256_NUM_U16_LIMBS, M>, PostflightError> {
     let instruction = postflight.instruction(step);
     validate_alu_instruction(instruction)?;
-    let rs_ptrs = [
-        instruction.b.as_canonical_u32(),
-        instruction.c.as_canonical_u32(),
-    ];
-    let rd_ptr = instruction.a.as_canonical_u32();
+    let rs_ptrs = [instruction.b.as_u32(), instruction.c.as_u32()];
+    let rd_ptr = instruction.a.as_u32();
     let from_pc = postflight.pc(step);
     let from_timestamp = postflight.timestamp(step);
     let mut replay = postflight.replay(step);
@@ -259,11 +252,8 @@ fn replay_alu_bytes<F: PrimeField32, M>(
 ) -> Result<AluReplay<u8, INT256_NUM_U8_LIMBS, M>, PostflightError> {
     let instruction = postflight.instruction(step);
     validate_alu_instruction(instruction)?;
-    let rs_ptrs = [
-        instruction.b.as_canonical_u32(),
-        instruction.c.as_canonical_u32(),
-    ];
-    let rd_ptr = instruction.a.as_canonical_u32();
+    let rs_ptrs = [instruction.b.as_u32(), instruction.c.as_u32()];
+    let rd_ptr = instruction.a.as_u32();
     let from_pc = postflight.pc(step);
     let from_timestamp = postflight.timestamp(step);
     let mut replay = postflight.replay(step);
@@ -350,10 +340,7 @@ fn replay_branch<F: PrimeField32, M>(
 ) -> Result<BranchReplay<M>, PostflightError> {
     let instruction = postflight.instruction(step);
     validate_alu_instruction(instruction)?;
-    let rs_ptrs = [
-        instruction.a.as_canonical_u32(),
-        instruction.b.as_canonical_u32(),
-    ];
+    let rs_ptrs = [instruction.a.as_u32(), instruction.b.as_u32()];
     let from_pc = postflight.pc(step);
     let from_timestamp = postflight.timestamp(step);
     let mut replay = postflight.replay(step);
@@ -379,7 +366,7 @@ fn replay_branch<F: PrimeField32, M>(
     let decision = branch(inputs);
     let taken = decision.taken;
     let next_pc = if taken {
-        (F::from_u32(from_pc) + instruction.c).as_canonical_u32()
+        from_pc.wrapping_add_signed(instruction.c.as_i32())
     } else {
         from_pc.wrapping_add(DEFAULT_PC_STEP)
     };
@@ -755,7 +742,7 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
             }
             core.opcode_beq_flag = F::from_bool(opcode == BranchEqualOpcode::BEQ);
             core.opcode_bne_flag = F::from_bool(opcode == BranchEqualOpcode::BNE);
-            core.imm = postflight.instruction(step).c;
+            core.imm = instruction_operand_to_field(postflight.instruction(step).c);
             core.cmp_result = F::from_bool(replay.taken);
             core.a = a.map(F::from_u16);
             core.b = b.map(F::from_u16);
@@ -881,7 +868,7 @@ pub(crate) fn generate_branch_less_than_trace<F: PrimeField32>(
             core.opcode_bltu_flag = F::from_bool(opcode == BranchLessThanOpcode::BLTU);
             core.opcode_bge_flag = F::from_bool(opcode == BranchLessThanOpcode::BGE);
             core.opcode_bgeu_flag = F::from_bool(opcode == BranchLessThanOpcode::BGEU);
-            core.imm = postflight.instruction(step).c;
+            core.imm = instruction_operand_to_field(postflight.instruction(step).c);
             core.cmp_result = F::from_bool(replay.taken);
             core.a = a.map(F::from_u16);
             core.b = b.map(F::from_u16);

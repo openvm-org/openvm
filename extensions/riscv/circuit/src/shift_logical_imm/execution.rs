@@ -28,10 +28,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ShiftLogicalImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
-    pub(super) fn pre_compute_impl<F: PrimeField32>(
+    pub(super) fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut ShiftLogicalImmPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
@@ -43,10 +43,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
             e,
             ..
         } = inst;
-        let c = c.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS
-            || e.as_canonical_u32() != IMM_AS
-            || c >= (NUM_LIMBS * LIMB_BITS) as u32
+        let c = c.as_u32();
+        if d.as_u32() != REGISTER_AS || e.as_u32() != IMM_AS || c >= (NUM_LIMBS * LIMB_BITS) as u32
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -58,8 +56,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
         }
         *data = ShiftLogicalImmPreCompute {
             shamt: c as u8,
-            rd_ptr: a.as_canonical_u32() as u8,
-            rs1_ptr: b.as_canonical_u32() as u8,
+            rd_ptr: a.as_u32() as u8,
+            rs1_ptr: b.as_u32() as u8,
         };
         Ok(local_opcode == ShiftImmOpcode::SLLI as usize)
     }
@@ -87,7 +85,7 @@ where
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -105,7 +103,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -135,7 +133,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -155,7 +153,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

@@ -5,6 +5,7 @@ use openvm_circuit::{
     },
     utils::{test_gpu_engine, test_system_config},
 };
+use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
@@ -23,13 +24,10 @@ use openvm_riscv_circuit::{
 };
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::StarkEngine;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::PreflightProgramEvent;
 
 use super::{Keccak256PreflightGpuTracegen, Keccak256Rv64GpuBuilder};
 use crate::Keccak256Rv64Config;
-
-type F = BabyBear;
 
 fn reg(index: usize) -> usize {
     index * REGISTER_BYTES as usize
@@ -96,7 +94,7 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
     collision.register(native_opcode, schedule).unwrap();
     let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
     let collision = PreflightReplayProgram::upload_with_postflight_access_registry(
-        &Program::<F>::from_instructions(&[]),
+        &Program::from_instructions(&[]),
         &MemoryConfig::default(),
         &collision,
         &device_ctx,
@@ -109,11 +107,11 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
 #[test]
 fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values() {
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
             [reg(4), reg(0), 7, REGISTER_AS as usize, IMM_AS as usize],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             XorinOpcode::XORIN.global_opcode(),
             [
                 reg(1),
@@ -123,11 +121,11 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 MEMORY_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             KeccakfOpcode::KECCAKF.global_opcode(),
             [reg(1), 0, 0, REGISTER_AS as usize, MEMORY_AS as usize],
         ),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
     let buffer_ptr = 64u64;
@@ -162,7 +160,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -182,7 +180,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
     assert_eq!(execution.transcript.replay_values.len(), 42);
 
     let malformed = Program::from_instructions(&[
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             XorinOpcode::XORIN.global_opcode(),
             [
                 reg(1) + 1,
@@ -192,7 +190,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 MEMORY_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ]);
     let malformed = Keccak256PreflightGpuTracegen::upload_postflight_program(
         &malformed,
@@ -303,7 +301,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
     );
 
     let zero_program = Program::from_instructions(&[
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             XorinOpcode::XORIN.global_opcode(),
             [
                 reg(1),
@@ -313,7 +311,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
                 MEMORY_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ]);
     let zero_memory: SparseMemoryImage = [(1usize, 3u64), (2, 5), (3, 0)]
         .into_iter()
@@ -367,8 +365,8 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_replay_values(
 fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
     let unknown_opcode = 0x00ff_0000usize;
     let instructions = [
-        Instruction::<F>::from_usize(VmOpcode::from_usize(unknown_opcode), [0; 5]),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(VmOpcode::from_usize(unknown_opcode), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
     let history = PreflightHistory {

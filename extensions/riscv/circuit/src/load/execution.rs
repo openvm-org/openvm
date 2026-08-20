@@ -39,10 +39,10 @@ struct LoadPreCompute {
 }
 
 impl<const LOAD_WIDTH: usize> LoadExecutor<LOAD_WIDTH> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut LoadPreCompute,
     ) -> Result<(LoadStoreOpcode, bool), StaticProgramError> {
         let Instruction {
@@ -58,8 +58,8 @@ impl<const LOAD_WIDTH: usize> LoadExecutor<LOAD_WIDTH> {
         } = inst;
         let enabled = !f.is_zero();
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -71,12 +71,12 @@ impl<const LOAD_WIDTH: usize> LoadExecutor<LOAD_WIDTH> {
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
+        let imm = c.as_u32();
+        let imm_sign = g.as_u32();
         *data = LoadPreCompute {
             imm_extended: sign_extend_imm16(imm, imm_sign),
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok((local_opcode, enabled))
     }
@@ -116,7 +116,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadPreCompute = data.borrow_mut();
@@ -128,7 +128,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -153,7 +153,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -170,7 +170,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

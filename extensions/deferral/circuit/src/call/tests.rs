@@ -135,10 +135,10 @@ fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
 fn set_and_execute_call<E, T>(
     tester: &mut T,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     num_deferrals: usize,
-) -> Instruction<F>
+) -> Instruction
 where
     E: Executor<F> + Clone,
     T: TestBuilder<F>,

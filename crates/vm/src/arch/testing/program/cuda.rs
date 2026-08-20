@@ -25,7 +25,7 @@ impl DeviceProgramTester {
         self.0.bus
     }
 
-    pub fn execute(&mut self, instruction: &Instruction<F>, initial_state: &ExecutionState<u32>) {
+    pub fn execute(&mut self, instruction: &Instruction, initial_state: &ExecutionState<u32>) {
         self.0.execute(instruction, initial_state);
     }
 }

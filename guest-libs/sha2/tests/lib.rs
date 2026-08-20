@@ -18,8 +18,6 @@ mod tests {
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
-    type F = BabyBear;
-
     enum Sha2Type {
         Sha256,
         Sha384,
@@ -74,7 +72,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "sha2", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -97,7 +95,7 @@ mod tests {
         if prove {
             air_test_with_min_segments(Sha2Rv64Builder, config, openvm_exe, stdin, 1);
         } else {
-            let executor = VmExecutor::new(config.clone())?;
+            let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
             let instance = executor.instance(&openvm_exe)?;
             #[allow(unused_variables)]
             let state = instance.execute(stdin.clone())?;
@@ -122,7 +120,7 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -130,7 +128,7 @@ mod tests {
         )?;
 
         let stdin = StdIn::default();
-        let executor = VmExecutor::new(config.clone())?;
+        let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
         let instance = executor.instance(&openvm_exe)?;
         #[allow(unused_variables)]
         let state = instance.execute(stdin.clone())?;

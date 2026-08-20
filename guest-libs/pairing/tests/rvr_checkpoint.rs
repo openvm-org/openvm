@@ -29,10 +29,7 @@ use openvm_pairing_transpiler::{PairingPhantom, PairingTranspilerExtension};
 use openvm_riscv_transpiler::{
     HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
-use openvm_stark_sdk::{
-    openvm_stark_backend::{p3_field::PrimeField32, StarkEngine},
-    p3_baby_bear::BabyBear,
-};
+use openvm_stark_sdk::{openvm_stark_backend::StarkEngine, p3_baby_bear::BabyBear};
 use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -47,7 +44,7 @@ struct Discovery {
     replay_values: usize,
 }
 
-fn instruction_at(exe: &VmExe<BabyBear>, pc: u32) -> &Instruction<BabyBear> {
+fn instruction_at(exe: &VmExe, pc: u32) -> &Instruction {
     let slot = pc
         .checked_sub(exe.program.pc_base)
         .expect("executed PC precedes the program base")
@@ -116,11 +113,11 @@ fn discover_pairing_split(
 
 fn prove_pairing_checkpoint(
     mut config: Rv64PairingConfig,
-    exe: VmExe<BabyBear>,
+    exe: VmExe,
     input: Vec<Vec<u8>>,
 ) -> Result<()> {
     *config.as_mut() = test_system_config();
-    let executor = VmExecutor::new(config.clone())?;
+    let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
     let checkpoint = executor.preflight_instance(&exe)?;
     let pairing_pcs = exe
         .program
@@ -128,7 +125,7 @@ fn prove_pairing_checkpoint(
         .iter()
         .filter_map(|(pc, instruction, _)| {
             (instruction.opcode.as_usize() == SystemOpcode::PHANTOM.global_opcode_usize()
-                && instruction.c.as_canonical_u32() as u16 == PairingPhantom::HintFinalExp as u16)
+                && instruction.c.as_u32() as u16 == PairingPhantom::HintFinalExp as u16)
                 .then_some(*pc)
         })
         .collect::<Vec<_>>();
@@ -205,7 +202,7 @@ fn prove_pairing_checkpoint(
             let instruction = instruction_at(&exe, event.pc);
             let opcode = instruction.opcode.as_usize();
             let is_pairing_phantom = opcode == SystemOpcode::PHANTOM.global_opcode_usize()
-                && instruction.c.as_canonical_u32() as u16 == PairingPhantom::HintFinalExp as u16;
+                && instruction.c.as_u32() as u16 == PairingPhantom::HintFinalExp as u16;
             if is_pairing_phantom {
                 saw_pairing_phantom = true;
             } else if saw_pairing_phantom
@@ -277,10 +274,7 @@ fn prove_pairing_checkpoint(
     Ok(())
 }
 
-fn transpile_pairing_fixture(
-    curve_feature: &str,
-    config: &Rv64PairingConfig,
-) -> Result<VmExe<BabyBear>> {
+fn transpile_pairing_fixture(curve_feature: &str, config: &Rv64PairingConfig) -> Result<VmExe> {
     let elf = build_example_program_at_path_with_features(
         get_programs_dir!("tests/programs"),
         "pairing_check",
@@ -289,7 +283,7 @@ fn transpile_pairing_fixture(
     )?;
     Ok(VmExe::from_elf(
         elf,
-        Transpiler::<BabyBear>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension)

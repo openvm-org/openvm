@@ -23,15 +23,12 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 
     for (row_index, &step) in steps.iter().enumerate() {
         let instruction = postflight.instruction(step);
-        if [instruction.d, instruction.e, instruction.f, instruction.g]
-            .into_iter()
-            .any(|operand| operand != F::ZERO)
-        {
+        let Some(operands) = instruction.checked_phantom_operands() else {
             return Err(PostflightError::new(format!(
-                "phantom instruction at PC {:#x} has nonzero unused operands",
+                "phantom instruction at PC {:#x} has invalid operands",
                 postflight.pc(step)
             )));
-        }
+        };
 
         let pc = postflight.pc(step);
         let timestamp = postflight.timestamp(step);
@@ -42,7 +39,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         let row: &mut PhantomCols<F> =
             trace.values[row_index * width..(row_index + 1) * width].borrow_mut();
         row.pc = F::from_u32(pc);
-        row.operands = [instruction.a, instruction.b, instruction.c];
+        row.operands = operands.map(F::from_u32);
         row.timestamp = F::from_u32(timestamp);
         row.is_valid = F::ONE;
     }

@@ -1,5 +1,6 @@
 use openvm_instructions::{
-    program::Program, riscv::REGISTER_AS, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+    instruction::InstructionOperand, program::Program, riscv::REGISTER_AS, SystemOpcode,
+    DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -21,8 +22,7 @@ fn fill_trace_rows_skips_empty_ranges() {
 fn peek_uses_the_already_consumed_timed_event_prefix() {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -58,7 +58,7 @@ fn peek_uses_the_already_consumed_timed_event_prefix() {
         },
     };
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight = Postflight::<BabyBear>::new(&program, &history, &memory_config, None).unwrap();
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     let mut replay = postflight.replay(step);
 
@@ -74,8 +74,7 @@ fn peek_uses_the_already_consumed_timed_event_prefix() {
 fn peek_before_a_first_read_uses_the_read_value() {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -98,7 +97,7 @@ fn peek_before_a_first_read_uses_the_read_value() {
         },
     };
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight = Postflight::<BabyBear>::new(&program, &history, &memory_config, None).unwrap();
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     let mut replay = postflight.replay(step);
 
@@ -128,11 +127,10 @@ fn compact_reference(index: u32) -> [u16; BLOCK_FE_WIDTH] {
     [index as u16, (index >> 16) as u16, 0, 0]
 }
 
-fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
+fn mixed_history() -> (Program, PreflightHistory) {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -187,8 +185,7 @@ fn mixed_history() -> (Program<BabyBear>, PreflightHistory) {
 fn u8_history_replays_packed_event_and_seed() {
     let instruction =
         Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program =
-        Program::<BabyBear>::new_without_debug_infos(&[instruction.clone(), instruction], 0);
+    let program = Program::new_without_debug_infos(&[instruction.clone(), instruction], 0);
     let initial = [1, 2, 3, 4];
     let written = [5, 6, 7, 8];
     let history = PreflightHistory {
@@ -218,7 +215,8 @@ fn u8_history_replays_packed_event_and_seed() {
         },
     };
 
-    let postflight = Postflight::new(&program, &history, &MemoryConfig::default(), None).unwrap();
+    let postflight =
+        Postflight::<BabyBear>::new(&program, &history, &MemoryConfig::default(), None).unwrap();
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     let mut replay = postflight.replay(step);
     let access = replay.write_u8(PUBLIC_VALUES_AS, 0, written).unwrap();
@@ -238,16 +236,18 @@ fn rejects_invalid_program_boundaries() {
     let memory_config = MemoryConfig::default();
     let (program, mut history) = mixed_history();
     history.program[0].pc = 2;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("instruction-aligned"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("instruction-aligned")
+    );
 
     let terminate =
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
     let phantom = Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program = Program::<BabyBear>::new_without_debug_infos(&[terminate, phantom], 0);
+    let program = Program::new_without_debug_infos(&[terminate, phantom], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -261,18 +261,20 @@ fn rejects_invalid_program_boundaries() {
         ],
         ..Default::default()
     };
-    assert!(Postflight::new(&program, &history, &memory_config, Some(0))
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("duplicate the sentinel"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, Some(0))
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("duplicate the sentinel")
+    );
 }
 
 #[test]
 fn derives_boundary_frequencies_and_mixed_touched_memory() {
     let (program, history) = mixed_history();
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight = Postflight::<BabyBear>::new(&program, &history, &memory_config, None).unwrap();
 
     assert_eq!(postflight.from_state(), ExecutionState::new(0u32, 1u32));
     assert_eq!(postflight.to_state(), ExecutionState::new(4u32, 5u32));
@@ -337,7 +339,7 @@ fn retains_a_terminated_boundary_and_frequency() {
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, exit_code as usize, 0, 0],
     );
-    let program = Program::<BabyBear>::new_without_debug_infos(&[terminate], 0);
+    let program = Program::new_without_debug_infos(&[terminate], 0);
     let boundary = PreflightProgramEvent {
         pc: 0,
         timestamp: 1,
@@ -347,7 +349,8 @@ fn retains_a_terminated_boundary_and_frequency() {
         ..Default::default()
     };
     let memory_config = MemoryConfig::default();
-    let postflight = Postflight::new(&program, &history, &memory_config, Some(exit_code)).unwrap();
+    let postflight =
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, Some(exit_code)).unwrap();
 
     assert_eq!(postflight.from_state(), ExecutionState::new(0u32, 1u32));
     assert_eq!(postflight.to_state(), ExecutionState::new(0u32, 1u32));
@@ -355,14 +358,35 @@ fn retains_a_terminated_boundary_and_frequency() {
     assert_eq!(postflight.filtered_exec_frequencies(), [1]);
 }
 
+#[test]
+fn rejects_negative_terminate_exit_code() {
+    let terminate = Instruction {
+        opcode: SystemOpcode::TERMINATE.global_opcode(),
+        c: InstructionOperand::from_i32(-1),
+        ..Default::default()
+    };
+    let program = Program::new_without_debug_infos(&[terminate], 0);
+    let boundary = PreflightProgramEvent {
+        pc: 0,
+        timestamp: 1,
+    };
+    let history = PreflightHistory {
+        program: vec![boundary, boundary],
+        ..Default::default()
+    };
+
+    let error =
+        Postflight::<BabyBear>::new(&program, &history, &MemoryConfig::default(), Some(u32::MAX))
+            .err()
+            .unwrap();
+    assert!(error.to_string().contains("must be non-negative"));
+}
+
 #[cfg(feature = "metrics")]
 #[test]
 fn derives_opcode_counts_from_validated_history() {
     let phantom = Instruction::from_usize(SystemOpcode::PHANTOM.global_opcode(), [0, 0, 0, 0, 0]);
-    let program = Program::<BabyBear>::new_without_debug_infos(
-        &[phantom.clone(), phantom.clone(), phantom],
-        0,
-    );
+    let program = Program::new_without_debug_infos(&[phantom.clone(), phantom.clone(), phantom], 0);
     let history = PreflightHistory {
         program: vec![
             PreflightProgramEvent {
@@ -380,7 +404,8 @@ fn derives_opcode_counts_from_validated_history() {
         ],
         ..Default::default()
     };
-    let postflight = Postflight::new(&program, &history, &MemoryConfig::default(), None).unwrap();
+    let postflight =
+        Postflight::<BabyBear>::new(&program, &history, &MemoryConfig::default(), None).unwrap();
 
     assert_eq!(
         postflight.executed_opcodes().collect::<Vec<_>>(),
@@ -398,58 +423,70 @@ fn rejects_invalid_memory_domains_and_field_sidecars() {
 
     let (program, mut history) = mixed_history();
     history.memory.accesses[0].pointer = 1;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("misaligned"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("misaligned")
+    );
 
     let (program, mut history) = mixed_history();
     history.memory.accesses[0].address_space_and_kind = PUBLIC_VALUES_AS;
     history.memory.accesses[0].value = encode_u8_block([1, 2, 3, 4]);
     history.memory.accesses[0].value[2] = 1;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("u8 memory event has nonzero padding"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("u8 memory event has nonzero padding")
+    );
 
     let (program, mut history) = mixed_history();
     history.memory.initial_writes[0].address_space = PUBLIC_VALUES_AS;
     history.memory.initial_writes[0].initial_value = encode_u8_block([1, 2, 3, 4]);
     history.memory.initial_writes[0].initial_value[3] = 1;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("u8 initial-write seed has nonzero padding"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("u8 initial-write seed has nonzero padding")
+    );
 
     let (program, mut history) = mixed_history();
     history.memory.accesses[2].value = compact_reference(1);
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("dense ordered"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("dense ordered")
+    );
 
     let (program, mut history) = mixed_history();
     history.memory.field_values[0].values[0] = BabyBear::ORDER_U32;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("non-canonical"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("non-canonical")
+    );
 
     let (program, mut history) = mixed_history();
     history.program[1].timestamp = 1 << memory_config.timestamp_max_bits;
-    assert!(Postflight::new(&program, &history, &memory_config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("timestamp exceeds"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &memory_config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("timestamp exceeds")
+    );
 
     let (program, history) = mixed_history();
-    let postflight = Postflight::new(&program, &history, &memory_config, None).unwrap();
+    let postflight = Postflight::<BabyBear>::new(&program, &history, &memory_config, None).unwrap();
     let step = postflight.steps(SystemOpcode::PHANTOM.global_opcode())[0];
     assert!(postflight
         .replay(step)
@@ -513,9 +550,11 @@ fn rejects_invalid_memory_chronology() {
 
     let (program, mut history) = mixed_history();
     history.memory.accesses[1].timestamp = history.memory.accesses[0].timestamp;
-    assert!(Postflight::new(&program, &history, &config, None)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("not strictly increasing"));
+    assert!(
+        Postflight::<BabyBear>::new(&program, &history, &config, None)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("not strictly increasing")
+    );
 }

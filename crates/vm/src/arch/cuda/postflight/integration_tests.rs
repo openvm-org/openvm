@@ -584,7 +584,7 @@ fn gpu_chronology_rejects_partial_or_noncanonical_field_values() {
 #[test]
 fn gpu_program_rejects_memory_configs_outside_the_compact_key_abi() {
     let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
-    let program = Program::<BabyBear>::from_instructions(&[]);
+    let program = Program::from_instructions(&[]);
     let assert_invalid = |config: &MemoryConfig| {
         assert!(matches!(
             GpuPostflightProgram::upload(&program, config, &device_ctx),
@@ -670,7 +670,7 @@ fn gpu_program_index_matches_cpu_oracle_and_preserves_order() {
         ..Default::default()
     };
     let endpoint = PreflightEndpoint::Terminated;
-    let cpu_program = Program::<BabyBear>::new_without_debug_infos(
+    let cpu_program = Program::new_without_debug_infos(
         &[
             Instruction::from_usize(VmOpcode::from_usize(100), [0; 5]),
             Instruction::from_usize(VmOpcode::from_usize(200), [0; 5]),
@@ -679,7 +679,8 @@ fn gpu_program_index_matches_cpu_oracle_and_preserves_order() {
         0,
     );
     let expected =
-        Postflight::new(&cpu_program, &history, &MemoryConfig::default(), Some(0)).unwrap();
+        Postflight::<CudaField>::new(&cpu_program, &history, &MemoryConfig::default(), Some(0))
+            .unwrap();
     let actual = gpu_plan(&program, &history, endpoint).unwrap();
     let actual_steps = actual.steps_host().unwrap();
     let expected_steps = expected

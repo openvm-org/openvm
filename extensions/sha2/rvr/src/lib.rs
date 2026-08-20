@@ -4,7 +4,8 @@
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
 use openvm_instructions::{
-    riscv::{NUM_REGISTERS, REGISTER_BYTES},
+    instruction::Instruction,
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha512Config};
@@ -14,7 +15,7 @@ use rvr_openvm_ir::{
 };
 use rvr_openvm_lift::{
     decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
-    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
 };
 
 // SHA-512 has three independent ranges; its largest range is the 128-byte block.
@@ -166,13 +167,22 @@ impl Sha2Extension {
 }
 
 impl RvrExtension for Sha2Extension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
+        let is_sha256 = match opcode {
+            opcode if opcode == Sha2Opcode::SHA256.global_opcode_usize() => true,
+            opcode if opcode == Sha2Opcode::SHA512.global_opcode_usize() => false,
+            _ => return None,
+        };
 
-        if opcode == Sha2Opcode::SHA256.global_opcode_usize() {
-            let dst_ptr_reg = decode_reg(insn.a);
-            let state_ptr_reg = decode_reg(insn.b);
-            let input_ptr_reg = decode_reg(insn.c);
+        if insn.d.as_u32() != REGISTER_AS || insn.e.as_u32() != MEMORY_AS {
+            return None;
+        }
+
+        if is_sha256 {
+            let dst_ptr_reg = decode_reg(insn.a.as_u32());
+            let state_ptr_reg = decode_reg(insn.b.as_u32());
+            let input_ptr_reg = decode_reg(insn.c.as_u32());
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(Sha256Instr {
@@ -185,23 +195,19 @@ impl RvrExtension for Sha2Extension {
             }));
         }
 
-        if opcode == Sha2Opcode::SHA512.global_opcode_usize() {
-            let dst_ptr_reg = decode_reg(insn.a);
-            let state_ptr_reg = decode_reg(insn.b);
-            let input_ptr_reg = decode_reg(insn.c);
-            return Some(LiftedInstr::Body(InstrAt {
-                pc,
-                instr: Box::new(Sha512Instr {
-                    dst_ptr_reg,
-                    state_ptr_reg,
-                    input_ptr_reg,
-                    block_hasher_chip_idx: self.sha512_block_hasher_chip_idx,
-                }),
-                source_loc: None,
-            }));
-        }
-
-        None
+        let dst_ptr_reg = decode_reg(insn.a.as_u32());
+        let state_ptr_reg = decode_reg(insn.b.as_u32());
+        let input_ptr_reg = decode_reg(insn.c.as_u32());
+        Some(LiftedInstr::Body(InstrAt {
+            pc,
+            instr: Box::new(Sha512Instr {
+                dst_ptr_reg,
+                state_ptr_reg,
+                input_ptr_reg,
+                block_hasher_chip_idx: self.sha512_block_hasher_chip_idx,
+            }),
+            source_loc: None,
+        }))
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
@@ -368,6 +374,26 @@ mod tests {
         assert_eq!(replay_values.len(), expected_replay_values);
         for (index, operation) in replay_values.into_iter().enumerate() {
             assert!(operation.contains(&format!("+ {}ull", index * size_of::<u64>())));
+        }
+    }
+
+    #[test]
+    fn rejects_wrong_address_spaces() {
+        let extension = Sha2Extension::new(None).unwrap();
+        for opcode in [Sha2Opcode::SHA256, Sha2Opcode::SHA512] {
+            let valid = Instruction::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(extension.try_lift(&valid, 0x100).is_some());
+
+            for (d, e) in [(MEMORY_AS, MEMORY_AS), (REGISTER_AS, REGISTER_AS)] {
+                let invalid = Instruction::from_usize(
+                    opcode.global_opcode(),
+                    [8, 16, 24, d as usize, e as usize],
+                );
+                assert!(extension.try_lift(&invalid, 0x100).is_none());
+            }
         }
     }
 

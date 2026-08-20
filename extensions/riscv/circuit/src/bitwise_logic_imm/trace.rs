@@ -45,7 +45,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(local_opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-            let immediate = postflight.instruction(step).c.as_canonical_u32();
+            let immediate = postflight.instruction(step).c.as_u32();
             let c = imm_to_bytes(immediate);
             let (b, a) = BaseAluImmAdapterFiller::replay(
                 postflight,

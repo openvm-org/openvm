@@ -15,15 +15,12 @@ mod guest_tests {
     };
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
-        openvm_stark_backend::SystemParams, p3_baby_bear::BabyBear,
+        config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine, openvm_stark_backend::SystemParams,
     };
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
     use crate::guest_tests::ecdsa_config::EcdsaBuilder;
-
-    type F = BabyBear;
 
     #[cfg(test)]
     fn test_rv64weierstrass_config(curves: Vec<CurveConfig>) -> Rv64WeierstrassConfig {
@@ -39,7 +36,7 @@ mod guest_tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "add", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -57,7 +54,7 @@ mod guest_tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "mul", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -78,7 +75,7 @@ mod guest_tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -180,7 +177,7 @@ mod guest_tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "ecdsa", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -212,7 +209,7 @@ mod guest_tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)

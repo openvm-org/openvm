@@ -77,7 +77,7 @@ fn create_harness(
     )
 }
 
-fn reveal_instruction(src_ptr: usize, base_ptr: usize, imm: i16) -> Instruction<F> {
+fn reveal_instruction(src_ptr: usize, base_ptr: usize, imm: i16) -> Instruction {
     Instruction::from_usize(
         RevealOpcode::REVEAL.global_opcode(),
         [

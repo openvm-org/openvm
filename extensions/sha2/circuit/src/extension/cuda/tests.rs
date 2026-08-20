@@ -5,6 +5,7 @@ use openvm_circuit::{
     },
     utils::{test_gpu_engine, test_system_config},
 };
+use openvm_cuda_backend::prelude::F;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
@@ -15,7 +16,6 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_sha2_transpiler::Sha2Opcode;
 use openvm_stark_backend::StarkEngine;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rvr_state::{
     PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
 };
@@ -23,8 +23,6 @@ use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
 use super::{Sha2PreflightGpuTracegen, Sha2Rv64GpuBuilder};
 use crate::Sha2Rv64Config;
-
-type F = BabyBear;
 
 const DST_PTR: u32 = 0x1000;
 const STATE_PTR: u32 = 0x2000;
@@ -134,9 +132,9 @@ fn sha_results(state: &[u8; 64], input: &[u8; 128]) -> ([u8; 32], [u8; 64]) {
     (result256, result512)
 }
 
-fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, PreflightHistory) {
+fn fixture(corrupt_sha256_register_event: bool) -> (Program, VmExe, PreflightHistory) {
     let instructions = [
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             BaseAluImmOpcode::ADDI.global_opcode(),
             [
                 reg(4) as usize,
@@ -146,7 +144,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
                 IMM_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             Sha2Opcode::SHA256.global_opcode(),
             [
                 reg(1) as usize,
@@ -156,7 +154,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
                 MEMORY_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(
+        Instruction::from_usize(
             Sha2Opcode::SHA512.global_opcode(),
             [
                 reg(1) as usize,
@@ -166,7 +164,7 @@ fn fixture(corrupt_sha256_register_event: bool) -> (Program<F>, VmExe<F>, Prefli
                 MEMORY_AS as usize,
             ],
         ),
-        Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
     let state = std::array::from_fn::<_, 64, _>(|i| (i as u8).wrapping_mul(11).wrapping_add(5));
@@ -255,7 +253,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let checkpoint = executor.preflight_instance(&exe).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -294,7 +292,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corruption() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let state = executor
         .interpreter_instance(&exe)
         .unwrap()
@@ -334,7 +332,7 @@ fn mixed_rv64_sha_manual_transcript_rejects_corrupt_outputs() {
         system: test_system_config(),
         ..Default::default()
     };
-    let executor = VmExecutor::new(config.clone()).unwrap();
+    let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
     let state = executor
         .interpreter_instance(&exe)
         .unwrap()

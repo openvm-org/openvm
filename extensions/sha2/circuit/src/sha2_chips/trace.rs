@@ -39,10 +39,10 @@ where
 {
     let instruction = postflight.instruction(step);
     if instruction.opcode != C::OPCODE.global_opcode()
-        || instruction.d.as_canonical_u32() != REGISTER_AS
-        || instruction.e.as_canonical_u32() != MEMORY_AS
-        || instruction.f.as_canonical_u32() != 0
-        || instruction.g.as_canonical_u32() != 0
+        || instruction.d.as_u32() != REGISTER_AS
+        || instruction.e.as_u32() != MEMORY_AS
+        || instruction.f.as_u32() != 0
+        || instruction.g.as_u32() != 0
     {
         return Err(PostflightError::new(
             "SHA-2 instruction has invalid opcode or address spaces",
@@ -50,9 +50,9 @@ where
     }
 
     let register_ptrs = [
-        instruction.a.as_canonical_u32(),
-        instruction.b.as_canonical_u32(),
-        instruction.c.as_canonical_u32(),
+        instruction.a.as_u32(),
+        instruction.b.as_u32(),
+        instruction.c.as_u32(),
     ];
     if register_ptrs.iter().any(|&ptr| {
         ptr as usize >= NUM_REGISTERS * REGISTER_NUM_LIMBS

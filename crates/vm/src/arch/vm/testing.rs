@@ -14,7 +14,7 @@ where
     /// Builds the interpreter preflight backend for differential tests.
     pub fn test_preflight_interpreter_instance(
         &self,
-        exe: &VmExe<F>,
+        exe: &VmExe,
     ) -> Result<InterpretedInstance<'_, PreflightCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =

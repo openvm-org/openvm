@@ -136,14 +136,14 @@ fn encode_field_inputs(values: &[BigUint], num_limbs: usize) -> Vec<u8> {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
-    instruction: Instruction<F>,
+    instruction: Instruction,
     rs_ptrs: [u32; NUM_READS],
     rd_ptr: u32,
     rs_vals: [u32; NUM_READS],
     rd_val: u32,
     input_bytes: &[u8],
     output_bytes: &[u8],
-) -> (Program<F>, PreflightHistory) {
+) -> (Program, PreflightHistory) {
     let bytes_per_value = BLOCKS * MEMORY_BLOCK_BYTES;
     assert_eq!(input_bytes.len(), NUM_READS * bytes_per_value);
     assert_eq!(output_bytes.len(), bytes_per_value);
@@ -229,10 +229,10 @@ fn make_vec_heap_history<const NUM_READS: usize, const BLOCKS: usize>(
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn repeat_vec_heap_history(
-    instruction: Instruction<F>,
+    instruction: Instruction,
     history: PreflightHistory,
     repetitions: usize,
-) -> (Program<F>, PreflightHistory) {
+) -> (Program, PreflightHistory) {
     assert!(repetitions > 0);
     let first_timestamp = history.program[0].timestamp;
     let timestamp_step = history.program[1].timestamp - first_timestamp;
@@ -368,11 +368,11 @@ fn gpu_range_counts(tester: &GpuChipTestBuilder) -> Vec<u32> {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn combine_two_vec_heap_histories(
-    first_instruction: Instruction<F>,
+    first_instruction: Instruction,
     mut first: PreflightHistory,
-    second_instruction: Instruction<F>,
+    second_instruction: Instruction,
     mut second: PreflightHistory,
-) -> (Program<F>, PreflightHistory) {
+) -> (Program, PreflightHistory) {
     let second_start = first.program[1].timestamp;
     let timestamp_shift = second_start - second.program[0].timestamp;
     for event in &mut second.memory.accesses {
@@ -530,14 +530,14 @@ mod ec_addne_tests {
     fn set_and_execute_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut EcAddNeExecutor<BLOCKS>,
-        preflight: &mut TestPreflight<F>,
+        preflight: &mut TestPreflight,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
         p1: Option<(BigUint, BigUint)>,
         p2: Option<(BigUint, BigUint)>,
-    ) -> Instruction<F> {
+    ) -> Instruction {
         let (x1, y1, x2, y2, op_local) = if is_setup {
             (
                 modulus.clone(),
@@ -800,7 +800,7 @@ mod ec_addne_tests {
 
         history.memory.accesses[0].value[2] = 0;
         history.memory.accesses[0].pointer += 1;
-        let error = Postflight::new_for_test(&execution.program, &history, &memory_config)
+        let error = Postflight::<F>::new_for_test(&execution.program, &history, &memory_config)
             .err()
             .expect("misaligned memory event must be rejected");
         assert!(error.to_string().contains("misaligned"), "{error}");
@@ -1198,7 +1198,7 @@ mod ec_addne_tests {
             crate::SECP256K1_CONFIG.clone(),
         ]);
         *vm_config.as_mut() = test_system_config();
-        let executor = VmExecutor::new(vm_config.clone()).unwrap();
+        let executor = VmExecutor::<F, _>::new(vm_config.clone()).unwrap();
         let state = executor
             .interpreter_instance(&exe)
             .unwrap()
@@ -1471,7 +1471,7 @@ mod ec_double_tests {
     fn set_and_execute_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize>(
         tester: &mut impl TestBuilder<F>,
         executor: &mut EcDoubleExecutor<BLOCKS>,
-        preflight: &mut TestPreflight<F>,
+        preflight: &mut TestPreflight,
         rng: &mut StdRng,
         modulus: &BigUint,
         a_biguint: &BigUint,
@@ -1479,7 +1479,7 @@ mod ec_double_tests {
         offset: usize,
         x: Option<BigUint>,
         y: Option<BigUint>,
-    ) -> Instruction<F> {
+    ) -> Instruction {
         let (x1, y1, op_local) = if is_setup {
             (
                 modulus.clone(),

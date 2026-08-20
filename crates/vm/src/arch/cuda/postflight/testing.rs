@@ -1,3 +1,5 @@
+use openvm_cuda_backend::prelude::F as CudaField;
+
 use super::*;
 use crate::arch::Postflight;
 
@@ -7,33 +9,35 @@ impl GpuPostflightProgram {
     /// Production interpreter proving derives chronology on the device from
     /// the segment-start memory image. Tests already carry exact first-write
     /// seeds, so they can upload the validated predecessor index directly.
-    pub fn upload_history_for_test<F: PrimeField32>(
+    pub fn upload_history_for_test(
         &self,
-        program: &Program<F>,
+        program: &Program,
         history: &PreflightHistory,
         exit_code: Option<u32>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let postflight = Postflight::new(program, history, &self.memory_config, exit_code)
-            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        let postflight =
+            Postflight::<CudaField>::new(program, history, &self.memory_config, exit_code)
+                .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         self.upload_validated_history_for_test(history, postflight)
     }
 
     /// Uploads an isolated chip fixture whose final sentinel need not resolve
     /// to another instruction in the fixture program.
-    pub fn upload_isolated_history_for_test<F: PrimeField32>(
+    pub fn upload_isolated_history_for_test(
         &self,
-        program: &Program<F>,
+        program: &Program,
         history: &PreflightHistory,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
-        let postflight = Postflight::new_for_test(program, history, &self.memory_config)
-            .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
+        let postflight =
+            Postflight::<CudaField>::new_for_test(program, history, &self.memory_config)
+                .map_err(|error| GpuPostflightError::InvalidTranscript(error.to_string()))?;
         self.upload_validated_history_for_test(history, postflight)
     }
 
-    fn upload_validated_history_for_test<F: PrimeField32>(
+    fn upload_validated_history_for_test(
         &self,
         history: &PreflightHistory,
-        postflight: Postflight<'_, F>,
+        postflight: Postflight<'_, CudaField>,
     ) -> Result<(GpuPostflightTranscript, GpuPostflightPlan), GpuPostflightError> {
         let replay_steps = postflight
             .replay_steps_for_test()
@@ -235,7 +239,7 @@ impl GpuPostflightPlan {
             .collect())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "rvr"))]
     pub(super) const fn connector_boundary_for_test(&self) -> GpuPostflightBoundary {
         let (from, to, exit_code) = self.connector_boundary();
         GpuPostflightBoundary::new(from, to, exit_code)
@@ -255,7 +259,7 @@ pub type ChronologyOutputForTest = (
     Vec<PreflightFieldBlock>,
     Vec<PreflightFieldBlock>,
     Vec<u32>,
-    Vec<TouchedBlock<BabyBear>>,
+    Vec<TouchedBlock<CudaField>>,
 );
 
 #[cfg(all(test, feature = "rvr"))]

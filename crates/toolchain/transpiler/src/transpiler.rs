@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use eyre::Report;
 use openvm_instructions::{exe::SparseMemoryImage, instruction::Instruction};
-use openvm_stark_backend::p3_field::PrimeField32;
 use thiserror::Error;
 
 use crate::{util::unimp, TranspilerExtension, TranspilerOutput};
@@ -10,11 +9,11 @@ use crate::{util::unimp, TranspilerExtension, TranspilerOutput};
 /// Collection of [`TranspilerExtension`]s.
 /// The transpiler can be configured to transpile any ELF in 32-bit chunks.
 #[derive(Clone)]
-pub struct Transpiler<F> {
-    processors: Vec<Rc<dyn TranspilerExtension<F>>>,
+pub struct Transpiler {
+    processors: Vec<Rc<dyn TranspilerExtension>>,
 }
 
-impl<F: PrimeField32> Default for Transpiler<F> {
+impl Default for Transpiler {
     fn default() -> Self {
         Self::new()
     }
@@ -34,18 +33,18 @@ pub enum TranspilerError {
     },
 }
 
-impl<F: PrimeField32> Transpiler<F> {
+impl Transpiler {
     pub fn new() -> Self {
         Self { processors: vec![] }
     }
 
-    pub fn with_processor(self, proc: Rc<dyn TranspilerExtension<F>>) -> Self {
+    pub fn with_processor(self, proc: Rc<dyn TranspilerExtension>) -> Self {
         let mut procs = self.processors;
         procs.push(proc);
         Self { processors: procs }
     }
 
-    pub fn with_extension<T: TranspilerExtension<F> + 'static>(self, ext: T) -> Self {
+    pub fn with_extension<T: TranspilerExtension + 'static>(self, ext: T) -> Self {
         self.with_processor(Rc::new(ext))
     }
 
@@ -58,7 +57,7 @@ impl<F: PrimeField32> Transpiler<F> {
     pub fn transpile(
         &self,
         instructions_u32: &[u32],
-    ) -> Result<Vec<Option<Instruction<F>>>, TranspilerError> {
+    ) -> Result<Vec<Option<Instruction>>, TranspilerError> {
         let mut instructions = Vec::new();
         let mut ptr = 0;
         while ptr < instructions_u32.len() {

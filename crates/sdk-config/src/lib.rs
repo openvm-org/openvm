@@ -28,7 +28,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
-use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::RvrExtensions;
@@ -190,12 +189,12 @@ impl SdkVmConfig {
     }
 }
 
-pub trait TranspilerConfig<F> {
-    fn transpiler(&self) -> Transpiler<F>;
+pub trait TranspilerConfig {
+    fn transpiler(&self) -> Transpiler;
 }
 
-impl TranspilerConfig<F> for SdkVmConfig {
-    fn transpiler(&self) -> Transpiler<F> {
+impl TranspilerConfig for SdkVmConfig {
+    fn transpiler(&self) -> Transpiler {
         let mut transpiler = Transpiler::default();
         if self.rv64i.is_some() {
             transpiler = transpiler.with_extension(Rv64ITranspilerExtension);

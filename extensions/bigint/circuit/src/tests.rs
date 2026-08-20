@@ -329,7 +329,7 @@ fn blt_branch_fn(
 fn set_and_execute_rand<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     opcode: usize,
     branch_fn: Option<fn(usize, &[u32; INT256_NUM_U8_LIMBS], &[u32; INT256_NUM_U8_LIMBS]) -> bool>,

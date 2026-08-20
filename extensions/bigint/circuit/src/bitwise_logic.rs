@@ -61,7 +61,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for BitwiseLogic256Executor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -77,7 +77,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for BitwiseLogic256Executor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -100,7 +100,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BitwiseLogic256Executor 
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -118,7 +118,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for BitwiseLogic256Executor 
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -177,10 +177,10 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
 }
 
 impl BitwiseLogic256Executor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut BitwiseLogicPreCompute,
     ) -> Result<BaseAluOpcode, StaticProgramError> {
         let Instruction {
@@ -192,14 +192,14 @@ impl BitwiseLogic256Executor {
             e,
             ..
         } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BitwiseLogicPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
         let local_opcode =
             BaseAluOpcode::from_usize(opcode.local_opcode_idx(BaseAlu256Opcode::CLASS_OFFSET));

@@ -94,7 +94,7 @@ where
     E: Executor<F> + 'static,
 {
     pub fn new(
-        exe: &VmExe<F>,
+        exe: &VmExe,
         inventory: Arc<ExecutorInventory<E>>,
     ) -> Result<Self, StaticProgramError> {
         let inventory_ref = unsafe {
@@ -104,7 +104,7 @@ where
             // - moving the Arc does not move its allocation.
             &*Arc::as_ptr(&inventory)
         };
-        let inner = InterpretedInstance::new(inventory_ref, exe)?;
+        let inner = InterpretedInstance::new::<F, _>(inventory_ref, exe)?;
         Ok(Self {
             inner,
             _inventory: inventory,

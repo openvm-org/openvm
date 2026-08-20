@@ -28,8 +28,8 @@ use crate::OPENVM_VERSION;
 #[derive(From)]
 pub enum ExecutableFormat {
     Elf(Elf),
-    VmExe(VmExe<crate::F>),
-    SharedVmExe(Arc<VmExe<crate::F>>),
+    VmExe(VmExe),
+    SharedVmExe(Arc<VmExe>),
 }
 
 impl<'a> From<&'a [u8]> for ExecutableFormat {

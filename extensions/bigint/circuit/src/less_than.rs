@@ -60,7 +60,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for LessThan256Executor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -75,7 +75,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for LessThan256Executor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -97,7 +97,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for LessThan256Executor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -114,7 +114,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for LessThan256Executor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -178,10 +178,10 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
 }
 
 impl LessThan256Executor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut LessThanPreCompute,
     ) -> Result<LessThanOpcode, StaticProgramError> {
         let Instruction {
@@ -193,14 +193,14 @@ impl LessThan256Executor {
             e,
             ..
         } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = LessThanPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
         let local_opcode =
             LessThanOpcode::from_usize(opcode.local_opcode_idx(LessThan256Opcode::CLASS_OFFSET));

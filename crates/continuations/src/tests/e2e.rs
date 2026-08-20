@@ -331,7 +331,7 @@ fn test_deferral_e2e() -> Result<()> {
     )?;
     let exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension)
