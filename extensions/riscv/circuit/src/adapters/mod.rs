@@ -9,7 +9,10 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
-use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
+use openvm_instructions::{
+    instruction::InstructionOperand,
+    riscv::{MEMORY_AS, REGISTER_AS},
+};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -204,6 +207,16 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
+
+/// Decodes a signed instruction immediate and checks that it fits the requested
+/// RISC-V immediate width.
+#[inline]
+pub fn decode_signed_instruction_imm(operand: InstructionOperand, bits: usize) -> Option<i32> {
+    let value = operand.as_i32();
+    let shift = u32::try_from(bits.checked_sub(1)?).ok()?;
+    let bound = 1i32.checked_shl(shift)?;
+    (-bound..bound).contains(&value).then_some(value)
+}
 
 /// Composes an RV64 register byte-limb array into a `u64`.
 pub fn limbs_to_u64<F: PrimeField32>(limbs: [F; REGISTER_NUM_LIMBS]) -> u64 {
@@ -527,8 +540,40 @@ pub fn read_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
 }
 
 #[cfg(test)]
-mod pointer_tests {
-    use super::{checked_register_u16_pointer, validate_memory_block_byte_ptr};
+mod tests {
+    use openvm_instructions::instruction::InstructionOperand;
+
+    use super::{
+        checked_register_u16_pointer, decode_signed_instruction_imm,
+        validate_memory_block_byte_ptr, RV_B_TYPE_IMM_BITS,
+    };
+
+    #[test]
+    fn signed_branch_immediate_rejects_out_of_range_values() {
+        let bound = 1i32 << (RV_B_TYPE_IMM_BITS - 1);
+        assert_eq!(
+            decode_signed_instruction_imm(InstructionOperand::from_i32(-bound), RV_B_TYPE_IMM_BITS,),
+            Some(-bound)
+        );
+        assert_eq!(
+            decode_signed_instruction_imm(
+                InstructionOperand::from_i32(bound - 1),
+                RV_B_TYPE_IMM_BITS,
+            ),
+            Some(bound - 1)
+        );
+        assert_eq!(
+            decode_signed_instruction_imm(InstructionOperand::from_i32(bound), RV_B_TYPE_IMM_BITS,),
+            None
+        );
+        assert_eq!(
+            decode_signed_instruction_imm(
+                InstructionOperand::from_i32(InstructionOperand::MAX),
+                RV_B_TYPE_IMM_BITS,
+            ),
+            None
+        );
+    }
 
     #[test]
     fn memory_block_pointer_uses_the_eight_byte_equipartition() {

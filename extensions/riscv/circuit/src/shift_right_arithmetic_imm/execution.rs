@@ -28,10 +28,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
     ShiftRightArithmeticImmCoreExecutor<NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut ShiftRightArithmeticImmPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -43,18 +43,18 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
             e,
             ..
         } = inst;
-        let shamt = c.as_canonical_u32();
+        let shamt = c.as_u32();
         if opcode.local_opcode_idx(self.offset) != ShiftImmOpcode::SRAI as usize
-            || d.as_canonical_u32() != REGISTER_AS
-            || e.as_canonical_u32() != IMM_AS
+            || d.as_u32() != REGISTER_AS
+            || e.as_u32() != IMM_AS
             || shamt >= (NUM_LIMBS * LIMB_BITS) as u32
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = ShiftRightArithmeticImmPreCompute {
             shamt: shamt as u8,
-            rd_ptr: a.as_canonical_u32() as u8,
-            rs1_ptr: b.as_canonical_u32() as u8,
+            rd_ptr: a.as_u32() as u8,
+            rs1_ptr: b.as_u32() as u8,
         };
         Ok(())
     }
@@ -81,7 +81,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticImmPreCompute = data.borrow_mut();
@@ -93,7 +93,7 @@ where
     fn handler<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticImmPreCompute = data.borrow_mut();
@@ -116,7 +116,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticImmPreCompute> = data.borrow_mut();
@@ -130,7 +130,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticImmPreCompute> = data.borrow_mut();

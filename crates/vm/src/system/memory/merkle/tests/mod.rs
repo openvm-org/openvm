@@ -935,7 +935,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     // context. It touches no memory, so the boundary AIR is empty and the
     // merkle/compression/memory buses are left to {merkle, poseidon2}, which we
     // overwrite below.
-    let program = Program::from_instructions(&[Instruction::<BabyBear>::from_isize(
+    let program = Program::from_instructions(&[Instruction::from_isize(
         TERMINATE.global_opcode(),
         0,
         0,
@@ -943,7 +943,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         0,
         0,
     )]);
-    let vm_exe: VmExe<BabyBear> = program.into();
+    let vm_exe: VmExe = program.into();
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));

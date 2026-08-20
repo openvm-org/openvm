@@ -1,11 +1,12 @@
-use std::marker::PhantomData;
-
 use openvm_decoder::{
     instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
     InstructionProcessor,
 };
-use openvm_instructions::{instruction::Instruction, riscv::REGISTER_NUM_LIMBS, *};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_instructions::{
+    instruction::{Instruction, InstructionOperand},
+    riscv::REGISTER_NUM_LIMBS,
+    *,
+};
 use openvm_transpiler::util::{
     from_b_type, from_i_type, from_i_type_shamt, from_j_type, from_load, from_r_type, from_s_type,
     from_u_type, nop,
@@ -19,10 +20,10 @@ use crate::{
 };
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
-pub(crate) struct InstructionTranspiler<F>(pub PhantomData<F>);
+pub(crate) struct InstructionTranspiler;
 
-impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
-    type InstructionResult = Instruction<F>;
+impl InstructionProcessor for InstructionTranspiler {
+    type InstructionResult = Instruction;
 
     fn process_add(&mut self, dec_insn: RType) -> Self::InstructionResult {
         from_r_type(
@@ -264,13 +265,13 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
         Instruction::new(
             JalrOpcode::JALR.global_opcode(),
-            F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
-            F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
-            F::from_u32((dec_insn.imm as u32) & 0xffff),
-            F::ONE,
-            F::ZERO,
-            F::from_bool(dec_insn.rd != 0),
-            F::from_bool(dec_insn.imm < 0),
+            InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
+            InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
+            InstructionOperand::from_u32((dec_insn.imm as u32) & 0xffff),
+            InstructionOperand::ONE,
+            InstructionOperand::ZERO,
+            dec_insn.rd != 0,
+            dec_insn.imm < 0,
         )
     }
 
@@ -280,7 +281,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         }
         // we need to set f to 1 because this is handled by the same chip as jal
         let mut result = from_u_type(JalLuiOpcode::LUI.global_opcode().as_usize(), &dec_insn);
-        result.f = F::ONE;
+        result.f = InstructionOperand::ONE;
         result
     }
 
@@ -290,13 +291,13 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         }
         Instruction::new(
             AuipcOpcode::AUIPC.global_opcode(),
-            F::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
-            F::ZERO,
-            F::from_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
-            F::ONE, // rd is a register
-            F::ZERO,
-            F::ZERO,
-            F::ZERO,
+            InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
+            InstructionOperand::ZERO,
+            InstructionOperand::from_u32(((dec_insn.imm as u32) & 0xfffff000) >> 8),
+            InstructionOperand::ONE, // rd is a register
+            InstructionOperand::ZERO,
+            InstructionOperand::ZERO,
+            InstructionOperand::ZERO,
         )
     }
 

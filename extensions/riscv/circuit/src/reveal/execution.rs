@@ -62,10 +62,10 @@ fn checked_reveal_address(
 }
 
 impl RevealExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut RevealPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -79,17 +79,33 @@ impl RevealExecutor {
             g,
             ..
         } = inst;
-        let src_ptr = a.as_canonical_u32();
-        let base_ptr = b.as_canonical_u32();
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
+        let (
+            Some(src_ptr),
+            Some(base_ptr),
+            Some(imm),
+            Some(src_address_space),
+            Some(dst_address_space),
+            Some(is_enabled),
+            Some(imm_sign),
+        ) = (
+            a.checked_as_u32(),
+            b.checked_as_u32(),
+            c.checked_as_u32(),
+            d.checked_as_u32(),
+            e.checked_as_u32(),
+            f.checked_as_u32(),
+            g.checked_as_u32(),
+        )
+        else {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        };
         if opcode.local_opcode_idx(self.offset) != RevealOpcode::REVEAL as usize
             || !is_valid_register_pointer(src_ptr)
             || !is_valid_register_pointer(base_ptr)
             || imm > u16::MAX as u32
-            || d.as_canonical_u32() != REGISTER_AS
-            || e.as_canonical_u32() != PUBLIC_VALUES_AS
-            || !f.is_one()
+            || src_address_space != REGISTER_AS
+            || dst_address_space != PUBLIC_VALUES_AS
+            || is_enabled != 1
             || imm_sign > 1
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
@@ -116,7 +132,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for RevealExecutor {
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut RevealPreCompute = data.borrow_mut();
@@ -128,7 +144,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for RevealExecutor {
     fn handler<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let pre_compute: &mut RevealPreCompute = data.borrow_mut();
@@ -147,7 +163,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for RevealExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<RevealPreCompute> = data.borrow_mut();
@@ -161,7 +177,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for RevealExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<RevealPreCompute> = data.borrow_mut();
@@ -226,9 +242,13 @@ unsafe fn execute_e2_impl<Ctx: MeteredExecutionCtxTrait>(
 
 #[cfg(test)]
 mod tests {
-    use openvm_circuit::arch::ExecutionError;
+    use openvm_circuit::arch::{ExecutionError, StaticProgramError};
+    use openvm_instructions::{
+        instruction::Instruction, riscv::REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+    };
+    use openvm_riscv_transpiler::RevealOpcode;
 
-    use super::checked_reveal_address;
+    use super::{checked_reveal_address, RevealExecutor, RevealPreCompute};
 
     #[test]
     fn reveal_address_is_bounded_by_configured_public_values_capacity() {
@@ -242,5 +262,30 @@ mod tests {
             })
         ));
         assert!(checked_reveal_address(4, 0, u32::MAX, 64).is_err());
+    }
+
+    #[test]
+    fn reveal_rejects_negative_instruction_operand() {
+        let executor = RevealExecutor::new(RevealOpcode::CLASS_OFFSET);
+        let instruction = Instruction::large_from_isize(
+            RevealOpcode::REVEAL.global_opcode(),
+            8,
+            16,
+            -1,
+            REGISTER_AS as isize,
+            PUBLIC_VALUES_AS as isize,
+            1,
+            0,
+        );
+        let mut pre_compute = RevealPreCompute {
+            imm_extended: 0,
+            src_ptr: 0,
+            base_ptr: 0,
+        };
+
+        assert!(matches!(
+            executor.pre_compute_impl(4, &instruction, &mut pre_compute),
+            Err(StaticProgramError::InvalidInstruction(4))
+        ));
     }
 }

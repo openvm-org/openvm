@@ -8,7 +8,7 @@ use elf::{endian::LittleEndian, ElfBytes};
 use eyre::Result;
 use openvm_build::get_rustc_target;
 use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
-use openvm_sdk::{fs::read_object_from_file, F};
+use openvm_sdk::fs::read_object_from_file;
 
 // LLVM assigns this OS-specific type to `.llvm_bb_addr_map`:
 // https://llvm.org/docs/Extensions.html#sht-llvm-bb-addr-map-section-basic-block-address-map
@@ -166,7 +166,7 @@ fn test_multi_target_transpile_default() -> Result<()> {
     assert!(fibonacci_exe.exists());
     assert!(palindrome_exe.exists());
 
-    let exe: VmExe<F> = read_object_from_file(&fibonacci_exe)?;
+    let exe: VmExe = read_object_from_file(&fibonacci_exe)?;
     assert!(!exe.cfg_block_starts.is_empty());
     let is_instruction_pc = |pc: u32| {
         pc.checked_sub(exe.program.pc_base)

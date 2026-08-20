@@ -16,11 +16,15 @@ use openvm_circuit_primitives::{
     },
     var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::{Instruction, InstructionOperand},
+    program::PC_BITS,
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -100,7 +104,7 @@ fn create_harness(
 fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: JalLuiOpcode,
     imm: Option<i32>,
@@ -129,24 +133,18 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
             rng.random_range(0..(1u32 << 30).min(1u32 << PC_BITS))
         }
     });
-    let imm_field: F = if imm.is_negative() {
-        -F::from_u32(imm.unsigned_abs())
-    } else {
-        F::from_u32(imm.unsigned_abs())
-    };
     tester.execute_with_pc(
         executor,
         preflight,
-        &Instruction::from_usize(
+        &Instruction::new(
             opcode.global_opcode(),
-            [
-                a,
-                0,
-                imm_field.as_canonical_u32() as usize,
-                1,
-                0,
-                (a != 0) as usize,
-            ],
+            InstructionOperand::from_usize(a),
+            InstructionOperand::ZERO,
+            InstructionOperand::from_i32(imm),
+            InstructionOperand::ONE,
+            InstructionOperand::ZERO,
+            a != 0,
+            InstructionOperand::ZERO,
         ),
         initial_pc,
     );
@@ -598,9 +596,42 @@ fn run_lui_sign_extend_sanity_test() {
 #[test]
 fn get_signed_imm_test() {
     let imm: i32 = -10;
-    let imm_f: F = -F::from_u32(10);
-    let signed_imm = get_signed_imm(true, imm_f);
-    assert_eq!(signed_imm, imm);
+    let signed_imm = get_signed_imm(true, InstructionOperand::from_i32(imm));
+    assert_eq!(signed_imm, Some(imm));
+}
+
+#[test]
+fn get_signed_imm_rejects_out_of_range_values() {
+    let jal_bound = 1i32 << (RV_J_TYPE_IMM_BITS - 1);
+    assert_eq!(
+        get_signed_imm(true, InstructionOperand::from_i32(-jal_bound)),
+        Some(-jal_bound)
+    );
+    assert_eq!(
+        get_signed_imm(true, InstructionOperand::from_i32(jal_bound - 1)),
+        Some(jal_bound - 1)
+    );
+    assert_eq!(
+        get_signed_imm(true, InstructionOperand::from_i32(jal_bound)),
+        None
+    );
+    assert_eq!(
+        get_signed_imm(true, InstructionOperand::from_i32(InstructionOperand::MAX)),
+        None
+    );
+
+    assert_eq!(
+        get_signed_imm(false, InstructionOperand::from_u32((1u32 << 20) - 1),),
+        Some((1 << 20) - 1)
+    );
+    assert_eq!(
+        get_signed_imm(false, InstructionOperand::from_u32(1u32 << 20)),
+        None
+    );
+    assert_eq!(
+        get_signed_imm(false, InstructionOperand::from_i32(-1)),
+        None
+    );
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

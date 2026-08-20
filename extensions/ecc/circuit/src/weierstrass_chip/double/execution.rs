@@ -31,10 +31,10 @@ struct EcDoublePreCompute<'a> {
 }
 
 impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &'a self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut EcDoublePreCompute<'a>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
@@ -42,10 +42,10 @@ impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
         } = inst;
 
         // Validate instruction format
-        let a = a.as_canonical_u32();
-        let b = b.as_canonical_u32();
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
+        let a = a.as_u32();
+        let b = b.as_u32();
+        let d = d.as_u32();
+        let e = e.as_u32();
         if d != REGISTER_AS || e != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -139,7 +139,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -155,7 +155,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -181,7 +181,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -200,7 +200,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

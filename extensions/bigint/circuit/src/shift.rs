@@ -70,7 +70,7 @@ macro_rules! impl_shift256_executor {
             fn pre_compute<Ctx>(
                 &self,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
             where
@@ -85,7 +85,7 @@ macro_rules! impl_shift256_executor {
             fn handler<Ctx>(
                 &self,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<Handler<Ctx>, StaticProgramError>
             where
@@ -107,7 +107,7 @@ macro_rules! impl_shift256_executor {
                 &self,
                 chip_idx: usize,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
             where
@@ -124,7 +124,7 @@ macro_rules! impl_shift256_executor {
                 &self,
                 chip_idx: usize,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut [u8],
             ) -> Result<Handler<Ctx>, StaticProgramError>
             where
@@ -138,10 +138,10 @@ macro_rules! impl_shift256_executor {
         }
 
         impl $executor {
-            fn pre_compute_impl<F: PrimeField32>(
+            fn pre_compute_impl(
                 &self,
                 pc: u32,
-                inst: &Instruction<F>,
+                inst: &Instruction,
                 data: &mut ShiftPreCompute,
             ) -> Result<ShiftOpcode, StaticProgramError> {
                 let Instruction {
@@ -153,14 +153,14 @@ macro_rules! impl_shift256_executor {
                     e,
                     ..
                 } = inst;
-                let e_u32 = e.as_canonical_u32();
-                if d.as_canonical_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
+                let e_u32 = e.as_u32();
+                if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
                     return Err(StaticProgramError::InvalidInstruction(pc));
                 }
                 *data = ShiftPreCompute {
-                    a: a.as_canonical_u32() as u8,
-                    b: b.as_canonical_u32() as u8,
-                    c: c.as_canonical_u32() as u8,
+                    a: a.as_u32() as u8,
+                    b: b.as_u32() as u8,
+                    c: c.as_u32() as u8,
                 };
                 let local_opcode =
                     ShiftOpcode::from_usize(opcode.local_opcode_idx(Shift256Opcode::CLASS_OFFSET));

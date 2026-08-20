@@ -140,7 +140,7 @@ fn create_test_harness(tester: &mut VmChipTestBuilder<F>) -> TestHarness {
 fn set_and_execute_single_perm<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     opcode: KeccakfOpcode,
 ) {
@@ -284,7 +284,7 @@ fn postflight_keccakf_trace_generation_succeeds() {
         Postflight::new_for_test(&execution.program, &execution.history, &memory_config).unwrap();
 
     let actual_op = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
-    let actual_perm = generate_perm_trace_from_postflight(&perm.1, &postflight).unwrap();
+    let actual_perm = generate_perm_trace_from_postflight::<F>(&perm.1, &postflight).unwrap();
 
     assert_eq!(actual_op.height(), 1);
     assert!(!actual_perm.values.is_empty());
@@ -413,7 +413,7 @@ fn load_cuda_harness(tester: GpuChipTester, harness: CudaTestHarness) -> GpuChip
 fn cuda_set_and_execute(
     tester: &mut GpuChipTestBuilder,
     executor: &mut KeccakfExecutor,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
 ) {
     const KECCAK_STATE_BYTES: usize = 200;
@@ -543,7 +543,7 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 fn test_keccakf_preflight_replay_accepts_valid_transcript_and_rejects_corruption() {
     let buffer_reg = 8usize;
     let buffer_ptr = 0x100u32;
-    let keccakf_instruction = Instruction::<F>::from_usize(
+    let keccakf_instruction = Instruction::from_usize(
         KeccakfOpcode::KECCAKF.global_opcode(),
         [buffer_reg, 0, 0, REGISTER_AS as usize, MEMORY_AS as usize],
     );

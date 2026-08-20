@@ -9,7 +9,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm-stark-backend.workspace = true
 openvm-instructions-derive.workspace = true
 
 backtrace = { workspace = true, features = ["serde"] }
@@ -23,7 +22,6 @@ num-traits.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-p3-baby-bear.workspace = true
 bitcode.workspace = true
 rand.workspace = true
 

@@ -35,7 +35,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let (adapter_row, core_row) = row.split_at_mut(adapter_width);
             let instruction = postflight.instruction(step);
-            let immediate = instruction.c.as_canonical_u32();
+            let immediate = instruction.c.as_u32();
             let imm_low11 = (immediate & 0x7ff) as u16;
             let imm_sign = ((immediate >> 11) & 1) as u8;
             let c = imm_to_u16_limbs::<BLOCK_FE_WIDTH>(imm_low11, imm_sign);

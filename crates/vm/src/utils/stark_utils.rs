@@ -48,7 +48,7 @@ cfg_if::cfg_if! {
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
-pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
+pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe>)
 where
     VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
     VC: VmExecutionConfig<BabyBear>
@@ -65,7 +65,7 @@ where
 pub fn air_test_with_min_segments<VB, VC>(
     builder: VB,
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
+    exe: impl Into<VmExe>,
     input: impl Into<Streams>,
     min_segments: usize,
 ) -> Option<MemoryImage>
@@ -151,7 +151,7 @@ fn check_vm_state_eq(lhs: &VmState<GuestMemory>, rhs: &VmState<GuestMemory>) -> 
 #[cfg(feature = "rvr")]
 pub fn check_rvr_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
-    exe: &VmExe<Val<E::SC>>,
+    exe: &VmExe,
     input: &Streams,
 ) -> eyre::Result<()>
 where
@@ -279,7 +279,7 @@ pub fn air_test_impl<E, VB>(
     params: SystemParams,
     builder: VB,
     config: VB::VmConfig,
-    exe: impl Into<VmExe<Val<E::SC>>>,
+    exe: impl Into<VmExe>,
     input: impl Into<Streams>,
     min_segments: usize,
     debug: bool,

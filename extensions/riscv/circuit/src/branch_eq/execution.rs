@@ -12,10 +12,11 @@ use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BranchEqualCoreExecutor;
+use crate::adapters::{decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS};
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct BranchEqualPreCompute {
-    imm: isize,
+    imm: i32,
     a: u8,
     b: u8,
 }
@@ -23,10 +24,10 @@ struct BranchEqualPreCompute {
 impl<const NUM_LIMBS: usize> BranchEqualCoreExecutor<NUM_LIMBS> {
     /// Return `is_bne`, true if the local opcode is BNE.
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut BranchEqualPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
@@ -34,19 +35,15 @@ impl<const NUM_LIMBS: usize> BranchEqualCoreExecutor<NUM_LIMBS> {
             opcode, a, b, c, d, ..
         } = inst;
         let local_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let c = c.as_canonical_u32();
-        let imm = if F::ORDER_U32 - c < c {
-            -((F::ORDER_U32 - c) as isize)
-        } else {
-            c as isize
-        };
-        if d.as_canonical_u32() != REGISTER_AS {
+        let imm = decode_signed_instruction_imm(c, RV_B_TYPE_IMM_BITS)
+            .ok_or(StaticProgramError::InvalidInstruction(pc))?;
+        if d.as_u32() != REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchEqualPreCompute {
             imm,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
         };
         Ok(local_opcode == BranchEqualOpcode::BNE)
     }
@@ -80,7 +77,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
@@ -92,7 +89,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -117,7 +114,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -134,7 +131,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -155,7 +152,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
     let rs1 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.a as u32);
     let rs2 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.b as u32);
     if (rs1 == rs2) ^ IS_NE {
-        pc = (pc as isize + pre_compute.imm) as u32;
+        pc = pc.wrapping_add_signed(pre_compute.imm);
     } else {
         pc = pc.wrapping_add(DEFAULT_PC_STEP);
     }

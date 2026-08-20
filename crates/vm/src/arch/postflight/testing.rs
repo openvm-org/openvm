@@ -6,7 +6,7 @@ use crate::arch::{
 
 impl<'a, F: PrimeField32> Postflight<'a, F> {
     pub fn new_for_test(
-        program: &'a Program<F>,
+        program: &'a Program,
         history: &'a PreflightHistory,
         memory_config: &MemoryConfig,
     ) -> Result<Self, PostflightError> {

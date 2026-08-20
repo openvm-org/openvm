@@ -43,7 +43,7 @@ where
     pub fn new(
         vm_builder: VB,
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmExe<Val<SC>>>,
+        app_exe: Arc<VmExe>,
         agg_prover: Arc<AggProver>,
         deferral_setup: DeferralSetup,
     ) -> Result<Self> {

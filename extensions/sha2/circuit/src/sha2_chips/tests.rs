@@ -171,7 +171,7 @@ impl<C: Sha2Config + 'static> TestHarness<C> {
 fn set_and_execute_single_block<C: Sha2Config, E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     opcode: Sha2Opcode,
     message: Option<&[u8]>,
@@ -250,7 +250,7 @@ fn rand_sha2_single_block_test<C: Sha2Config + 'static>() {
 fn execute_postflight_fixture<C: Sha2Config>(
     tester: &mut VmChipTestBuilder<F>,
     harness: &mut Harness<C>,
-) -> Instruction<F> {
+) -> Instruction {
     let register_ptrs = [8u32, 16, 24];
     let memory_ptrs = [0x1000u32, 0x2000, 0x3000];
     for (&register_ptr, &memory_ptr) in register_ptrs.iter().zip(&memory_ptrs) {
@@ -382,7 +382,7 @@ fn rand_sha384_single_block_test() {
 fn set_and_execute_full_message<C: Sha2Config + 'static, E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     opcode: Sha2Opcode,
     message: Option<&[u8]>,

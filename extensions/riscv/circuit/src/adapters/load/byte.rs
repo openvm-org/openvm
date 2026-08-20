@@ -225,14 +225,12 @@ impl LoadByteAdapterFiller {
         compute: impl FnOnce([u16; BLOCK_FE_WIDTH], usize) -> [u16; BLOCK_FE_WIDTH],
     ) -> Result<([u16; BLOCK_FE_WIDTH], usize, [u16; BLOCK_FE_WIDTH]), PostflightError> {
         let instruction = postflight.instruction(step);
-        if instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != MEMORY_AS
-        {
+        if instruction.d.as_u32() != REGISTER_AS || instruction.e.as_u32() != MEMORY_AS {
             return Err(PostflightError::new(
                 "byte-load instruction has invalid address spaces",
             ));
         }
-        let needs_write = match instruction.f.as_canonical_u32() {
+        let needs_write = match instruction.f.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -241,7 +239,7 @@ impl LoadByteAdapterFiller {
                 ));
             }
         };
-        let imm_sign = match instruction.g.as_canonical_u32() {
+        let imm_sign = match instruction.g.as_u32() {
             0 => false,
             1 => true,
             _ => {
@@ -250,15 +248,15 @@ impl LoadByteAdapterFiller {
                 ));
             }
         };
-        let imm = instruction.c.as_canonical_u32();
+        let imm = instruction.c.as_u32();
         if imm > u16::MAX as u32 {
             return Err(PostflightError::new(
                 "byte-load instruction has a non-canonical immediate",
             ));
         }
 
-        let rs1_ptr = instruction.b.as_canonical_u32();
-        let rd_ptr = instruction.a.as_canonical_u32();
+        let rs1_ptr = instruction.b.as_u32();
+        let rd_ptr = instruction.a.as_u32();
         if rs1_ptr > u32::from(u8::MAX) || !rs1_ptr.is_multiple_of(REGISTER_NUM_LIMBS as u32) {
             return Err(PostflightError::new(
                 "byte-load instruction has an invalid source register pointer",

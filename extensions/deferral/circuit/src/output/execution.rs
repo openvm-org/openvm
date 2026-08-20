@@ -63,10 +63,10 @@ fn check_block_aligned_ptr(pc: u32, ptr: u32) -> Result<u32, ExecutionError> {
 
 impl DeferralOutputExecutor {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut DeferralOutputPrecompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -80,16 +80,16 @@ impl DeferralOutputExecutor {
         } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::OUTPUT as usize
-            || d.as_canonical_u32() != REGISTER_AS
-            || e.as_canonical_u32() != MEMORY_AS
+            || d.as_u32() != REGISTER_AS
+            || e.as_u32() != MEMORY_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = DeferralOutputPrecompute {
-            rd_ptr: a.as_canonical_u32(),
-            rs_ptr: b.as_canonical_u32(),
-            deferral_idx: c.as_canonical_u32(),
+            rd_ptr: a.as_u32(),
+            rs_ptr: b.as_u32(),
+            deferral_idx: c.as_u32(),
         };
         Ok(())
     }
@@ -108,7 +108,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -123,7 +123,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -145,7 +145,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -162,7 +162,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

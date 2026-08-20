@@ -129,7 +129,7 @@ fn create_muldiv_test_chips<const BLOCKS: usize>(
 fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut Fp2Executor<BLOCKS>,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     modulus: &BigUint,
     is_setup: bool,

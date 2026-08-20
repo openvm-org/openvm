@@ -30,10 +30,10 @@ struct HintStorePreCompute {
 
 impl HintStoreExecutor {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut HintStorePreCompute,
     ) -> Result<HintStoreOpcode, StaticProgramError> {
         let &Instruction {
@@ -45,14 +45,14 @@ impl HintStoreExecutor {
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != REGISTER_AS || e.as_canonical_u32() != MEMORY_AS {
+        if d.as_u32() != REGISTER_AS || e.as_u32() != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = {
             HintStorePreCompute {
-                c: c.as_canonical_u32(),
-                a: a.as_canonical_u32() as u8,
-                b: b.as_canonical_u32() as u8,
+                c: c.as_u32(),
+                a: a.as_u32() as u8,
+                b: b.as_u32() as u8,
             }
         };
         Ok(HintStoreOpcode::from_usize(
@@ -93,7 +93,7 @@ where
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
@@ -105,7 +105,7 @@ where
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -130,7 +130,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -147,7 +147,7 @@ where
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where

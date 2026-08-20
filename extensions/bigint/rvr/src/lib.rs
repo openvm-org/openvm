@@ -9,8 +9,9 @@ use openvm_bigint_transpiler::{
     Mul256Opcode, Shift256Opcode,
 };
 use openvm_instructions::{
+    instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{NUM_REGISTERS, REGISTER_BYTES},
+    riscv::{MEMORY_AS, NUM_REGISTERS, REGISTER_AS, REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -19,17 +20,27 @@ use openvm_riscv_transpiler::{
 use rvr_openvm_ir::{
     CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, Variable,
 };
-use rvr_openvm_lift::{
-    decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
-};
+use rvr_openvm_lift::{decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension};
 use strum::EnumCount;
 
 // An Int256 operation can read two independent 32-byte values and write one.
 const INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(32);
+const BRANCH_IMMEDIATE_BOUND: i32 = 1 << 12;
 
 fn decode_reg(value: u32) -> Variable {
     decode_variable(value, REGISTER_BYTES as u32, NUM_REGISTERS as u32)
+}
+
+fn has_register_memory_domains(insn: &Instruction) -> bool {
+    insn.d.as_u32() == REGISTER_AS && insn.e.as_u32() == MEMORY_AS
+}
+
+fn decode_branch_immediate(insn: &Instruction) -> Option<i32> {
+    let imm = insn.c.as_i32();
+    (-BRANCH_IMMEDIATE_BOUND..BRANCH_IMMEDIATE_BOUND)
+        .contains(&imm)
+        .then_some(imm)
 }
 
 fn emit_pointer_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
@@ -299,7 +310,7 @@ impl Default for Int256Extension {
 }
 
 impl RvrExtension for Int256Extension {
-    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         // ── ALU body instructions ───────────────────────────────────────
@@ -315,7 +326,7 @@ impl RvrExtension for Int256Extension {
                 4 => Int256AluOp::And,
                 _ => unreachable!(),
             };
-            return Some(self.lift_alu(insn, pc, op));
+            return self.lift_alu(insn, pc, op);
         }
 
         // Shift256: SLL(0), SRL(1), SRA(2)
@@ -327,7 +338,7 @@ impl RvrExtension for Int256Extension {
                 2 => Int256AluOp::Sra,
                 _ => unreachable!(),
             };
-            return Some(self.lift_alu(insn, pc, op));
+            return self.lift_alu(insn, pc, op);
         }
 
         // LessThan256: SLT(0), SLTU(1)
@@ -338,13 +349,13 @@ impl RvrExtension for Int256Extension {
                 1 => Int256AluOp::Sltu,
                 _ => unreachable!(),
             };
-            return Some(self.lift_alu(insn, pc, op));
+            return self.lift_alu(insn, pc, op);
         }
 
         // Mul256: MUL(0)
         let mul_start = Mul256Opcode::CLASS_OFFSET;
         if opcode >= mul_start && opcode < mul_start + MulOpcode::COUNT {
-            return Some(self.lift_alu(insn, pc, Int256AluOp::Mul));
+            return self.lift_alu(insn, pc, Int256AluOp::Mul);
         }
 
         // ── Branch terminator instructions ──────────────────────────────
@@ -353,10 +364,13 @@ impl RvrExtension for Int256Extension {
         let beq_start = BranchEqual256Opcode::CLASS_OFFSET;
         if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {
             let is_ne = opcode - beq_start == 1;
-            let rs1_reg = decode_reg(insn.a);
-            let rs2_reg = decode_reg(insn.b);
-            let imm = insn.signed_c();
-            let target_pc = (pc as i64 + imm as i64) as u64;
+            if !has_register_memory_domains(insn) {
+                return None;
+            }
+            let imm = decode_branch_immediate(insn)?;
+            let rs1_reg = decode_reg(insn.a.as_u32());
+            let rs2_reg = decode_reg(insn.b.as_u32());
+            let target_pc = pc.wrapping_add_signed(i64::from(imm));
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
             return Some(LiftedInstr::Term {
                 pc,
@@ -381,10 +395,13 @@ impl RvrExtension for Int256Extension {
                 3 => Int256BranchLtOp::Bgeu,
                 _ => unreachable!(),
             };
-            let rs1_reg = decode_reg(insn.a);
-            let rs2_reg = decode_reg(insn.b);
-            let imm = insn.signed_c();
-            let target_pc = (pc as i64 + imm as i64) as u64;
+            if !has_register_memory_domains(insn) {
+                return None;
+            }
+            let imm = decode_branch_immediate(insn)?;
+            let rs1_reg = decode_reg(insn.a.as_u32());
+            let rs2_reg = decode_reg(insn.b.as_u32());
+            let target_pc = pc.wrapping_add_signed(i64::from(imm));
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
             return Some(LiftedInstr::Term {
                 pc,
@@ -424,11 +441,14 @@ impl RvrExtension for Int256Extension {
 
 impl Int256Extension {
     /// Lift an R-type ALU instruction: a=rd, b=rs1, c=rs2.
-    fn lift_alu(&self, insn: &RvrInstruction, pc: u64, op: Int256AluOp) -> LiftedInstr {
-        let rd_reg = decode_reg(insn.a);
-        let rs1_reg = decode_reg(insn.b);
-        let rs2_reg = decode_reg(insn.c);
-        LiftedInstr::Body(InstrAt {
+    fn lift_alu(&self, insn: &Instruction, pc: u64, op: Int256AluOp) -> Option<LiftedInstr> {
+        if !has_register_memory_domains(insn) {
+            return None;
+        }
+        let rd_reg = decode_reg(insn.a.as_u32());
+        let rs1_reg = decode_reg(insn.b.as_u32());
+        let rs2_reg = decode_reg(insn.c.as_u32());
+        Some(LiftedInstr::Body(InstrAt {
             pc,
             instr: Box::new(Int256AluInstr {
                 rd_reg,
@@ -437,12 +457,13 @@ impl Int256Extension {
                 op,
             }),
             source_loc: None,
-        })
+        }))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use openvm_instructions::VmOpcode;
     use rvr_openvm_ir::{MemWidth, PageAddressSpace};
 
     use super::*;
@@ -610,18 +631,31 @@ mod tests {
         }
     }
 
-    fn instruction(opcode: impl LocalOpcode, c: u32) -> RvrInstruction {
-        RvrInstruction::from_canonical(opcode.global_opcode(), [8, 16, c, 0, 0, 0, 0], 101)
+    fn instruction(opcode: VmOpcode, c: i32) -> Instruction {
+        Instruction::from_isize(
+            opcode,
+            8,
+            16,
+            c as isize,
+            REGISTER_AS as isize,
+            MEMORY_AS as isize,
+        )
     }
 
     #[test]
-    fn bigint_branches_preserve_negative_field_encoded_offsets() {
+    fn bigint_branches_preserve_negative_offsets() {
         let pc = 0x1000;
         let ext = Int256Extension::new();
 
         for insn in [
-            instruction(BranchEqual256Opcode(BranchEqualOpcode::BEQ), 101 - 12),
-            instruction(BranchLessThan256Opcode(BranchLessThanOpcode::BLT), 101 - 12),
+            instruction(
+                BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+                -12,
+            ),
+            instruction(
+                BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
+                -12,
+            ),
         ] {
             let lifted = ext.try_lift(&insn, pc).unwrap();
             let LiftedInstr::Term { terminator, .. } = lifted else {
@@ -631,6 +665,54 @@ mod tests {
                 terminator.successors(pc, pc + DEFAULT_PC_STEP as u64),
                 [pc - 12, pc + 4]
             );
+        }
+    }
+
+    #[test]
+    fn bigint_instruction_domains_match_the_interpreter() {
+        let ext = Int256Extension::new();
+        let pc = 0x1000;
+        for opcode in [
+            BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
+            Shift256Opcode(ShiftOpcode::SLL).global_opcode(),
+            LessThan256Opcode(LessThanOpcode::SLT).global_opcode(),
+            Mul256Opcode(MulOpcode::MUL).global_opcode(),
+            BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+            BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
+        ] {
+            let valid = Instruction::from_usize(
+                opcode,
+                [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(ext.try_lift(&valid, pc).is_some());
+
+            let wrong_register = Instruction::from_usize(
+                opcode,
+                [8, 16, 24, MEMORY_AS as usize, MEMORY_AS as usize],
+            );
+            assert!(ext.try_lift(&wrong_register, pc).is_none());
+
+            let wrong_memory = Instruction::from_usize(
+                opcode,
+                [8, 16, 24, REGISTER_AS as usize, REGISTER_AS as usize],
+            );
+            assert!(ext.try_lift(&wrong_memory, pc).is_none());
+        }
+    }
+
+    #[test]
+    fn bigint_branches_require_signed_13_bit_offsets() {
+        let ext = Int256Extension::new();
+        for opcode in [
+            BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
+            BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
+        ] {
+            for offset in [-BRANCH_IMMEDIATE_BOUND, BRANCH_IMMEDIATE_BOUND - 1] {
+                assert!(ext.try_lift(&instruction(opcode, offset), 0x1000).is_some());
+            }
+            for offset in [-BRANCH_IMMEDIATE_BOUND - 1, BRANCH_IMMEDIATE_BOUND] {
+                assert!(ext.try_lift(&instruction(opcode, offset), 0x1000).is_none());
+            }
         }
     }
 

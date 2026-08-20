@@ -9,7 +9,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm-stark-backend.workspace = true
 openvm-platform.workspace = true
 openvm-instructions.workspace = true
 

@@ -134,10 +134,10 @@ fn make_result(
 fn set_and_execute_output<E, T>(
     tester: &mut T,
     executor: &mut E,
-    preflight: &mut TestPreflight<F>,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     num_deferrals: usize,
-) -> Instruction<F>
+) -> Instruction
 where
     E: Executor<F> + Clone,
     T: TestBuilder<F>,

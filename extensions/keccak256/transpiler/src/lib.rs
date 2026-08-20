@@ -4,7 +4,6 @@ use openvm_decoder::instruction_formats::RType;
 use openvm_instructions::{riscv::MEMORY_AS, LocalOpcode};
 use openvm_instructions_derive::LocalOpcode;
 use openvm_keccak256_guest::{KECCAKF_FUNCT7, OPCODE, XORIN_FUNCT3, XORIN_FUNCT7};
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use strum::{EnumCount, EnumIter, FromRepr};
 
@@ -29,8 +28,8 @@ pub enum XorinOpcode {
 #[derive(Default)]
 pub struct Keccak256TranspilerExtension;
 
-impl<F: PrimeField32> TranspilerExtension<F> for Keccak256TranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+impl TranspilerExtension for Keccak256TranspilerExtension {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput> {
         if instruction_stream.is_empty() {
             return None;
         }

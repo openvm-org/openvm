@@ -28,16 +28,38 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let instruction = postflight.instruction(step);
+        let (
+            Some(src_ptr),
+            Some(base_ptr),
+            Some(imm),
+            Some(src_address_space),
+            Some(dst_address_space),
+            Some(is_enabled),
+            Some(imm_sign),
+        ) = (
+            instruction.a.checked_as_u32(),
+            instruction.b.checked_as_u32(),
+            instruction.c.checked_as_u32(),
+            instruction.d.checked_as_u32(),
+            instruction.e.checked_as_u32(),
+            instruction.f.checked_as_u32(),
+            instruction.g.checked_as_u32(),
+        )
+        else {
+            return Err(PostflightError::new(
+                "REVEAL instruction has a negative operand",
+            ));
+        };
         if instruction.opcode != RevealOpcode::REVEAL.global_opcode()
-            || instruction.d.as_canonical_u32() != REGISTER_AS
-            || instruction.e.as_canonical_u32() != PUBLIC_VALUES_AS
-            || !instruction.f.is_one()
+            || src_address_space != REGISTER_AS
+            || dst_address_space != PUBLIC_VALUES_AS
+            || is_enabled != 1
         {
             return Err(PostflightError::new(
                 "REVEAL instruction has invalid fixed operands",
             ));
         }
-        let imm_sign = match instruction.g.as_canonical_u32() {
+        let imm_sign = match imm_sign {
             0 => false,
             1 => true,
             _ => {
@@ -46,15 +68,14 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
                 ));
             }
         };
-        let imm = instruction.c.as_canonical_u32();
         if imm > u16::MAX as u32 {
             return Err(PostflightError::new(
                 "REVEAL immediate exceeds the u16 execution-bus operand",
             ));
         }
 
-        let base_ptr = u32::from(checked_register_pointer(instruction.b.as_canonical_u32())?);
-        let src_ptr = u32::from(checked_register_pointer(instruction.a.as_canonical_u32())?);
+        let base_ptr = u32::from(checked_register_pointer(base_ptr)?);
+        let src_ptr = u32::from(checked_register_pointer(src_ptr)?);
         let from_pc = postflight.pc(step);
         let from_timestamp = postflight.timestamp(step);
         let mut replay = postflight.replay(step);

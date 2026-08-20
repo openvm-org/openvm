@@ -37,7 +37,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(local_opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let instruction = postflight.instruction(step);
-            let shamt = instruction.c.as_canonical_u32() as usize;
+            let shamt = instruction.c.as_u32() as usize;
             if shamt >= BLOCK_FE_WIDTH * U16_BITS {
                 return Err(PostflightError::new(
                     "logical shift immediate is out of range",
@@ -113,7 +113,7 @@ pub fn generate_word_trace_from_postflight<F: PrimeField32>(
         let steps = postflight.steps(local_opcode.global_opcode());
         fill_trace_rows(&mut trace, row_index, steps, |row, step| {
             let instruction = postflight.instruction(step);
-            let shamt = instruction.c.as_canonical_u32() as usize;
+            let shamt = instruction.c.as_u32() as usize;
             if shamt >= WORD_U16_LIMBS * U16_BITS {
                 return Err(PostflightError::new(
                     "word logical shift immediate is out of range",

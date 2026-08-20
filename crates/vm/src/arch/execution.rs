@@ -151,7 +151,7 @@ pub trait InterpreterExecutor<F> {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -165,7 +165,7 @@ pub trait InterpreterExecutor<F> {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -186,7 +186,7 @@ pub trait InterpreterMeteredExecutor<F> {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
@@ -202,7 +202,7 @@ pub trait InterpreterMeteredExecutor<F> {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
     ) -> Result<Handler<Ctx>, StaticProgramError>
     where
@@ -445,7 +445,7 @@ impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///
 /// Phantom sub-instructions are only allowed to use operands
-/// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+/// `a,b`, the phantom discriminant in `c`, and `c_upper` in `d`.
 #[allow(clippy::too_many_arguments)]
 pub trait PhantomSubExecutor: Send + Sync {
     fn phantom_execute(

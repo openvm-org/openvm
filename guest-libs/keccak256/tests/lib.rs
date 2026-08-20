@@ -22,8 +22,6 @@ mod tests {
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
-    type F = BabyBear;
-
     struct TestVector {
         input: Vec<u8>,
         expected_output: Vec<u8>,
@@ -74,7 +72,7 @@ mod tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Keccak256TranspilerExtension)
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
@@ -92,7 +90,7 @@ mod tests {
         if prove {
             air_test_with_min_segments(TestBuilder, config, openvm_exe, stdin, 1);
         } else {
-            let executor = VmExecutor::new(config.clone())?;
+            let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
             let instance = executor.instance(&openvm_exe)?;
             #[allow(unused_variables)]
             let state = instance.execute(stdin.clone())?;

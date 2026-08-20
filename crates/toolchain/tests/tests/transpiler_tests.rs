@@ -52,7 +52,7 @@ fn test_decode_elf() -> Result<()> {
 #[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
-    let program = Transpiler::<F>::default()
+    let program = Transpiler::default()
         .with_extension(Rv64ITranspilerExtension)
         .with_extension(Rv64MTranspilerExtension)
         .with_extension(Rv64IoTranspilerExtension)
@@ -70,13 +70,13 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension),
     )?;
     let config = Rv64ImConfig::default();
-    let executor = VmExecutor::new(config)?;
+    let executor = VmExecutor::<F, _>::new(config)?;
     let instance = executor.instance(&exe)?;
     instance.execute(vec![])?;
     Ok(())
@@ -133,14 +133,14 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let openvm_exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let executor = VmExecutor::new(config)?;
+    let executor = VmExecutor::<F, _>::new(config)?;
     let instance = executor.instance(&openvm_exe)?;
     instance.execute(vec![])?;
     Ok(())
@@ -152,7 +152,7 @@ fn test_terminate_prove() -> Result<()> {
     let elf = get_elf("tests/data/rv64im-terminate-from-as")?;
     let openvm_exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
+        Transpiler::default()
             .with_extension(Rv64ITranspilerExtension)
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension)

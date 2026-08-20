@@ -3,7 +3,6 @@
 #![allow(non_camel_case_types)]
 
 use openvm_instructions_derive::LocalOpcode;
-use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
@@ -68,11 +67,6 @@ impl VmOpcode {
     /// Create a new [VmOpcode] from a usize
     pub const fn from_usize(value: usize) -> Self {
         Self(value)
-    }
-
-    /// Convert the VmOpcode into a field element
-    pub fn to_field<F: Field>(&self) -> F {
-        F::from_usize(self.as_usize())
     }
 }
 

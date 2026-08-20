@@ -166,7 +166,7 @@ where
     #[getset(get = "pub")]
     app_vm_builder: VB,
 
-    transpiler: Option<Transpiler<F>>,
+    transpiler: Option<Transpiler>,
 
     /// The `executor` may be used to construct different types of interpreters, given the program,
     /// for more specific execution purposes. By default, it is recommended to use the
@@ -276,7 +276,7 @@ where
     ) -> Result<Self, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         Self::builder()
             .app_config(app_config)
@@ -410,7 +410,7 @@ where
     }
 
     /// Transpiler for transpiling RISC-V ELF to OpenVM executable.
-    pub fn transpiler(&self) -> Result<&Transpiler<F>, SdkError> {
+    pub fn transpiler(&self) -> Result<&Transpiler, SdkError> {
         self.transpiler
             .as_ref()
             .ok_or(SdkError::TranspilerNotAvailable)
@@ -420,7 +420,7 @@ where
     pub fn convert_to_exe(
         &self,
         executable: impl Into<ExecutableFormat>,
-    ) -> Result<Arc<VmExe<F>>, SdkError> {
+    ) -> Result<Arc<VmExe>, SdkError> {
         let executable = executable.into();
         let exe = match executable {
             ExecutableFormat::Elf(elf) => {
@@ -465,7 +465,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    fn guest_debug_map(&self, elf_path: &Path, exe: &VmExe<F>) -> Result<GuestDebugMap, SdkError> {
+    fn guest_debug_map(&self, elf_path: &Path, exe: &VmExe) -> Result<GuestDebugMap, SdkError> {
         let pcs = exe
             .program
             .instructions_and_debug_infos

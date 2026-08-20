@@ -58,7 +58,7 @@ where
     pub fn new(
         vm_builder: VB,
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmExe<Val<E::SC>>>,
+        app_exe: Arc<VmExe>,
     ) -> Result<Self, VirtualMachineError> {
         let instance = new_local_prover(vm_builder, app_vm_pk, app_exe)?;
         let app_vm_vk = app_vm_pk.vm_pk.get_vk();
@@ -144,7 +144,7 @@ where
     }
 
     /// App Exe
-    pub fn exe(&self) -> Arc<VmExe<Val<E::SC>>> {
+    pub fn exe(&self) -> Arc<VmExe> {
         self.instance.exe().clone()
     }
 

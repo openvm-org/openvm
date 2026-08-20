@@ -20,7 +20,7 @@ use openvm_circuit_primitives::{
         SharedRangeTupleCheckerChip,
     },
 };
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::InstructionOperand, LocalOpcode};
 use openvm_riscv_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -125,7 +125,7 @@ fn create_harness(
 fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: MulOpcode,
     b: Option<[u8; REGISTER_NUM_LIMBS]>,
@@ -137,7 +137,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let (mut instruction, rd) =
         rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
-    instruction.e = F::ZERO;
+    instruction.e = InstructionOperand::ZERO;
     tester.execute(executor, preflight, &instruction);
 
     let (a, _) = run_mul::<REGISTER_NUM_LIMBS, BYTE_BITS>(&b, &c);

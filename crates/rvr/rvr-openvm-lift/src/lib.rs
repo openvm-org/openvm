@@ -12,7 +12,6 @@
 pub mod cfg;
 pub mod convert;
 pub mod extension;
-pub mod instruction;
 pub mod opcode;
 
 pub use cfg::build_blocks;
@@ -23,4 +22,3 @@ pub use extension::{
     ExtensionRegistry, RvrExtension, RvrExtensionCtx, RvrExtensions, RvrRuntimeExtension,
     TraceChipIndex, VmRvrExtension, MAIN_MEMORY_PAGE_BYTES,
 };
-pub use instruction::RvrInstruction;

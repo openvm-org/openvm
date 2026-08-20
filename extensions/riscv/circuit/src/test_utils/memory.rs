@@ -96,7 +96,7 @@ fn random_memory_access(
 pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: LoadStoreOpcode,
     rs1: Option<[u8; 8]>,
@@ -174,7 +174,7 @@ pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>
 pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    preflight: &mut openvm_circuit::arch::testing::TestPreflight<F>,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
     rng: &mut StdRng,
     opcode: LoadStoreOpcode,
     rs1: Option<[u8; 8]>,

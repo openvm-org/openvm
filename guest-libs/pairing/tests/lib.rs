@@ -31,7 +31,7 @@ mod bn254 {
     use openvm_instructions::exe::VmExe;
     #[cfg(feature = "rvr")]
     use openvm_instructions::{
-        instruction::Instruction,
+        instruction::{Instruction, InstructionOperand},
         program::Program,
         riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
         LocalOpcode, PhantomDiscriminant, SystemOpcode,
@@ -50,12 +50,12 @@ mod bn254 {
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::SystemParams, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::openvm_stark_backend::SystemParams;
+    #[cfg(feature = "rvr")]
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand08::SeedableRng;
-
-    type F = BabyBear;
 
     #[cfg(test)]
     pub fn get_testing_config() -> Rv64PairingConfig {
@@ -92,7 +92,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -114,7 +114,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -149,7 +149,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -205,7 +205,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -252,7 +252,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -303,7 +303,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -358,7 +358,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -421,7 +421,7 @@ mod bn254 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -473,14 +473,14 @@ mod bn254 {
         let instructions = [
             Instruction::phantom(
                 PhantomDiscriminant(openvm_pairing_transpiler::PairingPhantom::HintFinalExp as u16),
-                F::new((P_REGISTER * REGISTER_NUM_LIMBS) as u32),
-                F::new((Q_REGISTER * REGISTER_NUM_LIMBS) as u32),
+                InstructionOperand::from_usize(P_REGISTER * REGISTER_NUM_LIMBS),
+                InstructionOperand::from_usize(Q_REGISTER * REGISTER_NUM_LIMBS),
                 PairingCurve::Bn254 as u16,
             ),
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
-        let executor = VmExecutor::new(get_testing_config())?;
+        let executor = VmExecutor::<BabyBear, _>::new(get_testing_config())?;
         let rvr = executor.instance(&exe)?;
 
         let cases = [
@@ -612,12 +612,10 @@ mod bls12_381 {
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::SystemParams, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::openvm_stark_backend::SystemParams;
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand08::SeedableRng;
-
-    type F = BabyBear;
 
     #[cfg(test)]
     pub fn get_testing_config() -> Rv64PairingConfig {
@@ -661,7 +659,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -683,7 +681,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -718,7 +716,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -775,7 +773,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -822,7 +820,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -879,7 +877,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -934,7 +932,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
@@ -996,7 +994,7 @@ mod bls12_381 {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Rv64ITranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension)
