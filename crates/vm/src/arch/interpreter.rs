@@ -205,12 +205,7 @@ where
     }
 
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
-        VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        )
+        VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
     /// # Safety
@@ -325,12 +320,8 @@ impl InterpretedInstance<'_, ExecutionCtx> {
         &self,
         inputs: impl Into<Streams>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        );
+        let vm_state =
+            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state)
     }
 
@@ -340,12 +331,8 @@ impl InterpretedInstance<'_, ExecutionCtx> {
         inputs: impl Into<Streams>,
         num_insns: u64,
     ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        );
+        let vm_state =
+            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state_for(vm_state, num_insns)
     }
 

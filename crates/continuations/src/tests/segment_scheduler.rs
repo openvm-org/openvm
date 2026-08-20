@@ -4,13 +4,17 @@
 //! produce. Proving that at the byte level needs a prover that reproduces itself,
 //! and by default this one does not: the periphery Poseidon2 trace is built by
 //! iterating a concurrent map, so its row order follows insertion history rather
-//! than the records. The two tests here split that apart.
+//! than the records. The two equivalence tests split that apart.
 //!
-//! - Under [`set_deterministic_tracegen`] the serial driver reproduces itself, so the scheduled
-//!   driver can be held to byte-identity. That is the scheduling question, isolated.
-//! - Under the default ordering the proofs may differ byte for byte, so what must match is their
-//!   meaning: the executable commitment, the final memory root, the public values, and every
-//!   segment's public values, with both sides verifying.
+//! - Under [`set_deterministic_tracegen`], with grinding pinned to one worker, the serial driver
+//!   reproduces itself, so the scheduled driver can be held to byte-identity. That is the
+//!   scheduling question, isolated.
+//! - Under the default ordering the proofs may differ byte for byte, so what must match is what
+//!   went in and what it means: per segment the same boundaries and the same per-AIR trace heights,
+//!   and on the way out the same executable commitment, final memory root and public values, with
+//!   each arm's public-values proof checked against the root its own segment proofs established.
+//!
+//! A third test pins the budget arithmetic and needs no proving.
 
 use eyre::Result;
 use openvm_circuit::{
@@ -37,8 +41,14 @@ use crate::SC;
 /// Fibonacci input that splits into more than one segment under
 /// [`test_rv64im_config`] while staying inside the app parameters' stacked height,
 /// so the graph has a real execute chain and an observable `per_segment` order.
-const LOG_FIB_INPUT: usize = 12;
-const EXPECTED_SEGMENTS: usize = 2;
+/// Four segments, not two. The driver seeds one segment before admitting anything
+/// and fills its lookahead while proves are in flight, so a two-segment program
+/// dispatches `[P0]` and then `[P1]` alone and never puts two proves in flight —
+/// which is what the concurrency witness below correctly reported. Four reaches two
+/// resident proves from the second batch, and is what makes "identical bytes
+/// despite two concurrent proves" an assertion about something that happened.
+const LOG_FIB_INPUT: usize = 13;
+const EXPECTED_SEGMENTS: usize = 4;
 /// Segmentation ceiling low enough that a small input still splits, so the graph
 /// is real without paying for a large proof.
 const SEGMENTATION_MAX_MEMORY: usize = 1 << 27;
