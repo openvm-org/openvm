@@ -1,16 +1,16 @@
 | group | app.proof_time_ms | app.cycles | leaf.proof_time_ms |
 | -- | -- | -- | -- |
-| [fibonacci](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/fibonacci-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 459 |  4,000,051 |  229 |
-| [keccak](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/keccak-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 7,180 |  14,365,133 |  1,583 |
-| [sha2_bench](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/sha2_bench-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 4,026 |  11,167,961 |  517 |
-| [regex](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/regex-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 723 |  4,090,656 |  217 |
-| [ecrecover](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/ecrecover-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 209 |  112,210 |  184 |
-| [pairing](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/pairing-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 240 |  592,827 |  184 |
-| [kitchen_sink](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/kitchen_sink-4ecf7c68d03a31c88b442dd15002ab8dc6c1564a.md) | 2,143 |  1,979,971 |  457 |
+| [fibonacci](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/fibonacci-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 451 |  4,000,051 |  232 |
+| [keccak](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/keccak-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 7,218 |  14,365,133 |  1,597 |
+| [sha2_bench](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/sha2_bench-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 4,084 |  11,167,961 |  520 |
+| [regex](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/regex-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 741 |  4,090,656 |  218 |
+| [ecrecover](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/ecrecover-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 206 |  112,210 |  183 |
+| [pairing](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/pairing-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 241 |  592,827 |  183 |
+| [kitchen_sink](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-pr/3104/kitchen_sink-a19d3561108611d7f626aa170ca87632ee7f66e8.md) | 2,154 |  1,979,971 |  460 |
 
 Note: cells_used metrics omitted because CUDA tracegen does not expose unpadded trace heights.
 
 
-Commit: https://github.com/openvm-org/openvm/commit/4ecf7c68d03a31c88b442dd15002ab8dc6c1564a
+Commit: https://github.com/openvm-org/openvm/commit/a19d3561108611d7f626aa170ca87632ee7f66e8
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/32505627125)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/32513341685)
