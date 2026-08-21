@@ -45,7 +45,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnsetPvsAir {
         let local: &UnsetPvsCols<AB::Var> = (*local).borrow();
         let next: &UnsetPvsCols<AB::Var> = (*next).borrow();
 
-        builder.assert_bool(local.is_valid);
+        if self.num_pvs == 0 {
+            builder.assert_zero(local.is_valid);
+        } else {
+            builder.assert_bool(local.is_valid);
+        }
+
         builder
             .when_transition()
             .assert_one(next.proof_idx - local.proof_idx);
