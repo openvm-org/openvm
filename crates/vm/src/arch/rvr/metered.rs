@@ -717,6 +717,10 @@ mod tests {
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,
+                #[cfg(feature = "metrics")]
+                bus_names: &[],
+                #[cfg(feature = "metrics")]
+                bus_interactions: &vec![Vec::new(); num_airs],
                 widths: &widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
