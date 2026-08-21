@@ -300,9 +300,13 @@ __global__ void xorin_replay_tracegen(
             from.timestamp + XORIN_REGISTER_READS + 2 * num_blocks + i
         );
     }
-    // Block-index range-check counts for both base pointers. Mirrors `xorin/trace.rs`.
-    add_block_index_range_checks(range_checker, buffer_ptr, pointer_max_bits);
-    add_block_index_range_checks(range_checker, input_ptr, pointer_max_bits);
+    // Block-index range-check counts for both base pointers. `len = 0` performs no block access
+    // and leaves the don't-care pointers unchecked, matching the gated AIR checks. Mirrors
+    // `xorin/trace.rs`.
+    if (num_blocks > 0) {
+        add_block_index_range_checks(range_checker, buffer_ptr, pointer_max_bits);
+        add_block_index_range_checks(range_checker, input_ptr, pointer_max_bits);
+    }
 }
 
 extern "C" int _xorin_replay_tracegen(
