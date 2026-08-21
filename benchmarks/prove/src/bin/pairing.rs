@@ -10,7 +10,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/pairing/elf/openvm-pairing-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     args.run(vm_config, elf, StdIn::default())

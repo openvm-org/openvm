@@ -26,8 +26,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, checked_register_u16_pointer, concat_u16_block, is_canonical_i12,
-    U16_BITS, WORD_U16_LIMBS,
+    checked_register_u16_pointer, concat_u16_block, is_canonical_i12,
+    reg_byte_ptr_to_cell_ptr_limbs, U16_BITS, WORD_U16_LIMBS,
 };
 
 /// Adapter columns for RV64 word instructions with an immediate operand.
@@ -92,7 +92,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWImmU16AdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 rs1_data,
                 timestamp_pp(),
@@ -119,7 +119,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWImmU16AdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
                 ),
                 write_data,
                 timestamp_pp(),

@@ -23,8 +23,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, bytes_to_u16_block, checked_register_u16_pointer, is_canonical_i12,
-    u16_block_to_bytes,
+    bytes_to_u16_block, checked_register_u16_pointer, is_canonical_i12,
+    reg_byte_ptr_to_cell_ptr_limbs, u16_block_to_bytes,
 };
 
 /// Immediate-only byte-limb adapter (single register read + register write). The immediate
@@ -83,7 +83,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluImmAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
@@ -96,7 +96,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluImmAdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),

@@ -52,18 +52,23 @@ enum MemoryCellType : uint32_t {
 //
 //   byte_ptr = size_of::<F>() * ptr
 //
-// In every AS, ptr counts cells. Block k starts at ptr k * BLOCK_FE_WIDTH, and
+// In every AS, ptr counts cells. Memory-bus block index k starts at ptr k * BLOCK_FE_WIDTH, and
 // merkle leaf l starts at ptr l * DIGEST_WIDTH.
 
 #include "poseidon2.cuh" // brings in CELLS / CELLS_OUT from stark-backend
+#include "primitives/constants.h"
+#include <cstddef>
 
+// log2 of the number of cells per Poseidon2 half.
+inline constexpr size_t DIGEST_WIDTH_BITS = 3;
 // Cells per Poseidon2 half (and per merkle leaf).
-inline constexpr size_t DIGEST_WIDTH = CELLS_OUT;
+inline constexpr size_t DIGEST_WIDTH = 1 << DIGEST_WIDTH_BITS;
+static_assert(DIGEST_WIDTH == CELLS_OUT);
 // Cells per Poseidon2 permutation input.
 inline constexpr size_t POSEIDON2_WIDTH = CELLS;
 
 // Host byte width of one u16-celled storage cell.
-inline constexpr size_t U16_CELL_SIZE = 2;
+inline constexpr size_t U16_CELL_SIZE = 1 << openvm::U16_CELL_SIZE_BITS;
 
 // Cells per memory-bus block.
 inline constexpr size_t BLOCK_FE_WIDTH = 4;

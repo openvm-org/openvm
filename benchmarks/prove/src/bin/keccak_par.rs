@@ -30,7 +30,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/keccak256_iter/elf/openvm-keccak256-iter-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     let num_keccak_iters: u64 = 1 << 12;

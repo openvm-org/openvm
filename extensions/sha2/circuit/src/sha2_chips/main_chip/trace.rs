@@ -7,9 +7,9 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, U16_BITS};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
+use openvm_riscv_circuit::adapters::{add_block_index_range_checks, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
@@ -149,8 +149,11 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             ptr_to_u16_limbs(replay.input_ptr),
         );
 
-        for ptr in [replay.dst_ptr, replay.state_ptr, replay.input_ptr] {
-            range_checker.add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+        // Block-index range-check counts for each base heap pointer, registered on the
+        // caller-provided range checker so error paths stay clean. `replay` holds stable
+        // copies of the pointer values, separate from the trace row.
+        for byte_ptr in [replay.input_ptr, replay.state_ptr, replay.dst_ptr] {
+            add_block_index_range_checks(range_checker, byte_ptr, self.pointer_max_bits);
         }
 
         // fill in the register reads aux

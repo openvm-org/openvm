@@ -88,7 +88,7 @@ fn run_leaf_aggregation(
     let config = test_rv64im_config();
     let elf = Elf::decode(
         include_bytes!("../../../../crates/continuations/programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = VmExe::from_elf(
         elf,

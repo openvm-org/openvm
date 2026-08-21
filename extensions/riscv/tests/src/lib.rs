@@ -1931,6 +1931,25 @@ mod tests {
         Ok(())
     }
 
+    /// The full 2^32-byte RV64 memory address space is supported end to end: raw-pointer
+    /// accesses up to the last addressable byte must execute and prove. Uses the default
+    /// config because `test_rv64im_config()` shrinks `MEMORY_AS` below the addresses
+    /// exercised here.
+    #[test]
+    fn test_high_address_mem() -> Result<()> {
+        let config = Rv64ImConfig::default();
+        let elf = build_example_program_at_path(get_programs_dir!(), "high_address_mem", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension),
+        )?;
+        air_test(Rv64ImBuilder, config, exe);
+        Ok(())
+    }
+
     #[test]
     #[should_panic]
     #[cfg(not(feature = "rvr"))]

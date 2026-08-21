@@ -3,7 +3,6 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::*, system::memory::MemoryAuxColsFactory, utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_AS},
@@ -11,8 +10,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, ptr_bound_from_ptr, ptr_to_field_u16_limbs,
-    try_bytes_to_u32, u16_block_to_bytes,
+    add_block_index_range_checks, byte_ptr_to_u16_ptr_value, bytes_to_u16_block,
+    ptr_to_field_u16_limbs, try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
@@ -68,7 +67,9 @@ impl XorinVmFiller {
             ));
         }
         let num_reads = len_usize / MEMORY_BLOCK_BYTES;
-        if num_reads != 0 && (buffer & 1 != 0 || input & 1 != 0) {
+        // The AIR converts both base byte pointers to cell pointers on every enabled row (even
+        // when all blocks are padding), so alignment is required regardless of `len`.
+        if buffer & 1 != 0 || input & 1 != 0 {
             return Err(PostflightError::new(
                 "XORIN memory pointer must be two-byte aligned",
             ));
@@ -193,9 +194,11 @@ impl XorinVmFiller {
             timestamp += 1;
         }
 
-        for ptr in [buffer, input] {
-            self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+        // Block-index range-check counts for both base pointers. `len = 0` performs no block
+        // access and leaves the don't-care pointers unchecked, matching the gated AIR checks.
+        if num_reads > 0 {
+            add_block_index_range_checks(&self.range_checker_chip, buffer, self.pointer_max_bits);
+            add_block_index_range_checks(&self.range_checker_chip, input, self.pointer_max_bits);
         }
         Ok(())
     }

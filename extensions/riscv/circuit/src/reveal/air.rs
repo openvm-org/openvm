@@ -27,7 +27,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_block, pack_u8_pair, PTR_U16_LIMBS, U16_BITS,
+    expand_to_block, pack_u8_pair, reg_byte_ptr_to_cell_ptr_limbs, BLOCK_INDEX_Q_BITS,
+    PTR_U16_LIMBS, U16_BITS,
 };
 
 const REVEAL_TIMESTAMP_DELTA: usize = 4;
@@ -96,7 +97,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(cols.base_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.base_ptr),
                 ),
                 expand_to_block(&cols.base_ptr_limbs),
                 timestamp.clone(),
@@ -113,12 +114,14 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
         // Enforce 8-byte alignment and the configured pointer bound.
         let block_bytes = AB::F::from_usize(MEMORY_BLOCK_BYTES);
         self.range_bus
-            .range_check(cols.dst_ptr_low_limb * block_bytes.inverse(), U16_BITS - 3)
+            .range_check(
+                cols.dst_ptr_low_limb * block_bytes.inverse(),
+                BLOCK_INDEX_Q_BITS,
+            )
             .eval(builder, is_valid.clone());
         self.range_bus
             .range_check(dst_ptr_high_limb.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
-        let dst_ptr = cols.dst_ptr_low_limb + dst_ptr_high_limb * AB::F::from_u32(1 << U16_BITS);
 
         // Compose the source-register bus value directly from its byte limbs.
         let src_cells: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| {
@@ -131,7 +134,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(cols.src_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.src_ptr),
                 ),
                 src_cells,
                 timestamp.clone() + AB::Expr::ONE,
@@ -152,12 +155,14 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
             .enumerate()
         {
             let values: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|lane| bytes[lane].into());
+            // Public values are byte-celled, so divide the byte pointer by four cells per block.
+            let block_index = cols.dst_ptr_low_limb * AB::F::from_usize(BLOCK_FE_WIDTH).inverse()
+                + dst_ptr_high_limb.clone()
+                    * AB::F::from_u32(1 << (U16_BITS - BLOCK_FE_WIDTH.ilog2() as usize))
+                + AB::F::from_usize(chunk_idx);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        AB::F::from_u32(PUBLIC_VALUES_AS),
-                        dst_ptr.clone() + AB::F::from_usize(chunk_idx * BLOCK_FE_WIDTH),
-                    ),
+                    MemoryAddress::new(AB::F::from_u32(PUBLIC_VALUES_AS), block_index),
                     values,
                     timestamp.clone() + AB::Expr::from_usize(2 + chunk_idx),
                     aux,

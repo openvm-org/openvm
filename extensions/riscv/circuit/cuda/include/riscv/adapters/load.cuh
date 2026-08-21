@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -18,7 +19,6 @@ template <typename T> struct LoadMultiByteAdapterCols {
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
-    T mem_ptr_carry;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
 };
@@ -108,21 +108,9 @@ struct LoadAdapter {
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
-        range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
+        // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
+        range_checker.add_count(aligned_limb / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
-
-        uint32_t block1_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
-        bool carry = crosses && block1_low_sum == (1u << U16_BITS);
-        COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, mem_ptr_carry, carry);
-        if (crosses) {
-            range_checker.add_count(
-                (block1_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
-                U16_BITS - 3
-            );
-        }
-        if (carry) {
-            range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
-        }
     }
 };
 
@@ -218,7 +206,9 @@ struct LoadByteAdapter {
         COL_WRITE_VALUE(row, LoadByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
-        range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
+        uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
+        // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
+        range_checker.add_count(aligned_limb / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
     }
 };

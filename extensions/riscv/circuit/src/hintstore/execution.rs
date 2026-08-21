@@ -18,7 +18,7 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{validate_hint_buffer_num_words, HintStoreExecutor};
-use crate::adapters::{bytes_to_u32, validate_memory_block_byte_ptr};
+use crate::adapters::{bytes_to_u32, validate_memory_block_span, validate_memory_block_start};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -169,7 +169,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     let pc = exec_state.pc();
     let mem_ptr_limbs =
         exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = validate_memory_block_byte_ptr(pc, bytes_to_u32(mem_ptr_limbs))?;
+    let mem_ptr = validate_memory_block_start(pc, bytes_to_u32(mem_ptr_limbs))?;
 
     let num_words = if IS_HINT_STORED {
         exec_state.ctx.advance_timestamp(1);
@@ -180,6 +180,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
         u64::from_le_bytes(num_words_limbs)
     };
     let num_words = u32::from(validate_hint_buffer_num_words(pc, num_words)?);
+    validate_memory_block_span(pc, mem_ptr, num_words as usize)?;
 
     let num_bytes = REGISTER_NUM_LIMBS * num_words as usize;
     if exec_state.streams.hint_stream.remaining() < num_bytes {

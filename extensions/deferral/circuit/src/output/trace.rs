@@ -6,14 +6,16 @@ use openvm_circuit::{
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::{add_block_index_range_checks, u16_block_to_bytes};
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -295,6 +297,17 @@ fn fill_output_section<F: VmField>(
             {
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
             }
+
+            // Block-index range-check counts for the `input` base pointer (read on the first
+            // row) and the `output` base pointer (first write address).
+            for byte_ptr in [section.rs_val, section.rd_val] {
+                add_block_index_range_checks(
+                    &filler.range_checker_chip,
+                    byte_ptr,
+                    filler.address_bits,
+                );
+            }
+
             cols.sponge_inputs = initial_sponge_input;
             current_poseidon2_res = filler.poseidon2_chip.perm_and_record(
                 &cols.sponge_inputs,
@@ -337,7 +350,7 @@ fn fill_output_section<F: VmField>(
     let cols: &mut DeferralOutputCols<F> = trace.values[first_row..first_row + width].borrow_mut();
     let output_commit_rcs = output_commit_f
         .chunks_exact(F_NUM_BYTES)
-        .zip(cols.output_commit_lt_aux.iter_mut())
+        .zip(cols.output_commit_canonicity_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
@@ -346,6 +359,9 @@ fn fill_output_section<F: VmField>(
     for pair in output_commit_rcs.chunks_exact(2) {
         filler.bitwise_lookup_chip.request_range(pair[0], pair[1]);
     }
+    let output_len_rc =
+        CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_canonicity_aux);
+    filler.bitwise_lookup_chip.request_range(output_len_rc, 0);
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -356,5 +372,6 @@ pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }

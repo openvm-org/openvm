@@ -5,6 +5,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/constants.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -25,6 +26,7 @@ struct VecHeapU16AdapterCols {
     T rs_val[NUM_READS][PTR_U16_LIMBS];
     // Low 32 bits of rd register as u16 limbs.
     T rd_val[PTR_U16_LIMBS];
+
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> rd_read_aux;
@@ -85,16 +87,13 @@ struct VecHeapU16Adapter {
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE> record
     ) {
-        // Bound each register pointer to pointer_max_bits by narrowing the high u16 limb.
-        const size_t limb_shift_bits = PTR_BITS - pointer_max_bits;
+        // Block-index range-check counts for each base pointer. Mirrors the host filler in
+        // vec_heap_u16.rs.
+#pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            range_checker.add_count(
-                (record.rs_vals[i] >> U16_BITS) << limb_shift_bits, U16_BITS
-            );
+            add_block_index_range_checks(range_checker, record.rs_vals[i], pointer_max_bits);
         }
-        range_checker.add_count(
-            (record.rd_val >> U16_BITS) << limb_shift_bits, U16_BITS
-        );
+        add_block_index_range_checks(range_checker, record.rd_val, pointer_max_bits);
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;

@@ -114,5 +114,13 @@ template <typename V> struct Sha2MainLayout {
 
 #define SHA2_MAIN_SLICE_MEM(V, ROW, FIELD)                                                          \
     (ROW).slice_from(SHA2_MAIN_COL_INDEX_MEM_V(V, FIELD))
+#define SHA2_MAIN_WRITE_MEM(V, ROW, FIELD, VALUE)                                                   \
+    (ROW).write(SHA2_MAIN_COL_INDEX_MEM_V(V, FIELD), VALUE)
+#define SHA2_MAIN_WRITE_ARRAY_MEM(V, ROW, FIELD, VALUES)                                            \
+    (ROW).write_array(                                                                              \
+        SHA2_MAIN_COL_INDEX_MEM_V(V, FIELD),                                                         \
+        SHA2_MAIN_COL_ARRAY_LEN_V(V, Sha2MainMemoryCols, FIELD),                                     \
+        VALUES                                                                                      \
+    )
 
 } // namespace sha2

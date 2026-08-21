@@ -1,8 +1,8 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::VM_DIGEST_WIDTH;
+use openvm_instructions::{BLOCK_FE_WIDTH, VM_DIGEST_WIDTH};
 use openvm_platform::memory::MEM_BITS;
 use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 
@@ -20,7 +20,7 @@ pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 use crate::{
-    arch::{AirRefWithColumns, MemoryConfig},
+    arch::{AirRefWithColumns, MemoryConfig, U16_CELL_SIZE_BITS},
     system::memory::{
         interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
         persistent::PersistentBoundaryAir,
@@ -29,7 +29,7 @@ use crate::{
 
 /// Default maximum bit width of pointers within each address space. Pointers index cells, not
 /// bytes.
-pub const DEFAULT_POINTER_MAX_BITS: usize = MEM_BITS - size_of::<u16>().ilog2() as usize;
+pub const DEFAULT_POINTER_MAX_BITS: usize = MEM_BITS - U16_CELL_SIZE_BITS;
 // Valid RVR memory pointers and leaf indices fit in `u32`. Guest operands stay
 // `u64` until a runtime bounds check proves that they are valid pointers.
 const _: () = assert!(MEM_BITS <= u32::BITS as usize);
@@ -51,8 +51,20 @@ pub enum OpType {
     Write = 1,
 }
 
+/// Number of low pointer bits omitted from a memory-bus address.
+///
+/// Every memory-bus operation addresses one [`BLOCK_FE_WIDTH`]-cell block, and block starts are
+/// aligned to [`BLOCK_FE_WIDTH`]. The bus therefore carries the block index `pointer /
+/// BLOCK_FE_WIDTH` instead of the AS-native cell pointer.
+pub const MEMORY_BLOCK_INDEX_SHIFT: usize = BLOCK_FE_WIDTH.ilog2() as usize;
+
 /// The full pointer to a location in memory consists of an address space and a pointer within
 /// the address space.
+///
+/// The memory bus addresses [`BLOCK_FE_WIDTH`]-cell blocks, so the pointer is expressed at block
+/// granularity: an AS-native cell pointer divided by [`BLOCK_FE_WIDTH`]. With the largest
+/// supported 32-bit AS-native pointer domain it is at most 30 bits wide, so it fits injectively in
+/// the BabyBear field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct MemoryAddress<S, T> {
@@ -77,6 +89,17 @@ impl<S, T> MemoryAddress<S, T> {
             address_space: a.address_space.into(),
             pointer: a.pointer.into(),
         }
+    }
+}
+
+impl<S: Clone, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
+    /// Returns the address `blocks` memory-bus blocks after `self`.
+    #[inline(always)]
+    pub fn offset_blocks(&self, blocks: usize) -> Self {
+        Self::new(
+            self.address_space.clone(),
+            self.pointer.clone() + T::from_usize(blocks),
+        )
     }
 }
 

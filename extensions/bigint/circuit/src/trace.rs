@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut, iter::once};
+use std::{array, borrow::BorrowMut};
 
 use openvm_bigint_transpiler::{
     BaseAlu256Opcode, BranchEqual256Opcode, BranchLessThan256Opcode, LessThan256Opcode,
@@ -12,6 +12,9 @@ use openvm_circuit::{
     system::{memory::MemoryAuxColsFactory, program::trace::instruction_operand_to_field},
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerChip,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -22,7 +25,7 @@ use openvm_riscv_adapters::{
     VecHeapAdapterCols, VecHeapBranchU16AdapterCols, VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
-    adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs, U16_BITS},
+    adapters::{add_block_index_range_checks, ptr_to_u16_limbs, U16_BITS},
     AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
     LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
@@ -158,7 +161,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
-    range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    range_checker: &VariableRangeCheckerChip,
     adapter_row: &mut AluU16Cols<F>,
     compute: impl FnOnce(
         [[u16; INT256_NUM_U16_LIMBS]; NUM_READS],
@@ -202,9 +205,10 @@ fn replay_alu_u16<F: PrimeField32, M>(
     }
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
-    for pointer in rs_vals.into_iter().chain(once(rd_val)) {
-        range_checker.add_count(ptr_bound_from_ptr(pointer, pointer_max_bits), U16_BITS);
+    for &pointer in &rs_vals {
+        add_block_index_range_checks(range_checker, pointer, pointer_max_bits);
     }
+    add_block_index_range_checks(range_checker, rd_val, pointer_max_bits);
     for (access, cols) in write_accesses.iter().zip(&mut adapter_row.writes_aux) {
         cols.set_prev_data(access.previous_value.map(F::from_u16));
         mem_helper.fill(access.previous_timestamp, access.timestamp, cols.as_mut());
@@ -244,7 +248,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
-    range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    range_checker: &VariableRangeCheckerChip,
     adapter_row: &mut AluByteCols<F>,
     compute: impl FnOnce(
         [[u8; INT256_NUM_U8_LIMBS]; NUM_READS],
@@ -292,9 +296,10 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     }
     replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
-    for pointer in rs_vals.into_iter().chain(once(rd_val)) {
-        range_checker.add_count(ptr_bound_from_ptr(pointer, pointer_max_bits), U16_BITS);
+    for &pointer in &rs_vals {
+        add_block_index_range_checks(range_checker, pointer, pointer_max_bits);
     }
+    add_block_index_range_checks(range_checker, rd_val, pointer_max_bits);
     for (access, cols) in write_accesses.iter().zip(&mut adapter_row.writes_aux) {
         cols.set_prev_data(access.previous_value.map(F::from_u16));
         mem_helper.fill(access.previous_timestamp, access.timestamp, cols.as_mut());
@@ -334,7 +339,7 @@ fn replay_branch<F: PrimeField32, M>(
     step: PostflightStep,
     pointer_max_bits: usize,
     mem_helper: &MemoryAuxColsFactory<F>,
-    range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    range_checker: &VariableRangeCheckerChip,
     adapter_row: &mut BranchCols<F>,
     branch: impl FnOnce([[u16; INT256_NUM_U16_LIMBS]; NUM_READS]) -> BranchDecision<M>,
 ) -> Result<BranchReplay<M>, PostflightError> {
@@ -373,7 +378,7 @@ fn replay_branch<F: PrimeField32, M>(
     replay.finish(next_pc)?;
 
     for pointer in rs_vals {
-        range_checker.add_count(ptr_bound_from_ptr(pointer, pointer_max_bits), U16_BITS);
+        add_block_index_range_checks(range_checker, pointer, pointer_max_bits);
     }
     for (access, cols) in read_accesses.iter().zip(
         adapter_row
@@ -487,7 +492,7 @@ pub(crate) fn generate_bitwise_trace<F: PrimeField32>(
     chip: &BitwiseLogic256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
-    range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
+    range_checker: &SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND];
     let global = opcodes.map(|opcode| BaseAlu256Opcode(opcode).global_opcode());
@@ -709,7 +714,7 @@ pub(crate) fn generate_branch_equal_trace<F: PrimeField32>(
     chip: &BranchEqual256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
-    range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
+    range_checker: &SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcodes = [BranchEqualOpcode::BEQ, BranchEqualOpcode::BNE];
     let global = opcodes
@@ -942,7 +947,7 @@ pub(crate) fn generate_multiplication_trace<F: PrimeField32>(
     chip: &Multiplication256Chip<F>,
     postflight: &Postflight<'_, F>,
     pointer_max_bits: usize,
-    range_checker: &openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip,
+    range_checker: &SharedVariableRangeCheckerChip,
 ) -> Result<RowMajorMatrix<F>, PostflightError> {
     let opcode = Mul256Opcode(MulOpcode::MUL).global_opcode();
     let adapter_width = AluByteCols::<F>::width();
@@ -1047,7 +1052,7 @@ fn shift_logical(
 }
 
 fn fill_shift_decomposition<F: PrimeField32>(
-    range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    range_checker: &VariableRangeCheckerChip,
     b: &[u16; INT256_NUM_U16_LIMBS],
     c: &[u16; INT256_NUM_U16_LIMBS],
     limb_shift: usize,
