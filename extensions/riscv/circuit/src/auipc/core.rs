@@ -27,7 +27,7 @@ pub struct AuipcCoreCols<T> {
     // The immediate is split around the byte shift in AUIPC's `imm << 8`.
     pub imm_low_8: T,
     pub imm_high_16: T,
-    // High u16 limb of `from_pc`; the low limb is derived from `from_pc`.
+    // High u16 limb of the byte pc; the low limb is derived from `from_pc_idx`.
     pub pc_high: T,
     pub rd_data: [T; PTR_U16_LIMBS],
 }
@@ -58,7 +58,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &AuipcCoreCols<AB::Var> = (*local_core).borrow();
 
@@ -73,18 +73,18 @@ where
         builder.assert_bool(is_valid);
         builder.assert_bool(is_sign_extend);
 
-        // We want to constrain rd = from_pc + (imm << BYTE_BITS) where:
+        // We want to constrain rd = byte pc + (imm << BYTE_BITS) where:
         // - rd_data represents the low 32 bits of rd as u16 cells
         // - imm_low_8 and imm_high_16 decompose the 24-bit instruction immediate
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
         let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << BYTE_BITS);
-        // `from_pc` is a pc index; the byte pc is 4 * from_pc, whose u16 limbs are
-        // [4 * pc_idx_low, pc_high] with pc_idx_low = from_pc - pc_high * 2^PC_IDX_LOW_BITS.
-        let pc_idx_low = from_pc - pc_high * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
+        // The byte pc is 4 * from_pc_idx, whose u16 limbs are [4 * pc_idx_low, pc_high]
+        // with pc_idx_low = from_pc_idx - pc_high * 2^PC_IDX_LOW_BITS.
+        let pc_idx_low = from_pc_idx - pc_high * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
         let pc_low = pc_idx_low.clone() * AB::F::from_u32(DEFAULT_PC_STEP);
 
-        // `from_pc` is bounded to `PC_BITS` by the program bus, so the split into a
+        // `from_pc_idx` is bounded to `PC_BITS` by the program bus, so the split into a
         // PC_IDX_LOW_BITS-bit low part and a u16 high part is unique.
         self.range_bus
             .range_check(pc_idx_low, PC_IDX_LOW_BITS)

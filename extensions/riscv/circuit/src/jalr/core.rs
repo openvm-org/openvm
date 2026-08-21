@@ -66,7 +66,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &JalrCoreCols<AB::Var> = (*local_core).borrow();
         let JalrCoreCols::<AB::Var> {
@@ -87,8 +87,8 @@ where
         let pc_step = AB::F::from_u32(DEFAULT_PC_STEP);
         let pc_step_inv = pc_step.inverse();
 
-        // The byte return address is 4 * (from_pc + 1), where `from_pc` is a pc index.
-        let least_sig_limb = (from_pc + AB::F::ONE) * pc_step - composed;
+        // The byte return address is 4 * (from_pc_idx + 1).
+        let least_sig_limb = (from_pc_idx + AB::F::ONE) * pc_step - composed;
 
         // rd_data_low is the low-32-bit decomposition of the byte return address.
         let rd_data_low: [AB::Expr; PTR_U16_LIMBS] = [least_sig_limb.clone(), rd_high[0].into()];
@@ -96,8 +96,8 @@ where
         // The low limb is DEFAULT_PC_STEP-aligned with a PC_IDX_LOW_BITS-bit quotient (which
         // also implies it is a u16), and the high limb is a u16. This pins the decomposition:
         // the composed pc index rd_high[0] * 2^PC_IDX_LOW_BITS + least_sig_limb / 4 is
-        // < 2^PC_BITS < p, so it equals from_pc + 1 over the integers.
-        // Assumes only from_pc in [0, 2^PC_BITS) is allowed by program bus.
+        // < 2^PC_BITS < p, so it equals from_pc_idx + 1 over the integers.
+        // Assumes only from_pc_idx in [0, 2^PC_BITS) is allowed by program bus.
         self.range_bus
             .range_check(least_sig_limb.clone() * pc_step_inv, PC_IDX_LOW_BITS)
             .eval(builder, is_valid);
@@ -132,7 +132,7 @@ where
         self.range_bus
             .range_check(to_pc_limbs[0], PC_IDX_LOW_BITS)
             .eval(builder, is_valid);
-        let to_pc = to_pc_limbs[0] + to_pc_limbs[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
+        let to_pc_idx = to_pc_limbs[0] + to_pc_limbs[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
         let rs1_data = expand_to_block(&rs1);
@@ -141,7 +141,7 @@ where
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
         AdapterAirContext {
-            to_pc: Some(to_pc),
+            to_pc: Some(to_pc_idx),
             reads: [rs1_data].into(),
             writes: [rd_data].into(),
             instruction: SignedImmInstruction {

@@ -42,7 +42,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         interface: AdapterAirContext<AB::Expr, Self::Interface>,
     );
 
-    /// Return the `from_pc` expression.
+    /// Return the expression for the pc index (`pc_to_idx(from_pc)`) of the instruction.
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
@@ -51,12 +51,14 @@ where
     AB: AirBuilder,
     I: VmAdapterInterface<AB::Expr>,
 {
-    /// Returns `(to_pc, interface)`.
+    /// Returns `(to_pc, interface)`. Pc values on the buses are pc indices (see `pc_to_idx`):
+    /// `from_pc_idx` is the pc index of the instruction, and the returned `to_pc` is also a
+    /// pc index.
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
 
     /// The offset the opcodes by this chip start from.

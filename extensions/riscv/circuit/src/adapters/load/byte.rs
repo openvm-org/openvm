@@ -179,7 +179,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             )
             .eval(builder, write_count);
 
-        let to_pc = ctx.to_pc.unwrap_or(local_cols.from_state.pc + AB::F::ONE);
+        let to_pc_idx = ctx.to_pc.unwrap_or(local_cols.from_state.pc + AB::F::ONE);
         self.execution_bridge
             .execute(
                 ctx.instruction.opcode,
@@ -194,7 +194,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
                 ],
                 local_cols.from_state,
                 ExecutionState {
-                    pc: to_pc,
+                    pc: to_pc_idx,
                     timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )

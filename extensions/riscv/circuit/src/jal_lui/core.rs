@@ -64,7 +64,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &JalLuiCoreCols<AB::Var> = (*local_core).borrow();
         let JalLuiCoreCols::<AB::Var> {
@@ -100,11 +100,11 @@ where
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
 
-        // JAL: constrain rd_low_32 = 4 * (from_pc + 1), the byte return address for the pc
-        // index `from_pc`.
+        // JAL: constrain rd_low_32 = 4 * (from_pc_idx + 1), the byte return address for the
+        // pc index `from_pc_idx`.
         builder.when(is_jal).assert_eq(
             rd[0],
-            (from_pc + AB::F::ONE) * AB::F::from_u32(DEFAULT_PC_STEP) - rd[1] * limb_base,
+            (from_pc_idx + AB::F::ONE) * AB::F::from_u32(DEFAULT_PC_STEP) - rd[1] * limb_base,
         );
 
         // Range-check the low 32-bit rd cells.
@@ -127,9 +127,9 @@ where
 
         // JAL return addresses are DEFAULT_PC_STEP-aligned: rd[0] = 4 * x with
         // x < 2^PC_IDX_LOW_BITS. Together with rd[1] < 2^16 this makes the decomposition
-        // rd = 4 * (from_pc + 1) unique: the composed pc index rd[1] * 2^PC_IDX_LOW_BITS + x
-        // is < 2^PC_BITS < p, so it must equal from_pc + 1 over the integers. A JAL at the
-        // last pc index (from_pc + 1 = 2^PC_BITS) is unsatisfiable, hence unprovable.
+        // rd = 4 * (from_pc_idx + 1) unique: the composed pc index rd[1] * 2^PC_IDX_LOW_BITS + x
+        // is < 2^PC_BITS < p, so it must equal from_pc_idx + 1 over the integers. A JAL at the
+        // last pc index (from_pc_idx + 1 = 2^PC_BITS) is unsatisfiable, hence unprovable.
         self.range_bus
             .range_check(rd[0] * pc_step_inv, PC_IDX_LOW_BITS)
             .eval(builder, is_jal);
@@ -145,7 +145,7 @@ where
 
         // `imm` is a byte offset (a multiple of DEFAULT_PC_STEP, possibly negative as a field
         // element); pc values on the buses are pc indices, so scale it down by DEFAULT_PC_STEP.
-        let to_pc = from_pc + is_lui * AB::Expr::ONE + is_jal * imm * pc_step_inv;
+        let to_pc_idx = from_pc_idx + is_lui * AB::Expr::ONE + is_jal * imm * pc_step_inv;
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
@@ -153,7 +153,7 @@ where
         );
 
         AdapterAirContext {
-            to_pc: Some(to_pc),
+            to_pc: Some(to_pc_idx),
             reads: [].into(),
             writes: [write_data].into(),
             instruction: ImmInstruction {
