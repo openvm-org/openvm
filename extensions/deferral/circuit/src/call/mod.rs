@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_deferral_guest::MAX_DEF_CIRCUITS;
+use openvm_deferral_transpiler::MAX_DEF_CIRCUITS;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 /// Number of accumulator digests stored for each `deferral_idx`.

@@ -1,5 +1,6 @@
 use eyre::Result;
-use openvm_deferral_guest::{COMMIT_NUM_BYTES, DEFERRAL_FUNCT3, MAX_DEF_CIRCUITS, OPCODE};
+pub use openvm_deferral_guest::MAX_DEF_CIRCUITS;
+use openvm_deferral_guest::{COMMIT_NUM_BYTES, DEFERRAL_FUNCT3, OPCODE};
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::Instruction,
