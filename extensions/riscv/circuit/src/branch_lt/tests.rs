@@ -4,7 +4,9 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness, VmChipTestBuilder,
+        },
         ExecutionBridge, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -105,11 +107,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     });
 
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
-    let rs1 = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
-    let mut rs2 = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
-    while rs2 == rs1 {
-        rs2 = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
-    }
+    let [rs1, rs2] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
     let a_bytes: [F; REGISTER_NUM_LIMBS] = u16_block_to_bytes(a).map(F::from_u8);
     let b_bytes: [F; REGISTER_NUM_LIMBS] = u16_block_to_bytes(b).map(F::from_u8);
     tester.write_bytes::<REGISTER_NUM_LIMBS>(1, rs1, a_bytes);

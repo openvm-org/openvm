@@ -11,6 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
+    var_range::VariableRangeCheckerBus,
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -20,7 +21,10 @@ use openvm_instructions::{
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_register};
+use openvm_riscv_circuit::adapters::{
+    eval_byte_ptr_limbs_to_block_index, expand_to_register, pack_u8_ptr_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -73,7 +77,11 @@ pub struct DeferralOutputCols<T> {
 
     // Auxiliary columns to ensure the canonicity of each F byte decomposition in
     // output_commit.
-    pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_commit_canonicity_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+
+    // Auxiliary columns to ensure the canonicity of the output_len byte
+    // decomposition.
+    pub output_len_canonicity_aux: CanonicityAuxCols<T>,
 
     // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
@@ -94,6 +102,7 @@ pub struct DeferralOutputAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
     pub bitwise_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub address_bits: usize,
 }
 
@@ -179,7 +188,7 @@ where
         // F_NUM_BYTES bytes uniquely represents an element of F.
         let output_commit_rcs = izip!(
             local.output_commit.chunks_exact(F_NUM_BYTES),
-            local.output_commit_lt_aux
+            local.output_commit_canonicity_aux
         )
         .map(|(bytes, aux)| {
             CanonicitySubAir.assert_canonicity(builder, bytes, &aux, local.is_first.into())
@@ -201,6 +210,17 @@ where
                 .send_range(bytes[0], bytes[1])
                 .eval(builder, local.is_first);
         }
+        // Without this, byte encodings of `output_len + k * p` (e.g. `p + 8`) would alias
+        // `output_len` in the composed field element compared against `section_idx` below.
+        let output_len_rc = CanonicitySubAir.assert_canonicity(
+            builder,
+            &local.output_len,
+            &local.output_len_canonicity_aux,
+            local.is_first.into(),
+        );
+        self.bitwise_bus
+            .send_range(output_len_rc, AB::Expr::ZERO)
+            .eval(builder, local.is_first);
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
@@ -264,7 +284,9 @@ where
             }
         }
 
-        // We also constrain output_len to be under 2^address_bits.
+        // We also constrain output_len to be under 2^address_bits. At address_bits = 32 the
+        // shift is 1 and this is only a redundant byte check; the canonicity constraint above
+        // provides the injective bound on the composed value.
         self.bitwise_bus
             .send_range(
                 local.output_len[F_NUM_BYTES - 1] * limb_shift,
@@ -280,9 +302,13 @@ where
         let rd_full = expand_to_register(&local.rd_val);
         let rs_full = expand_to_register(&local.rs_val);
 
+        // Register byte pointers are small: `ptr / 2` in the low cell limb, high cell limb zero.
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rd_ptr)),
+                MemoryAddress::new(
+                    d.clone(),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
+                ),
                 pack_u8_block::<AB>(&rd_full),
                 local.from_state.timestamp,
                 &local.rd_aux,
@@ -291,7 +317,10 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rs_ptr)),
+                MemoryAddress::new(
+                    d.clone(),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs_ptr),
+                ),
                 pack_u8_block::<AB>(&rs_full),
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
@@ -301,8 +330,6 @@ where
         // Constrain memory reads and writes using the MemoryBridge. a and b are
         // register pointers whose values are read first, then used as heap
         // pointers. c carries deferral_idx.
-        let input_ptr = bytes_to_f(&local.rs_val);
-        let output_ptr = bytes_to_f(&local.rd_val);
         let output_len_full = from_fn(|i| {
             if i < F_NUM_BYTES {
                 local.output_len[i].into()
@@ -317,20 +344,28 @@ where
                 output_commit_and_len,
             );
 
-        for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
-            .into_iter()
-            .zip(&local.output_commit_and_len_aux)
-            .enumerate()
+        // Convert the `input` base *byte* pointer (read on the first row) to the bus address of
+        // its first heap block, enforcing eight-byte alignment.
+        let input_base = MemoryAddress::new(
+            e.clone(),
+            eval_byte_ptr_limbs_to_block_index::<AB>(
+                builder,
+                self.range_bus,
+                pack_u8_ptr_limbs(&local.rs_val),
+                self.address_bits,
+                local.is_first.into(),
+            ),
+        );
+
+        for (chunk_idx, (data, aux)) in izip!(
+            output_commit_and_len_chunks,
+            &local.output_commit_and_len_aux
+        )
+        .enumerate()
         {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        e.clone(),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            input_ptr.clone()
-                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
-                        ),
-                    ),
+                    input_base.offset_blocks(chunk_idx),
                     pack_u8_block::<AB>(&data),
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
@@ -341,6 +376,28 @@ where
         let write_bytes_chunks =
             split_byte_memory_ops::<_, DIGEST_SIZE, DIGEST_BYTE_MEMORY_OPS>(local.sponge_inputs);
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
+        let is_write_row = local.is_valid - local.is_first;
+
+        // Convert the `output` base *byte* pointer (read on the first row) to the bus address of
+        // the first output write block, enforcing eight-byte alignment.
+        let output_base = MemoryAddress::new(
+            e.clone(),
+            eval_byte_ptr_limbs_to_block_index::<AB>(
+                builder,
+                self.range_bus,
+                pack_u8_ptr_limbs(&local.rd_val),
+                self.address_bits,
+                local.is_first.into(),
+            ),
+        );
+
+        // Write row `section_idx` writes at `output_base + (section_idx - 1)` digests. The
+        // converted base is pinned on every write row because `rd_val` is section-constant.
+        let write_base = MemoryAddress::new(
+            e.clone(),
+            output_base.pointer
+                + section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS),
+        );
 
         for (chunk_idx, (data, aux)) in write_bytes_chunks
             .into_iter()
@@ -350,21 +407,15 @@ where
             for bytes in data.chunks(2) {
                 self.bitwise_bus
                     .send_range(bytes[0], bytes[1])
-                    .eval(builder, local.is_valid - local.is_first);
+                    .eval(builder, is_write_row.clone());
             }
 
             let data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|i| data[i].into());
+            // DIGEST_BYTE_MEMORY_OPS == 1, so there is a single write block per row.
+            debug_assert_eq!(chunk_idx, 0);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        e.clone(),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            output_ptr.clone()
-                                + (section_idx_minus_one.clone()
-                                    * AB::Expr::from_usize(DIGEST_SIZE))
-                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
-                        ),
-                    ),
+                    write_base.offset_blocks(chunk_idx),
                     pack_u8_block::<AB>(&data_expr),
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
@@ -372,7 +423,7 @@ where
                             * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS)),
                     aux,
                 )
-                .eval(builder, local.is_valid - local.is_first);
+                .eval(builder, is_write_row.clone());
         }
 
         // Evaluate the execution interaction. Because a single opcode spans many

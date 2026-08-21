@@ -6,13 +6,13 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 #include "rvr/replay.cuh"
 
 using namespace riscv;
 using namespace sha2;
-using openvm::U16_BITS;
 
 template <typename V>
 static __device__ __forceinline__ void sha2_main_replay_row_body(
@@ -66,15 +66,11 @@ static __device__ __forceinline__ void sha2_main_replay_row_body(
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_u16s);
-    range_checker.add_count(
-        ptr_bound_from_high_u16(dst_ptr_u16s[PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
-    );
-    range_checker.add_count(
-        ptr_bound_from_high_u16(state_ptr_u16s[PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
-    );
-    range_checker.add_count(
-        ptr_bound_from_high_u16(input_ptr_u16s[PTR_U16_LIMBS - 1], ptr_max_bits), U16_BITS
-    );
+    // Block-index range-check counts for each base heap pointer. Mirrors
+    // `add_block_index_range_checks` in `main_chip/trace.rs`.
+    add_block_index_range_checks(range_checker, input.input_ptr, ptr_max_bits);
+    add_block_index_range_checks(range_checker, input.state_ptr, ptr_max_bits);
+    add_block_index_range_checks(range_checker, input.dst_ptr, ptr_max_bits);
 
 #pragma unroll
     for (size_t i = 0; i < SHA2_REGISTER_READS; i++) {

@@ -402,7 +402,7 @@ where
         let elf_path =
             find_unique_executable(pkg_dir, target_dir, target_filter).map_err(SdkError::Other)?;
         let data = read(&elf_path)?;
-        Elf::decode(&data, MEM_SIZE as u32).map_err(SdkError::Other)
+        Elf::decode(&data, MEM_SIZE as u64).map_err(SdkError::Other)
     }
 
     /// Transpiler for transpiling RISC-V ELF to OpenVM executable.
@@ -442,7 +442,7 @@ where
             }),
             ExecutableInput::ElfFile(path) => {
                 let bytes = read(&path)?;
-                let elf = Elf::decode(&bytes, MEM_SIZE as u32)?;
+                let elf = Elf::decode(&bytes, MEM_SIZE as u64)?;
                 Ok(CompileInput {
                     executable: ExecutableFormat::Elf(elf),
                     #[cfg(feature = "rvr")]

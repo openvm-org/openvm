@@ -4,6 +4,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "riscv/reveal_replay.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
@@ -71,7 +72,7 @@ struct Reveal {
         uint32_t dst_ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(dst_ptr_limbs, dst_ptr);
         COL_WRITE_VALUE(row, RevealCols, dst_ptr_low_limb, dst_ptr_limbs[0]);
-        range_checker.add_count(dst_ptr_limbs[0] >> 3, U16_BITS - 3);
+        range_checker.add_count(dst_ptr_limbs[0] / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(dst_ptr_limbs[1], pointer_max_bits - U16_BITS);
         for (size_t i = 0; i < REGISTER_NUM_LIMBS; i += 2) {
             bitwise_lookup.add_range(input.src_bytes[i], input.src_bytes[i + 1]);

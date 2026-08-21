@@ -67,7 +67,6 @@ pub(crate) fn checked_pointer_offset(
         .ok_or_else(|| PostflightError::new(message))
 }
 
-#[inline(always)]
 pub const fn num_byte_memory_ops(total_bytes: usize) -> usize {
     assert!(total_bytes.is_multiple_of(MEMORY_BLOCK_BYTES));
     total_bytes / MEMORY_BLOCK_BYTES

@@ -6,14 +6,16 @@ use openvm_circuit::{
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::{add_block_index_range_checks, u16_block_to_bytes};
 use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -308,6 +310,11 @@ fn fill_call_adapter<F: VmField>(
         }
     }
 
+    // Block-index range-check counts for the heap `input`/`output` base pointers.
+    for byte_ptr in [replay.rs_val, replay.rd_val] {
+        add_block_index_range_checks(&filler.range_checker_chip, byte_ptr, filler.address_bits);
+    }
+
     for (aux, access) in cols
         .new_output_acc_aux
         .iter_mut()
@@ -415,7 +422,7 @@ fn fill_call_core<F: VmField>(
     let output_commit_f = replay.output_commit.map(F::from_u8);
     let input_commit_rcs = input_commit_f
         .chunks_exact(F_NUM_BYTES)
-        .zip(cols.input_commit_lt_aux.iter_mut())
+        .zip(cols.input_commit_canonicity_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
@@ -426,7 +433,7 @@ fn fill_call_core<F: VmField>(
     }
     let output_commit_rcs = output_commit_f
         .chunks_exact(F_NUM_BYTES)
-        .zip(cols.output_commit_lt_aux.iter_mut())
+        .zip(cols.output_commit_canonicity_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
@@ -467,5 +474,6 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }

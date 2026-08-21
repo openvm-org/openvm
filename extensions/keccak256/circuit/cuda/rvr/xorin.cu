@@ -5,6 +5,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "arch/rvr/replay.cuh"
 #include "xorin.cuh"
@@ -161,9 +162,8 @@ __global__ void xorin_replay_tracegen(
     uint32_t num_blocks = len / DEFAULT_BLOCK_SIZE;
     uint64_t domain_end = pointer_max_bits < 32 ? (uint64_t(1) << pointer_max_bits)
                                                 : (uint64_t(1) << 32);
-    // Zero-length XORIN has no main-memory accesses, so its byte pointers need not be aligned.
     if (len > XORIN_RATE_BYTES || len % DEFAULT_BLOCK_SIZE != 0 ||
-        (num_blocks != 0 && ((buffer_ptr & 1) != 0 || (input_ptr & 1) != 0)) ||
+        (buffer_ptr & 1) != 0 || (input_ptr & 1) != 0 ||
         buffer_ptr >= domain_end || input_ptr >= domain_end ||
         static_cast<uint64_t>(buffer_ptr) + len > domain_end ||
         static_cast<uint64_t>(input_ptr) + len > domain_end ||
@@ -300,14 +300,13 @@ __global__ void xorin_replay_tracegen(
             from.timestamp + XORIN_REGISTER_READS + 2 * num_blocks + i
         );
     }
-    range_checker.add_count(
-        ptr_bound_from_high_u16(buffer_ptr_limbs[PTR_U16_LIMBS - 1], pointer_max_bits),
-        U16_BITS
-    );
-    range_checker.add_count(
-        ptr_bound_from_high_u16(input_ptr_limbs[PTR_U16_LIMBS - 1], pointer_max_bits),
-        U16_BITS
-    );
+    // Block-index range-check counts for both base pointers. `len = 0` performs no block access
+    // and leaves the don't-care pointers unchecked, matching the gated AIR checks. Mirrors
+    // `xorin/trace.rs`.
+    if (num_blocks > 0) {
+        add_block_index_range_checks(range_checker, buffer_ptr, pointer_max_bits);
+        add_block_index_range_checks(range_checker, input_ptr, pointer_max_bits);
+    }
 }
 
 extern "C" int _xorin_replay_tracegen(

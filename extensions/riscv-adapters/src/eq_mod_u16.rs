@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
-        MinimalInstruction, VmAdapterAir, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        MinimalInstruction, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -20,8 +20,8 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    PTR_U16_LIMBS, U16_BITS,
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -111,11 +111,11 @@ impl<
         let d = AB::F::from_u32(REGISTER_AS);
         let e = AB::F::from_u32(MEMORY_AS);
 
-        // Read register values for rs
+        // Read register values for rs (register pointers are small).
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(d, byte_ptr_to_u16_ptr::<AB>(ptr)),
+                    MemoryAddress::new(d, reg_byte_ptr_to_cell_ptr_limbs::<AB>(ptr)),
                     expand_to_block(&val),
                     timestamp_pp(),
                     aux,
@@ -123,46 +123,42 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the two u16 cells into low 32-bit heap pointers.
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
+        let byte_ptr_max_bits = self.pointer_max_bits;
 
-        // Each materialized pointer is stored as two u16 cells. Bound the high
-        // cell against the guest byte-pointer limit.
-        for val in cols.rs_val.iter() {
-            self.range_bus
-                .range_check(
-                    ptr_bound_from_high_u16_expr(val[1], self.pointer_max_bits),
-                    U16_BITS,
-                )
-                .eval(builder, ctx.instruction.is_valid.clone());
-        }
+        // Convert each base *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
+        let rs_base: [MemoryAddress<AB::F, AB::Expr>; NUM_READS] = from_fn(|i| {
+            MemoryAddress::new(
+                e,
+                eval_byte_ptr_limbs_to_block_index::<AB>(
+                    builder,
+                    self.range_bus,
+                    cols.rs_val[i].map(Into::into),
+                    byte_ptr_max_bits,
+                    ctx.instruction.is_valid.clone(),
+                ),
+            )
+        });
 
-        // Reads from heap
+        // Reads from heap: block `j` is `j` blocks after the base address.
         let read_block_data: [[[_; BLOCK_FE_WIDTH]; BLOCKS_PER_READ]; NUM_READS] =
             ctx.reads.map(|r: [AB::Expr; TOTAL_READ_SIZE]| {
                 let mut r_it = r.into_iter();
                 from_fn(|_| from_fn(|_| r_it.next().unwrap()))
             });
-        let block_ptr_offset: [_; BLOCKS_PER_READ] =
-            from_fn(|i| AB::F::from_usize(i * MEMORY_BLOCK_BYTES));
 
-        for (ptr, block_data, block_aux) in izip!(rs_val_f, read_block_data, &cols.heap_read_aux) {
-            for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
+        for (base, block_data, block_aux) in izip!(rs_base, read_block_data, &cols.heap_read_aux) {
+            for (j, (data, aux)) in izip!(block_data, block_aux).enumerate() {
                 self.memory_bridge
-                    .read(
-                        MemoryAddress::new(e, byte_ptr_to_u16_ptr::<AB>(ptr.clone() + offset)),
-                        data,
-                        timestamp_pp(),
-                        aux,
-                    )
+                    .read(base.offset_blocks(j), data, timestamp_pp(), aux)
                     .eval(builder, ctx.instruction.is_valid.clone());
             }
         }
 
-        // Write to rd register
+        // Write to rd register (register pointer is small).
         self.memory_bridge
             .write(
-                MemoryAddress::new(d, byte_ptr_to_u16_ptr::<AB>(cols.rd_ptr)),
+                MemoryAddress::new(d, reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.rd_ptr)),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
                 &cols.writes_aux,

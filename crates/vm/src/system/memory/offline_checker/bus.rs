@@ -87,6 +87,7 @@ impl<T: PrimeCharacteristicRing> MemoryBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
+        // Memory-bus payload order: [address_space, pointer, data..., timestamp].
         let fields = iter::empty()
             .chain(iter::once(self.address.address_space))
             .chain(iter::once(self.address.pointer))

@@ -28,7 +28,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/ecrecover/elf/openvm-ecdsa-recover-key-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     let mut rng = ChaCha8Rng::seed_from_u64(12345);

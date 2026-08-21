@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -96,6 +97,10 @@ struct HintStore {
         COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
         COL_WRITE_ARRAY(row, HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
+        // Per-row block-index range checks prove alignment and the pointer bound.
+        range_checker.add_count(mem_ptr_limbs[0] / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
+        range_checker.add_count(mem_ptr_limbs[1], pointer_max_bits - U16_BITS);
+
         if (local_idx == 0) {
 #ifdef CUDA_DEBUG
             // The overflow check for mem_ptr + num_words * 8 is not needed because
@@ -103,11 +108,6 @@ struct HintStore {
             assert(MAX_HINT_BUFFER_DWORDS_BITS + 3 < pointer_max_bits);
             assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
 #endif
-
-            // Range check for mem_ptr (using pointer_max_bits).
-            uint32_t mem_ptr_shift = PTR_BITS - (uint32_t)pointer_max_bits;
-            uint32_t mem_ptr_high_u16 = record.mem_ptr >> U16_BITS;
-            range_checker.add_count(mem_ptr_high_u16 << mem_ptr_shift, U16_BITS);
 
             // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
             range_checker.add_count(record.num_words << REM_WORDS_SHIFT, U16_BITS);

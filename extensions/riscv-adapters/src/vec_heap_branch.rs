@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, iter::zip};
+use std::{array::from_fn, borrow::Borrow};
 
 use itertools::izip;
 use openvm_circuit::{
@@ -20,8 +20,8 @@ use openvm_instructions::{
     riscv::{MEMORY_AS, REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    PTR_U16_LIMBS, U16_BITS,
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+    PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -41,7 +41,9 @@ pub struct VecHeapBranchAdapterCols<T, const NUM_READS: usize, const BLOCKS_PER_
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
+    /// Low 32 bits of each source pointer register as little-endian 16-bit *byte*-pointer limbs.
     pub rs_val: [[T; PTR_U16_LIMBS]; NUM_READS],
+
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
@@ -86,13 +88,13 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs
+        // Read register values for rs (register pointers are small).
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
                         AB::F::from_u32(REGISTER_AS),
-                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                        reg_byte_ptr_to_cell_ptr_limbs::<AB>(ptr),
                     ),
                     expand_to_block(&val),
                     timestamp_pp(),
@@ -101,32 +103,30 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Each materialized pointer is stored as two u16 cells. Bound the high
-        // cell against the guest byte-pointer limit.
-        for val in cols.rs_val.iter() {
-            self.range_bus
-                .range_check(
-                    ptr_bound_from_high_u16_expr(val[1], self.pointer_max_bits),
-                    U16_BITS,
-                )
-                .eval(builder, ctx.instruction.is_valid.clone());
-        }
-
-        // Compose the two u16 cells into low 32-bit heap pointers.
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
-
+        let byte_ptr_max_bits = self.pointer_max_bits;
         let e = AB::F::from_u32(MEMORY_AS);
-        // Reads from heap
-        for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
-            for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
+
+        // Convert each base *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
+        let rs_base: [MemoryAddress<AB::F, AB::Expr>; NUM_READS] = from_fn(|i| {
+            MemoryAddress::new(
+                e,
+                eval_byte_ptr_limbs_to_block_index::<AB>(
+                    builder,
+                    self.range_bus,
+                    cols.rs_val[i].map(Into::into),
+                    byte_ptr_max_bits,
+                    ctx.instruction.is_valid.clone(),
+                ),
+            )
+        });
+
+        // Reads from heap: block `j` is `j` blocks after the base address.
+        for (base, reads, reads_aux) in izip!(rs_base, ctx.reads, &cols.reads_aux) {
+            for (j, (read, aux)) in izip!(reads, reads_aux).enumerate() {
                 self.memory_bridge
                     .read(
-                        MemoryAddress::new(
-                            e,
-                            byte_ptr_to_u16_ptr::<AB>(
-                                address.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
-                            ),
-                        ),
+                        base.offset_blocks(j),
                         pack_u8_block::<AB>(&read),
                         timestamp_pp(),
                         aux,

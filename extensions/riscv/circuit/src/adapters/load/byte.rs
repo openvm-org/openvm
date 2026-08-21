@@ -26,9 +26,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    address_add_imm, byte_ptr_to_u16_ptr, checked_byte_ptr_to_u16_ptr_value,
-    checked_register_u16_pointer, expand_to_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    sign_extend_imm16, PTR_U16_LIMBS, REGISTER_NUM_LIMBS, U16_BITS,
+    address_add_imm, checked_byte_ptr_to_u16_ptr_value, checked_register_u16_pointer,
+    expand_to_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs,
+    sign_extend_imm16, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
@@ -121,7 +121,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rs1_ptr),
                 ),
                 rs1_data,
                 timestamp_pp(),
@@ -138,28 +138,28 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
         builder.assert_bool(local_cols.imm_sign);
         let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
 
-        // Prevent mem_ptr overflow while allowing the adapter to read the containing 8-byte block.
+        // Alignment: the aligned heap byte pointer's low limb is divisible by 8, i.e.
+        // `aligned_limb / 8 < 2^13`, which also implies `aligned_limb < 2^16`. (The derived high
+        // byte limb `mem_ptr_hi` is bounded below.)
         let block_bytes = AB::F::from_u32(MEMORY_BLOCK_BYTES as u32);
-        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount.clone();
+        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount;
         self.range_bus
             .range_check(
                 // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
-                aligned_limb * block_bytes.inverse(),
-                U16_BITS - 3,
+                aligned_limb.clone() * block_bytes.inverse(),
+                BLOCK_INDEX_Q_BITS,
             )
             .eval(builder, is_valid.clone());
+
         self.range_bus
             .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
-
-        let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
+        let block_index = aligned_limb * block_bytes.inverse()
+            + mem_ptr_hi * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::F::from_u32(MEMORY_AS),
-                    byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount),
-                ),
+                MemoryAddress::new(AB::F::from_u32(MEMORY_AS), block_index),
                 ctx.reads,
                 timestamp_pp(),
                 &local_cols.read_data_aux,
@@ -171,7 +171,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rd_ptr),
                 ),
                 ctx.writes.clone(),
                 timestamp_pp(),
@@ -321,10 +321,14 @@ impl LoadByteAdapterFiller {
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
+        let aligned_byte_limbs = ptr_to_u16_limbs(aligned_ptr).map(u32::from);
+        // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
+        self.range_checker_chip.add_count(
+            aligned_byte_limbs[0] / MEMORY_BLOCK_BYTES as u32,
+            BLOCK_INDEX_Q_BITS,
+        );
         self.range_checker_chip
-            .add_count((ptr_limbs[0] - shift_amount as u32) >> 3, U16_BITS - 3);
-        self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+            .add_count(aligned_byte_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
         adapter_row.imm_sign = F::from_bool(imm_sign);
         adapter_row.imm = F::from_u32(imm);
