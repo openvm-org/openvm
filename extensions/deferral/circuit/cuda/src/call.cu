@@ -60,8 +60,8 @@ template <typename T> struct DeferralCallCoreCols {
     DeferralCallReads<T, T> reads;
     DeferralCallWrites<T, T> writes;
 
-    CanonicityAuxCols<T> input_commit_lt_aux[DIGEST_SIZE];
-    CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
+    CanonicityAuxCols<T> input_commit_canonicity_aux[DIGEST_SIZE];
+    CanonicityAuxCols<T> output_commit_canonicity_aux[DIGEST_SIZE];
 };
 
 __device__ __forceinline__ void deferral_call_core_tracegen(
@@ -125,8 +125,8 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
         0
     );
 
-    constexpr size_t input_aux_offset = COL_INDEX(DeferralCallCoreCols, input_commit_lt_aux);
-    constexpr size_t output_aux_offset = COL_INDEX(DeferralCallCoreCols, output_commit_lt_aux);
+    constexpr size_t input_aux_offset = COL_INDEX(DeferralCallCoreCols, input_commit_canonicity_aux);
+    constexpr size_t output_aux_offset = COL_INDEX(DeferralCallCoreCols, output_commit_canonicity_aux);
     constexpr size_t canonicity_aux_stride = sizeof(CanonicityAuxCols<uint8_t>);
 
     uint32_t input_commit_rcs[DIGEST_SIZE];

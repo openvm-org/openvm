@@ -422,7 +422,7 @@ fn fill_call_core<F: VmField>(
     let output_commit_f = replay.output_commit.map(F::from_u8);
     let input_commit_rcs = input_commit_f
         .chunks_exact(F_NUM_BYTES)
-        .zip(cols.input_commit_lt_aux.iter_mut())
+        .zip(cols.input_commit_canonicity_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
@@ -433,7 +433,7 @@ fn fill_call_core<F: VmField>(
     }
     let output_commit_rcs = output_commit_f
         .chunks_exact(F_NUM_BYTES)
-        .zip(cols.output_commit_lt_aux.iter_mut())
+        .zip(cols.output_commit_canonicity_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)

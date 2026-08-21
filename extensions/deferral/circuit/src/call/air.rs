@@ -82,8 +82,8 @@ pub struct DeferralCallCoreCols<T> {
     pub reads: DeferralCallReads<T, T>,
     pub writes: DeferralCallWrites<T, T>,
 
-    pub input_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
-    pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub input_commit_canonicity_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_commit_canonicity_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
@@ -123,7 +123,7 @@ where
         // F_NUM_BYTES bytes uniquely represents an element of F.
         let input_commit_rcs = izip!(
             cols.reads.input_commit.chunks_exact(F_NUM_BYTES),
-            cols.input_commit_lt_aux
+            cols.input_commit_canonicity_aux
         )
         .map(|(bytes, aux)| {
             CanonicitySubAir.assert_canonicity(builder, bytes, &aux, cols.is_valid.into())
@@ -132,7 +132,7 @@ where
 
         let output_commit_rcs = izip!(
             cols.writes.output_commit.chunks_exact(F_NUM_BYTES),
-            cols.output_commit_lt_aux
+            cols.output_commit_canonicity_aux
         )
         .map(|(bytes, aux)| {
             CanonicitySubAir.assert_canonicity(builder, bytes, &aux, cols.is_valid.into())

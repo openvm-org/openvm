@@ -64,11 +64,11 @@ template <typename T> struct DeferralOutputCols {
 
     // Auxiliary columns to ensure the canonicity of each F byte decomposition in
     // output_commit.
-    CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
+    CanonicityAuxCols<T> output_commit_canonicity_aux[DIGEST_SIZE];
 
     // Auxiliary columns to ensure the canonicity of the output_len byte
     // decomposition.
-    CanonicityAuxCols<T> output_len_lt_aux;
+    CanonicityAuxCols<T> output_len_canonicity_aux;
 
     // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]

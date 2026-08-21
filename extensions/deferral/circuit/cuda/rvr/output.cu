@@ -482,7 +482,7 @@ __global__ void deferral_output_replay_tracegen(
             for (size_t j = 0; j < F_NUM_BYTES; j++)
                 x_le[j] = Fp(output_key[i * F_NUM_BYTES + j]);
             output_commit_rcs[i] = generate_subrow(x_le, aux);
-            write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_commit_lt_aux), i, aux);
+            write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_commit_canonicity_aux), i, aux);
         }
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; i += 2)
@@ -494,7 +494,7 @@ __global__ void deferral_output_replay_tracegen(
             for (size_t j = 0; j < F_NUM_BYTES; j++)
                 x_le[j] = Fp(output_key[COMMIT_NUM_BYTES + j]);
             uint32_t output_len_rc = generate_subrow(x_le, aux);
-            write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_len_lt_aux), 0, aux);
+            write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_len_canonicity_aux), 0, aux);
             bitwise_buffer.add_range(output_len_rc, 0);
         }
         Fp sponge_inputs[DIGEST_SIZE] = {};
@@ -514,8 +514,8 @@ __global__ void deferral_output_replay_tracegen(
         COL_FILL_ZERO(row, DeferralOutputCols, rd_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, rs_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, output_commit_and_len_aux);
-        COL_FILL_ZERO(row, DeferralOutputCols, output_commit_lt_aux);
-        COL_FILL_ZERO(row, DeferralOutputCols, output_len_lt_aux);
+        COL_FILL_ZERO(row, DeferralOutputCols, output_commit_canonicity_aux);
+        COL_FILL_ZERO(row, DeferralOutputCols, output_len_canonicity_aux);
         size_t write_idx = event_start + 7 + section_idx - 1;
         ReplayPreviousValue write_previous;
         if (!deferral_output_replay_event(

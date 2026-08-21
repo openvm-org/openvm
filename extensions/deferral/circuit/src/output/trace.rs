@@ -354,7 +354,7 @@ fn fill_output_section<F: VmField>(
     let cols: &mut DeferralOutputCols<F> = trace.values[first_row..first_row + width].borrow_mut();
     let output_commit_rcs = output_commit_f
         .chunks_exact(F_NUM_BYTES)
-        .zip(cols.output_commit_lt_aux.iter_mut())
+        .zip(cols.output_commit_canonicity_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
@@ -364,7 +364,7 @@ fn fill_output_section<F: VmField>(
         filler.bitwise_lookup_chip.request_range(pair[0], pair[1]);
     }
     let output_len_rc =
-        CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_lt_aux);
+        CanonicityTraceGen::generate_subrow(&output_len_f, &mut cols.output_len_canonicity_aux);
     filler.bitwise_lookup_chip.request_range(output_len_rc, 0);
 }
 

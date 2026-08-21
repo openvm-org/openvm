@@ -427,8 +427,8 @@ fn deferral_output_non_canonical_len_negative_test() {
         // Best-effort canonicity witness: marker on the (big-endian) top byte, where the
         // aliased byte 0x78 equals p's top byte so diff_val = 0 satisfies the polynomial
         // constraints; the 8-bit range check on diff_val - 1 = -1 is what must fail.
-        cols.output_len_lt_aux.diff_marker = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-        cols.output_len_lt_aux.diff_val = F::ZERO;
+        cols.output_len_canonicity_aux.diff_marker = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+        cols.output_len_canonicity_aux.diff_val = F::ZERO;
         *trace = RowMajorMatrix::new(values, width);
     };
 

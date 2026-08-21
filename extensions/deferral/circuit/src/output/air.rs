@@ -77,11 +77,11 @@ pub struct DeferralOutputCols<T> {
 
     // Auxiliary columns to ensure the canonicity of each F byte decomposition in
     // output_commit.
-    pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_commit_canonicity_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 
     // Auxiliary columns to ensure the canonicity of the output_len byte
     // decomposition.
-    pub output_len_lt_aux: CanonicityAuxCols<T>,
+    pub output_len_canonicity_aux: CanonicityAuxCols<T>,
 
     // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
@@ -191,7 +191,7 @@ where
         // F_NUM_BYTES bytes uniquely represents an element of F.
         let output_commit_rcs = izip!(
             local.output_commit.chunks_exact(F_NUM_BYTES),
-            local.output_commit_lt_aux
+            local.output_commit_canonicity_aux
         )
         .map(|(bytes, aux)| {
             CanonicitySubAir.assert_canonicity(builder, bytes, &aux, local.is_first.into())
@@ -218,7 +218,7 @@ where
         let output_len_rc = CanonicitySubAir.assert_canonicity(
             builder,
             &local.output_len,
-            &local.output_len_lt_aux,
+            &local.output_len_canonicity_aux,
             local.is_first.into(),
         );
         self.bitwise_bus
