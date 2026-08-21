@@ -1,10 +1,9 @@
 # openvm-certified-verifier: vendored Lean Swirl verifier
 
-> The contents of this crate (Rust sources, `build.rs`, and `csrc/`)
-> are vendored from the private `swirl-rbr-fv` repo at commit
-> `b4d396bec3ed50e000742f7637caf166b4da87e2`. That repo is the source
-> of truth: do not edit in place without upstreaming the change, and
-> refresh the vendored copy (see below) when it moves.
+> The contents of this crate are vendored from the private `swirl-rbr-fv`
+> repo at commit `0d0c9d31989ec9579563fb5ada19e0499db8d3cf`.
+> That repo is the source of truth: do not edit in place without upstreaming
+> the change, and refresh the vendored copy (see below) when it moves.
 
 This crate lets `openvm-sdk` (behind its `certified-verifier` feature) run
 the certified Swirl verifier extracted from its Lean formalization against
@@ -54,7 +53,7 @@ The wire format is a hand-written contract between the encoder and
 tests in `crates/certified-verifier/` and the Lean decoders
 (`swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`). Validated at:
 
-- `swirl-rbr-fv` @ `b4d396be`
+- `swirl-rbr-fv` @ `0d0c9d31989ec9579563fb5ada19e0499db8d3cf`
 - `openvm-org/stark-backend` tag `v2.0.0` (`16d60de`); this workspace's
   pin `fcaff50` was diff-checked equivalent on the `Proof`/vk type
   surface.
