@@ -506,10 +506,6 @@ __global__ void deferral_output_replay_tracegen(
         // base byte pointers. Mirrors the first-row branch of the host `DeferralOutputFiller`.
         add_block_index_range_checks(range_checker, input_ptr, address_bits);
         add_block_index_range_checks(range_checker, output_ptr, address_bits);
-
-        // The write block index is unconstrained on the first row (its constraints are gated by
-        // `is_write_row`); match the host trace, which leaves it zero.
-        COL_WRITE_VALUE(row, DeferralOutputCols, write_block_index, Fp::zero());
     } else {
         COL_FILL_ZERO(row, DeferralOutputCols, rd_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, rs_aux);
@@ -543,13 +539,6 @@ __global__ void deferral_output_replay_tracegen(
         COL_WRITE_ARRAY(aux, MemoryWriteAuxColsDef, prev_data, packed_previous);
         mem_helper.fill(aux, write_previous.timestamp,
                         from.timestamp + 7 + section_idx - 1);
-
-        // Memory-bus block index of this row's output write. Mirrors the write-row branch of the
-        // host `DeferralOutputFiller`.
-        const uint32_t write_byte_ptr = output_ptr + (section_idx - 1) * DIGEST_SIZE;
-        COL_WRITE_VALUE(
-            row, DeferralOutputCols, write_block_index, Fp(write_byte_ptr / MEMORY_BLOCK_BYTES)
-        );
     }
 
     Fp prev_capacity[DIGEST_SIZE] = {};

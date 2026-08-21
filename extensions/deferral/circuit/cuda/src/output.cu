@@ -80,6 +80,4 @@ template <typename T> struct DeferralOutputCols {
     // non-last rows, compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
 
-    // Memory-bus block index written by this section row.
-    T write_block_index;
 };

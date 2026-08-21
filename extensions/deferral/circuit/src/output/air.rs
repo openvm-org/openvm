@@ -92,9 +92,6 @@ pub struct DeferralOutputCols<T> {
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
     pub poseidon2_res: [T; DIGEST_SIZE],
-
-    /// Memory-bus block index written by this section row.
-    pub write_block_index: T,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -394,20 +391,13 @@ where
             ),
         );
 
-        // A first row writes no output. If the next row belongs to the same section, it is the
-        // section's first write row and writes exactly at the output base block.
-        let is_first_write = local.is_first * is_transition.clone();
-        builder
-            .when(is_first_write)
-            .assert_eq(next.write_block_index, output_base.pointer);
-
-        // Subsequent write rows advance the block index by one digest.
-        let is_next_write = is_write_row.clone() * is_transition.clone();
-        builder.when(is_next_write).assert_eq(
-            next.write_block_index,
-            local.write_block_index + AB::F::from_usize(DIGEST_BYTE_MEMORY_OPS),
+        // Write row `section_idx` writes at `output_base + (section_idx - 1)` digests. The
+        // converted base is pinned on every write row because `rd_val` is section-constant.
+        let write_base = MemoryAddress::new(
+            e.clone(),
+            output_base.pointer
+                + section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS),
         );
-        let write_base = MemoryAddress::new(e.clone(), local.write_block_index.into());
 
         for (chunk_idx, (data, aux)) in write_bytes_chunks
             .into_iter()

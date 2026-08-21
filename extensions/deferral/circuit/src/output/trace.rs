@@ -334,10 +334,6 @@ fn fill_output_section<F: VmField>(
                 aux.set_prev_data(access.previous_value.map(F::from_u16));
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
             }
-
-            // Memory-bus block index of this row's output write.
-            let write_byte_ptr = section.rd_val + ((row_idx - 1) * DIGEST_SIZE) as u32;
-            cols.write_block_index = F::from_u32(write_byte_ptr / MEMORY_BLOCK_BYTES as u32);
         }
         cols.poseidon2_res = current_poseidon2_res;
     }
