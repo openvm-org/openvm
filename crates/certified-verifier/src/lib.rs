@@ -1,6 +1,6 @@
 //! Verification with the certified Lean Swirl verifier extracted from its formalization.
 //!
-//! Vendored from the private `swirl-rbr-fv` repo @ `b4d396be` (the
+//! Vendored from the private `swirl-rbr-fv` repo (the
 //! `proof-wire` crate and `lean-verifier-harness` lib of its
 //! `verifier-ffi/` workspace, merged into one crate) — see `README.md`
 //! in this crate's directory.
