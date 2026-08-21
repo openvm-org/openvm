@@ -4,7 +4,6 @@ use openvm_decoder::instruction_formats::{BType, IType, ITypeShamt, JType, RType
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::{Instruction, InstructionOperand},
-    program::DEFAULT_PC_STEP,
     riscv::{MEMORY_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
@@ -104,15 +103,15 @@ pub fn from_s_type(opcode: usize, dec_insn: &SType) -> Instruction {
 
 /// Create a new [`Instruction`] from a B-type instruction.
 ///
-/// The branch offset must be `DEFAULT_PC_STEP`-aligned: the circuit represents pc values in
-/// units of `DEFAULT_PC_STEP`, so a misaligned offset has no sound encoding. Without the C
-/// extension, RISC-V branch targets are always 4-byte aligned.
+/// The immediate stays a byte offset; the AIR scales it by `inverse(DEFAULT_PC_STEP)` because
+/// circuit-visible pc values are pc indices. A misaligned offset therefore has no sound
+/// encoding, but it cannot be rejected here: the transpiler decodes every word of `.text`,
+/// including embedded data and never-taken branches that merely *look* like misaligned
+/// branches. Misalignment is enforced where the target is actually used — the interpreter
+/// traps on the misaligned pc and tracegen rejects the row via
+/// `checked_branch_target` — so a misaligned branch that is never taken falls through
+/// normally, exactly as it does on hardware.
 pub fn from_b_type(opcode: usize, dec_insn: &BType) -> Instruction {
-    assert_eq!(
-        dec_insn.imm % DEFAULT_PC_STEP as i32,
-        0,
-        "branch offset must be a multiple of DEFAULT_PC_STEP"
-    );
     Instruction::new(
         VmOpcode::from_usize(opcode),
         InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rs1),
@@ -127,13 +126,10 @@ pub fn from_b_type(opcode: usize, dec_insn: &BType) -> Instruction {
 
 /// Create a new [`Instruction`] from a J-type instruction.
 ///
-/// The jump offset must be `DEFAULT_PC_STEP`-aligned; see [`from_b_type`].
+/// The jump offset is a byte offset and is not required to be `DEFAULT_PC_STEP`-aligned here;
+/// see [`from_b_type`]. A misaligned JAL that is actually executed is rejected by the
+/// interpreter and by JAL tracegen ("JAL target outside implemented PC address space").
 pub fn from_j_type(opcode: usize, dec_insn: &JType) -> Instruction {
-    assert_eq!(
-        dec_insn.imm % DEFAULT_PC_STEP as i32,
-        0,
-        "jump offset must be a multiple of DEFAULT_PC_STEP"
-    );
     Instruction::new(
         VmOpcode::from_usize(opcode),
         InstructionOperand::from_usize(REGISTER_NUM_LIMBS * dec_insn.rd),
