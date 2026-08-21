@@ -51,7 +51,6 @@ lean_object* l_Except_pure(lean_object*, lean_object*, lean_object*);
 static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_TranscriptM_observeExtList___redArg___closed__14;
 static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instReprTranscriptEvent_repr___redArg___closed__4;
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_proofShapeError_elim___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
-LEAN_EXPORT lean_object* l___private_Swirl_Protocol_Noninteractive_Runtime_Core_0__Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_TranscriptM_observeExtList___redArg(lean_object*, lean_object*, lean_object*, lean_object*);
 static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_TranscriptM_observeExtList___redArg___closed__6;
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSpongeConfig_ctorIdx(lean_object*, lean_object*);
@@ -82,6 +81,7 @@ LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_b
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_ctorIdx(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_whirError_elim___redArg___boxed(lean_object*);
 lean_object* l_Array_ofFn___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_emptyTraces_elim___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_stackedReductionError_elim___redArg(lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instReprTranscriptEvent___redArg(lean_object*, lean_object*);
@@ -143,7 +143,6 @@ LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_t
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_ExtensionEncoding_ctorIdx___boxed(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_init___redArg___lam__0___boxed(lean_object*, lean_object*);
 static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instReprVerifierError_repr___closed__12;
-LEAN_EXPORT lean_object* l___private_Swirl_Protocol_Noninteractive_Runtime_Core_0__Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_List_foldl___at___00Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_absorbWords_spec__0(lean_object*, lean_object*, lean_object*, lean_object*);
 lean_object* l_StateT_instMonad___redArg___lam__9(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_observeEvent(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
@@ -154,6 +153,7 @@ lean_object* l_StateT_bind(lean_object*, lean_object*, lean_object*, lean_object
 static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instReprTranscriptEvent_repr___redArg___closed__5;
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_VerifierError_invalidPrismPoint_elim(lean_object*, uint8_t, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instDecidableEqTranscriptEvent_decEq___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze(lean_object*, lean_object*, lean_object*);
 static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instReprVerifierError_repr___closed__16;
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_instDecidableEqTranscriptEvent___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_TranscriptM_sampleExt___redArg(lean_object*, lean_object*, lean_object*);
@@ -1151,7 +1151,7 @@ x_7 = l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_observeCommit___redAr
 return x_7;
 }
 }
-LEAN_EXPORT lean_object* l___private_Swirl_Protocol_Noninteractive_Runtime_Core_0__Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(lean_object* x_1, lean_object* x_2) {
+LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(lean_object* x_1, lean_object* x_2) {
 _start:
 {
 lean_object* x_3; lean_object* x_4; lean_object* x_5; lean_object* x_6; uint8_t x_12; 
@@ -1199,11 +1199,11 @@ return x_10;
 }
 }
 }
-LEAN_EXPORT lean_object* l___private_Swirl_Protocol_Noninteractive_Runtime_Core_0__Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze(lean_object* x_1, lean_object* x_2, lean_object* x_3) {
+LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze(lean_object* x_1, lean_object* x_2, lean_object* x_3) {
 _start:
 {
 lean_object* x_4; 
-x_4 = l___private_Swirl_Protocol_Noninteractive_Runtime_Core_0__Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(x_2, x_3);
+x_4 = l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(x_2, x_3);
 return x_4;
 }
 }
@@ -1211,7 +1211,7 @@ LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_sa
 _start:
 {
 lean_object* x_3; uint8_t x_4; 
-x_3 = l___private_Swirl_Protocol_Noninteractive_Runtime_Core_0__Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(x_1, x_2);
+x_3 = l_Swirl_Protocol_Noninteractive_Runtime_DuplexSponge_prepareForSqueeze___redArg(x_1, x_2);
 x_4 = !lean_is_exclusive(x_3);
 if (x_4 == 0)
 {
