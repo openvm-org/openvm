@@ -9,9 +9,8 @@ use openvm_circuit::{
     system::memory::{MemoryAuxColsFactory, SharedMemoryHelper},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
-    U16_BITS,
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerChip,
 };
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
@@ -20,8 +19,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr_value, bytes_to_u16_block, ptr_bound_from_ptr, ptr_to_field_u16_limbs,
-    try_bytes_to_u32, u16_block_to_bytes,
+    add_block_index_range_checks, byte_ptr_to_u16_ptr_value, bytes_to_u16_block,
+    ptr_to_field_u16_limbs, try_bytes_to_u32, u16_block_to_bytes,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
@@ -107,10 +106,8 @@ impl<F: PrimeField32> KeccakfOpChip<F> {
             timestamp += 1;
         }
 
-        range_checker.add_count(
-            ptr_bound_from_ptr(replay.buffer_ptr, self.pointer_max_bits),
-            U16_BITS,
-        );
+        // Block-index range-check counts, mirroring the AIR's per-valid-row multiplicity.
+        add_block_index_range_checks(range_checker, replay.buffer_ptr, self.pointer_max_bits);
     }
 }
 

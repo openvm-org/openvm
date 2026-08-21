@@ -149,14 +149,14 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         );
 
         // memory bus interactions
-        let leaf_ptr = local.leaf_label * AB::F::from_usize(DIGEST_WIDTH);
         for block_idx in 0..BLOCKS_PER_LEAF {
-            let ptr = leaf_ptr.clone() + AB::F::from_usize(block_idx * BLOCK_FE_WIDTH);
+            let memory_block_index = local.leaf_label * AB::F::from_usize(BLOCKS_PER_LEAF)
+                + AB::F::from_usize(block_idx);
             // Each block uses its own timestamp; untouched blocks stay at t=0.
             // initial block
             self.memory_bus
                 .send(
-                    MemoryAddress::new(local.address_space, ptr.clone()),
+                    MemoryAddress::new(local.address_space.into(), memory_block_index.clone()),
                     local.initial_values
                         [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
@@ -166,7 +166,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             // final block
             self.memory_bus
                 .send(
-                    MemoryAddress::new(local.address_space, ptr),
+                    MemoryAddress::new(local.address_space.into(), memory_block_index),
                     local.final_values
                         [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),

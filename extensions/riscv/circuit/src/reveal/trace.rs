@@ -13,7 +13,8 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use super::{RevealChip, RevealCols};
 use crate::adapters::{
     address_add_imm, byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, sign_extend_imm16, u16_block_to_bytes, PTR_U16_LIMBS, U16_BITS,
+    ptr_to_u16_limbs, sign_extend_imm16, u16_block_to_bytes, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS,
+    U16_BITS,
 };
 
 pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
@@ -117,9 +118,10 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
         replay.finish(from_pc.wrapping_add(DEFAULT_PC_STEP))?;
 
         let dst_ptr_limbs = ptr_to_u16_limbs(dst_ptr).map(u32::from);
-        chip.inner
-            .range_checker_chip
-            .add_count(dst_ptr_limbs[0] >> 3, U16_BITS - 3);
+        chip.inner.range_checker_chip.add_count(
+            dst_ptr_limbs[0] / MEMORY_BLOCK_BYTES as u32,
+            BLOCK_INDEX_Q_BITS,
+        );
         chip.inner
             .range_checker_chip
             .add_count(dst_ptr_limbs[1], chip.inner.pointer_max_bits - U16_BITS);

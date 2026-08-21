@@ -10,7 +10,8 @@ openvm::entry!(main);
 
 pub fn main() {
     unsafe {
-        asm!("lui t0, 0x40000");
-        asm!("lw x0, 0(t0)");
+        // Wild address: 4 GiB, just past the guest region (0..0x1_0000_0000).
+        // rd = x0 must not suppress the load's bounds check.
+        asm!("li t0, 1", "slli t0, t0, 32", "lw x0, 0(t0)");
     }
 }

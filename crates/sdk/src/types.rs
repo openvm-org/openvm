@@ -33,7 +33,7 @@ pub enum ExecutableFormat {
 
 impl<'a> From<&'a [u8]> for ExecutableFormat {
     fn from(bytes: &'a [u8]) -> Self {
-        let elf = Elf::decode(bytes, MEM_SIZE.try_into().unwrap()).expect("Invalid ELF bytes");
+        let elf = Elf::decode(bytes, MEM_SIZE as u64).expect("Invalid ELF bytes");
         ExecutableFormat::Elf(elf)
     }
 }

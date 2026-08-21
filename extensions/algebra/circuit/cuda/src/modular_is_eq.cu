@@ -2,6 +2,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "riscv-adapters/vec_heap.cuh"
 #include "arch/rvr/replay.cuh"
 #include "system/memory/params.cuh"
@@ -303,12 +304,8 @@ __global__ void modular_is_eq_replay_tracegen(
             rs_prev_timestamp[read],
             from.timestamp + static_cast<uint32_t>(read)
         );
-        range_checker.add_count(
-            ptr_bound_from_high_u16(
-                static_cast<uint16_t>(rs_val[read] >> U16_BITS), pointer_max_bits
-            ),
-            U16_BITS
-        );
+        // Block-index range-check counts. Mirrors the host filler in algebra's trace.rs.
+        add_block_index_range_checks(range_checker, rs_val[read], pointer_max_bits);
         for (size_t block = 0; block < BLOCKS; block++) {
             size_t aux_index = read * BLOCKS + block;
             memory_aux.fill(

@@ -103,7 +103,7 @@ impl Elf {
     /// This function may return an error if the ELF is not valid.
     ///
     /// Reference: [Executable and Linkable Format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
-    pub fn decode(input: &[u8], max_mem: u32) -> eyre::Result<Self> {
+    pub fn decode(input: &[u8], max_mem: u64) -> eyre::Result<Self> {
         let mut image: BTreeMap<u32, u32> = BTreeMap::new();
 
         // Parse the ELF file assuming that it is little-endian..
@@ -186,7 +186,7 @@ impl Elf {
             .map_err(|err| eyre::eyre!("e_entry was larger than 32 bits. {err}"))?;
 
         // Make sure the entrypoint is valid.
-        if entry >= max_mem || !entry.is_multiple_of(ELF_WORD_SIZE as u32) {
+        if u64::from(entry) >= max_mem || !entry.is_multiple_of(ELF_WORD_SIZE as u32) {
             bail!("Invalid entrypoint");
         }
 
@@ -212,13 +212,13 @@ impl Elf {
         for segment in load_segments {
             // Get the file size of the segment as an u32.
             let file_size: u32 = segment.p_filesz.try_into()?;
-            if file_size >= max_mem {
+            if u64::from(file_size) >= max_mem {
                 bail!("invalid segment file_size");
             }
 
             // Get the memory size of the segment as an u32.
             let mem_size: u32 = segment.p_memsz.try_into()?;
-            if mem_size >= max_mem {
+            if u64::from(mem_size) >= max_mem {
                 bail!("Invalid segment mem_size");
             }
 
@@ -257,7 +257,7 @@ impl Elf {
                 let addr = vaddr
                     .checked_add(i)
                     .ok_or_else(|| eyre::eyre!("vaddr overflow"))?;
-                if addr >= max_mem {
+                if u64::from(addr) >= max_mem {
                     bail!(
                         "address [0x{addr:08x}] exceeds maximum address for guest programs [0x{max_mem:08x}]"
                     );

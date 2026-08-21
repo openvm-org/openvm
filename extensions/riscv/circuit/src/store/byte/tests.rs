@@ -111,6 +111,33 @@ fn rand_store_byte_test() {
 }
 
 #[test]
+fn positive_storeb_max_address_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, bitwise) = create_store_byte_harness(&mut tester);
+    // The default config exposes the full 2^32-byte memory AS; deterministically store to the
+    // last addressable byte (byte address 2^32 - 1).
+    let rs1 = u32::MAX.to_le_bytes();
+    set_and_execute_store(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        STOREB,
+        Some([rs1[0], rs1[1], rs1[2], rs1[3], 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+    );
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
 fn run_storeb_sanity_test() {
     let read_data = bytes_to_u16_block([221, 104, 58, 147, 175, 33, 198, 250]);
     let prev_data = [

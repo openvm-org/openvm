@@ -120,8 +120,9 @@ fn xorin_test_pointers(
     input_ptr_offset: Option<usize>,
 ) -> (usize, usize) {
     if len == 0 {
-        // Main-memory pointers are unused for an all-padding row and need not be aligned.
-        return (1, 3);
+        // Main-memory pointers are never dereferenced for an all-padding row, but the AIR still
+        // converts them to cell pointers on every enabled row, so they must be 2-byte aligned.
+        return (2, 4);
     }
     if let Some(offset) = input_ptr_offset {
         assert!(offset.is_multiple_of(MEMORY_BLOCK_BYTES));
@@ -336,6 +337,16 @@ fn run_xorin_chip_negative_test(prank: impl Fn(&mut XorinVmCols<F>)) {
     tester
         .simple_test()
         .expect_err("Expected verification to fail, but it passed");
+}
+
+#[test]
+fn xorin_unaligned_buffer_ptr_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        // An unaligned heap pointer must be rejected by the block-index quotient range check:
+        // `(byte_lo + 6) / 8` is not a 13-bit integer in the field, so no witness can redirect
+        // the access to an aliased block index.
+        cols.instruction.buffer_ptr_limbs[0] += F::from_u32(6);
+    });
 }
 
 #[test]

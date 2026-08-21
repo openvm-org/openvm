@@ -1,4 +1,4 @@
-pub const MEM_BITS: usize = 29;
+pub const MEM_BITS: usize = 32;
 pub const MEM_SIZE: usize = 1 << MEM_BITS;
 pub const GUEST_MIN_MEM: usize = 0x0000_0400;
 pub const GUEST_MAX_MEM: usize = MEM_SIZE;

@@ -22,7 +22,8 @@ use openvm_stark_backend::{
 
 use super::{ReplayComputation, ReplayResult, REGISTER_NUM_LIMBS};
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, bytes_to_u16_block, checked_register_u16_pointer, u16_block_to_bytes,
+    bytes_to_u16_block, checked_register_u16_pointer, reg_byte_ptr_to_cell_ptr_limbs,
+    u16_block_to_bytes,
 };
 
 #[repr(C)]
@@ -79,7 +80,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for MultAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
@@ -91,7 +92,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for MultAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs2_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[1].clone()),
                 timestamp_pp(),
@@ -103,7 +104,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for MultAdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),

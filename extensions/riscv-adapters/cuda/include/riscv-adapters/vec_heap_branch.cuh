@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -14,9 +15,11 @@ struct VecHeapBranchAdapterCols {
 
     T rs_ptr[NUM_READS];
     T rs_val[NUM_READS][PTR_U16_LIMBS];
+
+
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
 
-    MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
+    MemoryReadAuxCols<T> reads_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
@@ -28,7 +31,7 @@ struct VecHeapBranchAdapterRecord {
     uint32_t rs_vals[NUM_READS];
 
     MemoryReadAuxRecord rs_read_aux[NUM_READS];
-    MemoryReadAuxRecord heap_read_aux[NUM_READS][BLOCKS_PER_READ];
+    MemoryReadAuxRecord reads_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
@@ -54,12 +57,11 @@ struct VecHeapBranchAdapter {
     ) {
         static_assert(NUM_READS == 1 || NUM_READS == 2);
 
+        // Block-index range-check counts for each base pointer. Mirrors the host filler in
+        // vec_heap_branch.rs.
 #pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            range_checker.add_count(
-                ptr_bound_from_high_u16(uint16_t(record.rs_vals[i] >> U16_BITS), pointer_max_bits),
-                U16_BITS
-            );
+            add_block_index_range_checks(range_checker, record.rs_vals[i], pointer_max_bits);
         }
 
         uint32_t timestamp = record.from_timestamp + NUM_READS + NUM_READS * BLOCKS_PER_READ;
@@ -68,8 +70,8 @@ struct VecHeapBranchAdapter {
             for (int j = BLOCKS_PER_READ - 1; j >= 0; j--) {
                 timestamp--;
                 mem_helper.fill(
-                    row.slice_from(COL_INDEX(Cols, heap_read_aux[i][j])),
-                    record.heap_read_aux[i][j].prev_timestamp,
+                    row.slice_from(COL_INDEX(Cols, reads_aux[i][j])),
+                    record.reads_aux[i][j].prev_timestamp,
                     timestamp
                 );
             }

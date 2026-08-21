@@ -290,6 +290,11 @@ impl SystemConfig {
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
+        assert!(
+            (16..=32).contains(&memory_config.pointer_max_bits),
+            "pointer_max_bits must be in [16, 32]: pointers decompose into a 16-bit low limb, \
+             and block indices must embed injectively in the 31-bit field"
+        );
         assert_public_values_shape::<VM_DIGEST_WIDTH>(num_public_values);
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
