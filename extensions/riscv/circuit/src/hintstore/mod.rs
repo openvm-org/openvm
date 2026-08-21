@@ -26,7 +26,9 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::adapters::{expand_to_block, reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS, U16_BITS};
+use crate::adapters::{
+    expand_to_block, reg_byte_ptr_to_cell_ptr_limbs, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, U16_BITS,
+};
 
 mod execution;
 
@@ -199,7 +201,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
 
         let block_bytes = AB::F::from_usize(MEMORY_BLOCK_BYTES);
         let block_index = local_cols.mem_ptr_limbs[0] * block_bytes.inverse()
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << (U16_BITS - 3));
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_u32(MEMORY_AS), block_index),
@@ -232,7 +234,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
         self.range_bus
             .range_check(
                 local_cols.mem_ptr_limbs[0] * AB::F::from_usize(MEMORY_BLOCK_BYTES).inverse(),
-                U16_BITS - 3,
+                BLOCK_INDEX_Q_BITS,
             )
             .eval(builder, is_valid.clone());
         self.range_bus

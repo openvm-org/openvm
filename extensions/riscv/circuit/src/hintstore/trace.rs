@@ -3,6 +3,7 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         Postflight, PostflightError, PostflightReplay, PostflightStep, U16Access, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
@@ -18,7 +19,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use super::{validate_hint_buffer_num_words, HintStoreChip, HintStoreCols, REM_WORDS_SHIFT};
 use crate::adapters::{
     byte_ptr_to_u16_ptr_value, checked_register_pointer, ptr_to_field_u16_limbs, u32_to_ptr_limbs,
-    PTR_BITS, U16_BITS,
+    BLOCK_INDEX_Q_BITS, PTR_BITS, U16_BITS,
 };
 
 struct HintStoreReplayInput {
@@ -245,7 +246,10 @@ fn fill_row<F: PrimeField32>(
     let byte_limbs = u32_to_ptr_limbs(byte_ptr);
     // `+8` carry from this row's low byte limb into the high limb.
     cols.mem_ptr_inc_carry = F::from_u32((byte_limbs[0] + REGISTER_NUM_LIMBS as u32) >> U16_BITS);
-    range_checker.add_count(byte_limbs[0] >> 3, U16_BITS - 3);
+    range_checker.add_count(
+        byte_limbs[0] / MEMORY_BLOCK_BYTES as u32,
+        BLOCK_INDEX_Q_BITS,
+    );
     range_checker.add_count(byte_limbs[1], pointer_max_bits - U16_BITS);
     cols.mem_ptr_ptr = F::from_u32(input.mem_ptr_ptr);
     cols.from_state.timestamp = F::from_u32(timestamp);

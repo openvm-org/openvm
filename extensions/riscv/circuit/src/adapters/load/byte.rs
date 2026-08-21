@@ -28,7 +28,7 @@ use openvm_stark_backend::{
 use crate::adapters::{
     address_add_imm, checked_byte_ptr_to_u16_ptr_value, checked_register_u16_pointer,
     expand_to_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs,
-    sign_extend_imm16, PTR_U16_LIMBS, REGISTER_NUM_LIMBS, U16_BITS,
+    sign_extend_imm16, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
@@ -147,7 +147,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             .range_check(
                 // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
                 aligned_limb.clone() * block_bytes.inverse(),
-                U16_BITS - 3,
+                BLOCK_INDEX_Q_BITS,
             )
             .eval(builder, is_valid.clone());
 
@@ -155,7 +155,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
         let block_index = aligned_limb * block_bytes.inverse()
-            + mem_ptr_hi * AB::F::from_u32(1 << (U16_BITS - 3));
+            + mem_ptr_hi * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
 
         self.memory_bridge
             .read(
@@ -323,8 +323,10 @@ impl LoadByteAdapterFiller {
         let ptr_limbs = ptr_to_u16_limbs(effective_ptr).map(u32::from);
         let aligned_byte_limbs = ptr_to_u16_limbs(aligned_ptr).map(u32::from);
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
-        self.range_checker_chip
-            .add_count(aligned_byte_limbs[0] >> 3, U16_BITS - 3);
+        self.range_checker_chip.add_count(
+            aligned_byte_limbs[0] / MEMORY_BLOCK_BYTES as u32,
+            BLOCK_INDEX_Q_BITS,
+        );
         self.range_checker_chip
             .add_count(aligned_byte_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);

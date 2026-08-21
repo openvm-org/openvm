@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -102,7 +103,7 @@ struct HintStore {
         uint32_t inc_carry =
             (mem_ptr_limbs[0] + (uint32_t)REGISTER_NUM_LIMBS) >> U16_BITS;
         COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_inc_carry, inc_carry);
-        range_checker.add_count(mem_ptr_limbs[0] >> 3, U16_BITS - 3);
+        range_checker.add_count(mem_ptr_limbs[0] / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(mem_ptr_limbs[1], pointer_max_bits - U16_BITS);
 
         if (local_idx == 0) {

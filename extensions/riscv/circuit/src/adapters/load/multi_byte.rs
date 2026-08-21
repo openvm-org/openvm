@@ -28,7 +28,7 @@ use openvm_stark_backend::{
 use crate::adapters::{
     address_add_imm, checked_byte_ptr_to_u16_ptr_value, checked_register_pointer, expand_to_block,
     is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    reg_byte_ptr_to_cell_ptr_limbs, sign_extend_imm16, PTR_U16_LIMBS, U16_BITS,
+    reg_byte_ptr_to_cell_ptr_limbs, sign_extend_imm16, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct LoadInstruction<T> {
@@ -151,7 +151,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadMultiByteAdapterAir {
             .range_check(
                 // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
                 aligned_limb.clone() * block_bytes.inverse(),
-                U16_BITS - 3,
+                BLOCK_INDEX_Q_BITS,
             )
             .eval(builder, is_valid.clone());
 
@@ -159,7 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadMultiByteAdapterAir {
             .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
         let block_index = aligned_limb * block_bytes.inverse()
-            + mem_ptr_hi * AB::F::from_u32(1 << (U16_BITS - 3));
+            + mem_ptr_hi * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
 
         let [read_data0, read_data1] = ctx.reads;
         // Read the memory block containing the effective load address.
@@ -366,7 +366,7 @@ impl LoadMultiByteAdapterFiller {
         let aligned_limb = ptr_limbs[0] - shift as u32;
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
         self.range_checker_chip
-            .add_count(aligned_limb >> 3, U16_BITS - 3);
+            .add_count(aligned_limb / MEMORY_BLOCK_BYTES as u32, BLOCK_INDEX_Q_BITS);
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);

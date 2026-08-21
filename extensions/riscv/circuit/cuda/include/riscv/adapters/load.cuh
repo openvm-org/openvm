@@ -109,7 +109,7 @@ struct LoadAdapter {
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
-        range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
+        range_checker.add_count(aligned_limb / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
     }
 };
@@ -208,7 +208,7 @@ struct LoadByteAdapter {
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
-        range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
+        range_checker.add_count(aligned_limb / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
     }
 };

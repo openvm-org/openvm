@@ -27,7 +27,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_block, pack_u8_pair, reg_byte_ptr_to_cell_ptr_limbs, PTR_U16_LIMBS, U16_BITS,
+    expand_to_block, pack_u8_pair, reg_byte_ptr_to_cell_ptr_limbs, BLOCK_INDEX_Q_BITS,
+    PTR_U16_LIMBS, U16_BITS,
 };
 
 const REVEAL_TIMESTAMP_DELTA: usize = 4;
@@ -113,7 +114,10 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
         // Enforce 8-byte alignment and the configured pointer bound.
         let block_bytes = AB::F::from_usize(MEMORY_BLOCK_BYTES);
         self.range_bus
-            .range_check(cols.dst_ptr_low_limb * block_bytes.inverse(), U16_BITS - 3)
+            .range_check(
+                cols.dst_ptr_low_limb * block_bytes.inverse(),
+                BLOCK_INDEX_Q_BITS,
+            )
             .eval(builder, is_valid.clone());
         self.range_bus
             .range_check(dst_ptr_high_limb.clone(), self.pointer_max_bits - U16_BITS)
