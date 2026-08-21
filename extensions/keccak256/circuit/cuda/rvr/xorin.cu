@@ -162,9 +162,6 @@ __global__ void xorin_replay_tracegen(
     uint32_t num_blocks = len / DEFAULT_BLOCK_SIZE;
     uint64_t domain_end = pointer_max_bits < 32 ? (uint64_t(1) << pointer_max_bits)
                                                 : (uint64_t(1) << 32);
-    // The AIR converts the base byte pointers to cell pointers on every enabled row (padding
-    // included), so 2-byte alignment is required even for zero-length XORIN. Mirrors the host
-    // replay validation.
     if (len > XORIN_RATE_BYTES || len % DEFAULT_BLOCK_SIZE != 0 ||
         (buffer_ptr & 1) != 0 || (input_ptr & 1) != 0 ||
         buffer_ptr >= domain_end || input_ptr >= domain_end ||
