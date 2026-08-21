@@ -244,8 +244,6 @@ fn fill_row<F: PrimeField32>(
     cols.mem_ptr_limbs = ptr_to_field_u16_limbs(byte_ptr);
     // Per-row block-index range checks prove eight-byte alignment and the pointer bound.
     let byte_limbs = u32_to_ptr_limbs(byte_ptr);
-    // `+8` carry from this row's low byte limb into the high limb.
-    cols.mem_ptr_inc_carry = F::from_u32((byte_limbs[0] + REGISTER_NUM_LIMBS as u32) >> U16_BITS);
     range_checker.add_count(
         byte_limbs[0] / MEMORY_BLOCK_BYTES as u32,
         BLOCK_INDEX_Q_BITS,

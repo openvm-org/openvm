@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_riscv_transpiler::{
     HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
     MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS,
@@ -85,9 +85,6 @@ pub struct HintStoreCols<T> {
     /// *byte*-pointer limbs `[lo16, hi16]`. The byte pointer may span the full 2^32 byte address
     /// space.
     pub mem_ptr_limbs: [T; PTR_U16_LIMBS],
-    /// Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment (computed limb-wise to
-    /// avoid composing a 32-bit pointer into one field element).
-    pub mem_ptr_inc_carry: T,
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
@@ -271,23 +268,14 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
         // additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address
         // at some point, which prevents this exploit.
         when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
-        // `next.mem_ptr == local.mem_ptr + 8`, computed limb-wise to avoid composing a 32-bit byte
-        // pointer into one field element:
-        //   next_lo = lo + 8 - inc_carry * 2^16
-        //   next_hi = hi + inc_carry
-        // with `inc_carry` boolean. The byte limbs are canonical (each `< 2^16`, range-checked),
-        // so this pins the increment exactly.
-        let inc_carry = local_cols.mem_ptr_inc_carry;
-        when_buffer_transition.assert_bool(inc_carry);
-        when_buffer_transition.assert_eq(
-            next_cols.mem_ptr_limbs[0],
-            local_cols.mem_ptr_limbs[0] + AB::F::from_usize(REGISTER_NUM_LIMBS)
-                - inc_carry * AB::F::from_u32(1u32 << U16_BITS),
-        );
-        when_buffer_transition.assert_eq(
-            next_cols.mem_ptr_limbs[1],
-            local_cols.mem_ptr_limbs[1] + inc_carry,
-        );
+        // `next.mem_ptr == local.mem_ptr + 8`: the next block index is one past the local one.
+        // Both rows are valid buffer rows under this gate, so their limbs are range-checked
+        // aligned and canonical, and the block index determines the limbs uniquely.
+        let local_block_index = local_cols.mem_ptr_limbs[0] * block_bytes.inverse()
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
+        let next_block_index = next_cols.mem_ptr_limbs[0] * block_bytes.inverse()
+            + next_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
+        when_buffer_transition.assert_eq(next_block_index, local_block_index + AB::Expr::ONE);
         when_buffer_transition.assert_eq(
             timestamp + AB::F::from_usize(timestamp_delta),
             next_cols.from_state.timestamp,

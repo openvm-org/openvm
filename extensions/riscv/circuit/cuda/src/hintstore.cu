@@ -29,8 +29,6 @@ template <typename T> struct HintStoreCols {
     // Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`; the upper 4 bytes are
     // known to be zero and are hardcoded in the memory bus interaction.
     T mem_ptr_limbs[PTR_U16_LIMBS];
-    // Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment.
-    T mem_ptr_inc_carry;
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
@@ -100,9 +98,6 @@ struct HintStore {
         COL_WRITE_ARRAY(row, HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         // Per-row block-index range checks prove alignment and the pointer bound.
-        uint32_t inc_carry =
-            (mem_ptr_limbs[0] + (uint32_t)REGISTER_NUM_LIMBS) >> U16_BITS;
-        COL_WRITE_VALUE(row, HintStoreCols, mem_ptr_inc_carry, inc_carry);
         range_checker.add_count(mem_ptr_limbs[0] / MEMORY_BLOCK_BYTES, BLOCK_INDEX_Q_BITS);
         range_checker.add_count(mem_ptr_limbs[1], pointer_max_bits - U16_BITS);
 
