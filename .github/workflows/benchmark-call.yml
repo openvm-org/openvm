@@ -111,11 +111,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
 
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        if: ${{ startsWith(inputs.instance_type || github.event.inputs.instance_type, 'g') }}
-        run: bash ./scripts/gpu_driver_setup.sh
-
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true

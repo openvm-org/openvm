@@ -20,7 +20,6 @@ shared: &shared
 cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/guest-lib-tests.cuda.yml"
-  - "scripts/gpu_driver_setup.sh"
 sha2:
   - *shared
   - "crates/sdk/**"

@@ -29,7 +29,6 @@ on:
       - ".github/actions/sccache/**"
       - ".github/workflows/riscv.yml"
       - "ci/install-openvm-toolchain.sh"
-      - "scripts/gpu_driver_setup.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-riscv-${{ github.event.pull_request.number || github.sha }}
@@ -94,10 +93,6 @@ jobs:
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - uses: ./.github/actions/sccache
-
-      - name: Setup GPU driver
-        if: contains(matrix.platform.features, 'cuda')
-        run: bash ./scripts/gpu_driver_setup.sh
 
       - name: Set feature flags
         run: |
