@@ -36,10 +36,6 @@ jobs:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
 
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
-
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
 

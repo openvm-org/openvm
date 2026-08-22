@@ -32,7 +32,6 @@ jobs:
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
               - '.cargo/config.toml'
-              - 'scripts/gpu_driver_setup.sh'
               - '.github/workflows/lints.yml'
               - '.github/actions/sccache/**'
               - '.github/actions/rust-cache-cuda/**'
@@ -180,9 +179,6 @@ jobs:
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
