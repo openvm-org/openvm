@@ -157,7 +157,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus
@@ -168,9 +169,9 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         let range_bus = inventory.range_checker().bus;
 
         // this bus will be used for communication between the block hasher chip and the main chip
-        let sha2_bus_index = inventory.new_bus_idx();
+        let sha2_bus_index = inventory.new_bus_idx_named("Sha2Block");
         // the sha2 subair needs its own bus for self-interactions
-        let subair_bus_index = inventory.new_bus_idx();
+        let subair_bus_index = inventory.new_bus_idx_named("Sha2SubAir");
 
         // SHA-256
         let sha256_block_hasher_air = Sha2BlockHasherVmAir::<Sha256Config>::new(
