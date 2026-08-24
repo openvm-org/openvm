@@ -4,6 +4,8 @@ use openvm_instructions::{
     metering::SEGMENT_CHECK_INSNS,
     riscv::{IMM_AS, REGISTER_AS},
 };
+#[cfg(feature = "metrics")]
+use openvm_stark_backend::interaction::BusIndex;
 use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +41,10 @@ pub struct MeteredCtx {
 pub struct MeteredCtxInputs<'a> {
     pub constant_trace_heights: &'a [Option<usize>],
     pub air_names: &'a [String],
+    #[cfg(feature = "metrics")]
+    pub bus_names: &'a [String],
+    #[cfg(feature = "metrics")]
+    pub bus_interactions: &'a [Vec<(BusIndex, usize)>],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
     pub need_rot: &'a [bool],
@@ -74,6 +80,13 @@ impl MeteredCtx {
             inputs.segmentation_limits,
             memory_config,
         );
+        #[cfg(feature = "metrics")]
+        let segmentation_config = {
+            let mut config = segmentation_config;
+            config
+                .set_bus_interactions(inputs.bus_names.to_vec(), inputs.bus_interactions.to_vec());
+            config
+        };
         let initial_trace_heights = trace_heights.clone();
         let mut memory_ctx = MemoryCtx::new(config);
         memory_ctx.add_register_merkle_heights();

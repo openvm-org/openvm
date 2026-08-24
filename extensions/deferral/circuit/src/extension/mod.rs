@@ -126,14 +126,16 @@ where
             inventory.system().port().program_bus,
         );
 
-        let count_bus = DeferralCircuitCountBus::new(inventory.new_bus_idx());
-        let poseidon2_bus = DeferralPoseidon2Bus::new(inventory.new_bus_idx());
+        let count_bus = DeferralCircuitCountBus::new(inventory.new_bus_idx_named("DeferralCount"));
+        let poseidon2_bus =
+            DeferralPoseidon2Bus::new(inventory.new_bus_idx_named("DeferralPoseidon2"));
         let bitwise_bus = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus

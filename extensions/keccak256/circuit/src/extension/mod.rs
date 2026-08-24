@@ -181,7 +181,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus
@@ -198,7 +199,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         );
         inventory.add_air(xorin_air);
 
-        let keccakf_state_bus = PermutationCheckBus::new(inventory.new_bus_idx());
+        let keccakf_state_bus =
+            PermutationCheckBus::new(inventory.new_bus_idx_named("KeccakfState"));
         let periphery_air = KeccakfPermAir::new(keccakf_state_bus);
         inventory.add_air(periphery_air);
 

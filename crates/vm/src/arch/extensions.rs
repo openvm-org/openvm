@@ -164,6 +164,9 @@ pub struct AirInventory<SC: StarkProtocolConfig> {
     ext_start: Vec<usize>,
 
     bus_idx_mgr: BusIndexManager,
+    #[cfg(feature = "metrics")]
+    /// Diagnostic names in bus-index order. These names are not part of the verifying key.
+    bus_names: Vec<&'static str>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -467,12 +470,27 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
         system: SystemAirInventory,
         bus_idx_mgr: BusIndexManager,
     ) -> Self {
+        #[cfg(feature = "metrics")]
+        let bus_names = {
+            let names = vec![
+                "Execution",
+                "Memory",
+                "Program",
+                "VariableRange",
+                "MemoryMerkle",
+                "Poseidon2Compression",
+            ];
+            assert_eq!(names.len(), usize::from(bus_idx_mgr.bus_idx_max));
+            names
+        };
         Self {
             config,
             system,
             ext_start: Vec::new(),
             ext_airs: Vec::new(),
             bus_idx_mgr,
+            #[cfg(feature = "metrics")]
+            bus_names,
         }
     }
 
@@ -482,7 +500,25 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
     }
 
     pub fn new_bus_idx(&mut self) -> BusIndex {
-        self.bus_idx_mgr.new_bus_idx()
+        self.new_bus_idx_named("unnamed")
+    }
+
+    /// Allocates a bus index with a diagnostic name for metrics and tooling.
+    pub fn new_bus_idx_named(&mut self, name: &'static str) -> BusIndex {
+        let idx = self.bus_idx_mgr.new_bus_idx();
+        #[cfg(feature = "metrics")]
+        {
+            debug_assert_eq!(usize::from(idx), self.bus_names.len());
+            self.bus_names.push(name);
+        }
+        #[cfg(not(feature = "metrics"))]
+        let _ = name;
+        idx
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn bus_names(&self) -> &[&'static str] {
+        &self.bus_names
     }
 
     /// Looks through already-defined AIRs to see if there exists any of type `A` by downcasting.
@@ -1095,5 +1131,17 @@ mod tests {
         assert_eq!(port.memory_bridge.range_bus().index(), 3);
         assert_eq!(system.memory.interface.boundary.merkle_bus.index, 4);
         assert_eq!(system.memory.interface.boundary.compression_bus.index, 5);
+        #[cfg(feature = "metrics")]
+        assert_eq!(
+            inventory.bus_names(),
+            [
+                "Execution",
+                "Memory",
+                "Program",
+                "VariableRange",
+                "MemoryMerkle",
+                "Poseidon2Compression",
+            ]
+        );
     }
 }
