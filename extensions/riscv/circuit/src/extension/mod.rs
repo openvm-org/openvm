@@ -408,7 +408,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus
@@ -1134,7 +1135,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus
@@ -1150,7 +1152,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
                 air.bus
             } else {
                 let bus = RangeTupleCheckerBus::new(
-                    inventory.new_bus_idx(),
+                    inventory.new_bus_idx_named("RangeTuple"),
                     self.range_tuple_checker_sizes,
                 );
                 let air = RangeTupleCheckerAir { bus };
@@ -1359,7 +1361,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus

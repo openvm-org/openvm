@@ -1,6 +1,8 @@
 use bytesize::ByteSize;
 use itertools::izip;
 use openvm_instructions::metering::SEGMENT_CHECK_INSNS;
+#[cfg(feature = "metrics")]
+use openvm_stark_backend::interaction::BusIndex;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
@@ -52,6 +54,16 @@ pub struct SegmentationConfig {
     max_interactions: u32,
     #[serde(with = "ProvingMemoryConfigSerde")]
     memory_config: ProvingMemoryConfig,
+    /// Symbolic interaction slots per AIR and bus, in AIR order.
+    ///
+    /// A slot may have zero or non-unit multiplicity at runtime, so this is not an active-message
+    /// count.
+    #[cfg(feature = "metrics")]
+    #[serde(default)]
+    bus_interactions: Vec<Vec<(BusIndex, usize)>>,
+    #[cfg(feature = "metrics")]
+    #[serde(default)]
+    bus_names: Vec<String>,
 }
 
 impl SegmentationConfig {
@@ -92,6 +104,39 @@ impl SegmentationConfig {
             max_memory: limits.max_memory,
             max_interactions: limits.max_interactions,
             memory_config,
+            #[cfg(feature = "metrics")]
+            bus_interactions: Vec::new(),
+            #[cfg(feature = "metrics")]
+            bus_names: Vec::new(),
+        }
+    }
+
+    #[cfg(feature = "metrics")]
+    pub(crate) fn set_bus_interactions(
+        &mut self,
+        bus_names: Vec<String>,
+        bus_interactions: Vec<Vec<(BusIndex, usize)>>,
+    ) {
+        self.bus_names = bus_names;
+        self.bus_interactions = bus_interactions;
+    }
+
+    #[cfg(feature = "metrics")]
+    fn validate_bus_interactions(&self, bus_interactions: &[Vec<(BusIndex, usize)>]) {
+        if bus_interactions.is_empty() {
+            return;
+        }
+        assert_eq!(bus_interactions.len(), self.interactions.len());
+        for (air_id, (by_bus, &total)) in bus_interactions
+            .iter()
+            .zip(self.interactions.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                by_bus.iter().map(|(_, count)| count).sum::<usize>(),
+                total,
+                "per-bus interactions do not match AIR {air_id} total"
+            );
         }
     }
 
@@ -212,6 +257,15 @@ struct MeteredMemoryBreakdown {
     unpadded: usize,
 }
 
+#[cfg(feature = "metrics")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct BusInteractionCells {
+    air_id: usize,
+    bus_index: BusIndex,
+    unpadded: usize,
+    padding: usize,
+}
+
 impl SegmentationCtx {
     pub(crate) fn new(
         config: SegmentationConfig,
@@ -224,6 +278,8 @@ impl SegmentationCtx {
         assert_eq!(trace_heights.len(), config.interactions.len());
         assert_eq!(trace_heights.len(), config.need_rot.len());
         assert_eq!(trace_heights.len(), config.constraint_eval_buffers.len());
+        #[cfg(feature = "metrics")]
+        config.validate_bus_interactions(&config.bus_interactions);
 
         let mut variable_airs = Vec::with_capacity(trace_heights.len());
         let mut constant_main_with_rot = 0;
@@ -472,6 +528,30 @@ impl SegmentationCtx {
         }
     }
 
+    #[cfg(feature = "metrics")]
+    fn calculate_bus_interaction_cells(&self, trace_heights: &[u32]) -> Vec<BusInteractionCells> {
+        debug_assert_eq!(trace_heights.len(), self.config.bus_interactions.len());
+
+        let mut counts = Vec::new();
+        for (air_id, (&height, air_interactions)) in trace_heights
+            .iter()
+            .zip(self.config.bus_interactions.iter())
+            .enumerate()
+        {
+            let unpadded_height = height as usize;
+            let padded_height = next_power_of_two_or_zero(unpadded_height);
+            for &(bus_index, interactions) in air_interactions {
+                counts.push(BusInteractionCells {
+                    air_id,
+                    bus_index,
+                    unpadded: unpadded_height * interactions,
+                    padding: (padded_height - unpadded_height) * interactions,
+                });
+            }
+        }
+        counts
+    }
+
     /// Calculate the total interactions based on trace heights
     /// All padding rows contribute a single message to the interactions (+1) since
     /// we assume chips don't send/receive with nonzero multiplicity on padding rows.
@@ -716,6 +796,7 @@ impl SegmentationCtx {
             let segment = self.segments.len().to_string();
             self.emit_metered_segment_metrics(&segment, &trace_heights);
             self.emit_metered_air_metrics(&segment, &trace_heights);
+            self.emit_metered_bus_metrics(&segment, &trace_heights);
         }
         self.segments.push(Segment {
             instret_start,
@@ -873,6 +954,50 @@ impl SegmentationCtx {
                 .absolute(memory_config.main_memory_bytes(padding_cells) as u64);
         }
     }
+
+    fn emit_metered_bus_metrics(&self, segment: &str, trace_heights: &[u32]) {
+        if self.config.bus_interactions.is_empty() {
+            return;
+        }
+
+        let memory_config = self.config.memory_config;
+        for cells in self.calculate_bus_interaction_cells(trace_heights) {
+            let total_cells = cells.unpadded + cells.padding;
+            if total_cells == 0 {
+                continue;
+            }
+            let labels = [
+                ("air_name", self.config.air_names[cells.air_id].clone()),
+                ("air_id", cells.air_id.to_string()),
+                ("bus_index", cells.bus_index.to_string()),
+                (
+                    "bus_name",
+                    self.config
+                        .bus_names
+                        .get(usize::from(cells.bus_index))
+                        .filter(|name| name.as_str() != "unnamed")
+                        .cloned()
+                        .unwrap_or_else(|| format!("bus_{}", cells.bus_index)),
+                ),
+                ("segment", segment.to_string()),
+            ];
+            // Attribute only the linear GKR leaf storage to a bus. The work buffer and fixed GKR
+            // overhead depend on the segment-wide interaction count and cannot be apportioned
+            // exactly; the segment metrics report the complete GKR estimate.
+            let bytes_per_cell = 2 * memory_config.extension_degree * memory_config.base_field_size;
+            let unpadded_memory = cells.unpadded * bytes_per_cell;
+            let total_memory = total_cells * bytes_per_cell;
+
+            metrics::counter!("metered_bus_interaction_cells_unpadded", &labels)
+                .absolute(cells.unpadded as u64);
+            metrics::counter!("metered_bus_interaction_cells_padding", &labels)
+                .absolute(cells.padding as u64);
+            metrics::counter!("metered_bus_interaction_memory_unpadded_bytes", &labels)
+                .absolute(unpadded_memory as u64);
+            metrics::counter!("metered_bus_interaction_memory_padding_bytes", &labels)
+                .absolute((total_memory - unpadded_memory) as u64);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1000,6 +1125,44 @@ mod tests {
 
         let ctx = scan_test_ctx(&[2049, 8, 0, 0], &[true, true, false, false]);
         assert_eq!(ctx.segmentation_trigger(50, &[2049, 8, 0, 0]), None);
+    }
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn bus_interaction_cells_reconcile_with_air_totals() {
+        let mut ctx = scan_test_ctx(&[0, 0, 0, 0], &[false; 4]);
+        ctx.config.set_bus_interactions(
+            vec!["Execution".to_string(), "Memory".to_string()],
+            vec![
+                vec![(0, 1)],
+                vec![(0, 1), (1, 1)],
+                vec![(1, 3)],
+                vec![(0, 2), (1, 2)],
+            ],
+        );
+
+        let heights = [3, 0, 5, 8];
+        let counts = ctx.calculate_bus_interaction_cells(&heights);
+        let by_bus = |bus_index| {
+            counts
+                .iter()
+                .filter(|counts| counts.bus_index == bus_index)
+                .fold((0, 0), |(unpadded, padding), counts| {
+                    (unpadded + counts.unpadded, padding + counts.padding)
+                })
+        };
+        assert_eq!(by_bus(0), (19, 1));
+        assert_eq!(by_bus(1), (31, 9));
+
+        let air_counts = ctx.calculate_count_breakdown(&heights);
+        assert_eq!(
+            counts.iter().map(|counts| counts.unpadded).sum::<usize>(),
+            air_counts.interaction_cells_unpadded
+        );
+        assert_eq!(
+            counts.iter().map(|counts| counts.padding).sum::<usize>(),
+            air_counts.interaction_cells_padding
+        );
     }
 
     #[test]

@@ -174,7 +174,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus
@@ -190,7 +191,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
                 air.bus
             } else {
                 let bus = RangeTupleCheckerBus::new(
-                    inventory.new_bus_idx(),
+                    inventory.new_bus_idx_named("RangeTuple"),
                     self.range_tuple_checker_sizes,
                 );
                 let air = RangeTupleCheckerAir { bus };

@@ -1501,6 +1501,29 @@ where
             })
             .multiunzip();
 
+        #[cfg(feature = "metrics")]
+        let bus_names = self
+            .chip_complex
+            .inventory
+            .airs()
+            .bus_names()
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect::<Vec<_>>();
+        #[cfg(feature = "metrics")]
+        let bus_interactions = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| {
+                let mut by_bus = BTreeMap::new();
+                for interaction in &pk.vk.symbolic_constraints.interactions {
+                    *by_bus.entry(interaction.bus_index).or_insert(0) += 1;
+                }
+                by_bus.into_iter().collect()
+            })
+            .collect::<Vec<_>>();
+
         // Program trace is the same for all segments
         constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
         // VmConnectorAir always has a constant trace height of 2
@@ -1528,6 +1551,10 @@ where
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,
+                #[cfg(feature = "metrics")]
+                bus_names: &bus_names,
+                #[cfg(feature = "metrics")]
+                bus_interactions: &bus_interactions,
                 widths: &widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
