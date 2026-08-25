@@ -1864,6 +1864,15 @@ pub struct ProveBatchRecord {
     /// concurrent proves into one number. Empty for backends that do not time
     /// their proves.
     pub prove_ms: Vec<(usize, u64)>,
+    /// Segment index paired with whether that prove read a proving key of its
+    /// own rather than one shared with the other proves in its batch.
+    ///
+    /// Read from the slot the prove actually ran on, not from the residency that
+    /// was requested. Those differ if a residency is set but never reaches the
+    /// pool, and a run that silently shares one key across streams is exactly the
+    /// unordered cross-stream read that has to be told apart from a per-prove
+    /// key. Empty for backends without a per-prove key.
+    pub own_pk: Vec<(usize, bool)>,
 }
 
 /// What the last continuation run did, recorded by whichever driver ran it.

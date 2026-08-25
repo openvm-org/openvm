@@ -10,8 +10,7 @@
 use std::sync::{Arc, OnceLock};
 #[cfg(feature = "metrics")]
 use std::time::Duration;
-use std::time::Instant;
-use std::{panic::resume_unwind, sync::Mutex};
+use std::{panic::resume_unwind, sync::Mutex, time::Instant};
 
 #[cfg(not(feature = "rvr"))]
 use openvm_circuit::arch::VmExecutionConfig;
@@ -568,6 +567,13 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
             .enumerate()
             .map(|(slot, (idx, _))| (*idx, self.pool[slot].queue_id()))
             .collect();
+        // Read from the slot, so this reports what the pool was actually built
+        // with rather than what residency was requested.
+        let own_pk = batch
+            .iter()
+            .enumerate()
+            .map(|(slot, (idx, _))| (*idx, self.pool[slot].pk.is_some()))
+            .collect();
         let (results, produced, still_running) = std::thread::scope(|scope| {
             let handles = batch
                 .into_iter()
@@ -631,6 +637,7 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
                 produced_while_proving: produced.len(),
                 still_running_after_production: still_running,
                 prove_ms,
+                own_pk,
             });
         Ok((proofs, produced))
     }
