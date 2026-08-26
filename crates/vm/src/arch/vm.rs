@@ -90,7 +90,8 @@ use super::{
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     segment_scheduler::{
-        drive_scheduled, ProvedBatch, SegmentDriver, SegmentSchedulerConfig, SegmentSource,
+        drive_scheduled, segment_scheduler_from_env, ProvedBatch, SegmentDriver,
+        SegmentSchedulerConfig, SegmentSource,
     },
     AirInventoryError, ChipInventoryError, ExecutionError, Executor, ExecutorInventory,
     ExecutorInventoryError, MemoryConfig, MeteredExecutor, Postflight, PreflightOutput,
@@ -1953,7 +1954,10 @@ where
             program_commitment,
             exe,
             state: Some(state),
-            segment_scheduler: None,
+            // Environment opt-in. Unset leaves this `None`, which is the serial
+            // path exactly as before; see `SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV`.
+            // Callers may still override either way with `set_segment_scheduler`.
+            segment_scheduler: segment_scheduler_from_env(),
             scheduled_driver: None,
             prove_pk_residency: ProvingKeyResidency::Shared,
             scheduled_run: ScheduledRunRecord::default(),

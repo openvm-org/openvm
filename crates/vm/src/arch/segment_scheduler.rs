@@ -100,6 +100,74 @@ impl SegmentSchedulerConfig {
     }
 }
 
+/// Environment variable that opts a process into the scheduled continuation prover.
+///
+/// **Unset means off, and off is the serial path.** This is the only switch a CI
+/// job or an operator needs: the scheduler is otherwise reachable only through the
+/// programmatic [`crate::arch::VmInstance::set_segment_scheduler`], so a build that
+/// does not set this variable proves serially however it is labelled.
+///
+/// Set it to the number of proves the scheduler may hold resident. `2` is the
+/// width the soundness and A/B work measured:
+///
+/// ```text
+/// OPENVM_SEGMENT_SCHEDULER_RESIDENT_PROVES=2
+/// ```
+///
+/// A value that is not a positive integer is a hard error rather than a silent
+/// fallback to serial: a typo must not leave the scheduler off while every
+/// surrounding log line reports it as enabled.
+pub const SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV: &str = "OPENVM_SEGMENT_SCHEDULER_RESIDENT_PROVES";
+
+/// Builds a scheduler config admitting exactly `resident_proves` proves at once.
+///
+/// Deliberately **not** [`SegmentSchedulerConfig::for_device`], following the
+/// precedent set for the measured arm: `for_device` derives the width from how
+/// much memory the GPU happens to have, so the same configuration means different
+/// widths on different hardware and a CI result cannot be compared to a local one.
+/// Here the budget is stated as an exact multiple of what one resident prove
+/// costs, so `max_resident_proves() == resident_proves` by construction.
+///
+/// `prove_lookahead` is raised to the width for the reason documented on
+/// [`SegmentSchedulerConfig::prove_lookahead`]: a lookahead below the width stalls
+/// the execute chain before the pool ever fills.
+pub fn scheduler_config_for_width(resident_proves: usize) -> SegmentSchedulerConfig {
+    let width = resident_proves.max(1);
+    let gpu_bytes = PROVE_MARGINAL_GPU_BYTES.saturating_mul(width as u64);
+    let mut config = SegmentSchedulerConfig::new(Budget::new(gpu_bytes, 0, 0));
+    config.prove_lookahead = DEFAULT_PROVE_LOOKAHEAD.max(width);
+    config
+}
+
+/// Reads [`SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV`].
+///
+/// `None` — the variable is unset or empty — leaves the caller on the serial path.
+///
+/// # Panics
+/// If the variable is set to anything other than a positive integer. Failing the
+/// boot is the point: the alternative is a run that silently proves serially while
+/// reporting itself as scheduled.
+pub fn segment_scheduler_from_env() -> Option<SegmentSchedulerConfig> {
+    let raw = std::env::var(SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV).ok()?;
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let width: usize = raw.parse().unwrap_or_else(|_| {
+        panic!(
+            "{SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV}={raw:?} is not a positive integer. \
+             Unset it for the serial path, or set it to the number of proves the \
+             scheduler may hold resident (the measured width is 2)."
+        )
+    });
+    assert!(
+        width > 0,
+        "{SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV}=0 is not a way to disable the \
+         scheduler; unset the variable instead so the choice is visible."
+    );
+    Some(scheduler_config_for_width(width))
+}
+
 /// A graph with no segments in it yet.
 pub(crate) fn empty_graph(config: &SegmentSchedulerConfig) -> Engine<SegmentNode> {
     Engine::new(config.budget)
@@ -320,4 +388,103 @@ fn register_segments(
 
 fn scheduling_error(error: impl std::fmt::Display) -> VirtualMachineError {
     VirtualMachineError::Scheduling(error.to_string())
+}
+
+#[cfg(test)]
+mod env_opt_in_tests {
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    use super::*;
+
+    /// The variable is process-global, so these cases cannot run concurrently.
+    fn env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Sets the variable for the duration of `body`, restoring it afterwards even
+    /// if `body` panics — `#[should_panic]` below depends on that.
+    fn with_env<R>(value: Option<&str>, body: impl FnOnce() -> R) -> R {
+        let _guard = env_lock();
+        let previous = std::env::var(SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV).ok();
+        match value {
+            Some(value) => std::env::set_var(SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV, value),
+            None => std::env::remove_var(SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV),
+        }
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
+        match previous {
+            Some(previous) => std::env::set_var(SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV, previous),
+            None => std::env::remove_var(SEGMENT_SCHEDULER_RESIDENT_PROVES_ENV),
+        }
+        match result {
+            Ok(value) => value,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+
+    /// The default is the whole point: an unset variable must leave a process on
+    /// the serial path, so a CI job that does not opt in is unaffected.
+    #[test]
+    fn unset_leaves_the_scheduler_off() {
+        assert_eq!(with_env(None, segment_scheduler_from_env), None);
+    }
+
+    /// An empty value is what an unset shell variable expands to in a workflow
+    /// file, so it must mean off rather than parse-error.
+    #[test]
+    fn empty_leaves_the_scheduler_off() {
+        assert_eq!(with_env(Some(""), segment_scheduler_from_env), None);
+        assert_eq!(with_env(Some("   "), segment_scheduler_from_env), None);
+    }
+
+    /// The width the soundness and A/B work measured.
+    #[test]
+    fn two_admits_exactly_two_resident_proves() {
+        let config = with_env(Some("2"), segment_scheduler_from_env)
+            .expect("a positive width must enable the scheduler");
+        assert_eq!(config.max_resident_proves(), 2);
+        // A lookahead below the width stalls the chain before the pool fills, so
+        // asking for two resident proves has to raise it above openvm's default.
+        assert!(config.prove_lookahead >= 2);
+    }
+
+    /// Width is honoured, not merely accepted — and surrounding whitespace from a
+    /// workflow file does not change it.
+    #[test]
+    fn width_is_taken_from_the_value() {
+        for (value, want) in [("1", 1), ("3", 3), (" 2 ", 2)] {
+            let config = with_env(Some(value), segment_scheduler_from_env)
+                .unwrap_or_else(|| panic!("{value:?} must enable the scheduler"));
+            assert_eq!(config.max_resident_proves(), want, "value {value:?}");
+        }
+    }
+
+    /// Same budget arithmetic as the measured arm, rather than `for_device`, so
+    /// the width does not depend on the card the job happens to land on.
+    #[test]
+    fn width_does_not_depend_on_the_device() {
+        assert_eq!(scheduler_config_for_width(2).max_resident_proves(), 2);
+        assert_eq!(
+            scheduler_config_for_width(2).budget.gpu_bytes,
+            2 * PROVE_MARGINAL_GPU_BYTES
+        );
+    }
+
+    /// A typo must fail the boot. Falling back to serial while every surrounding
+    /// log line still says "scheduler" is the failure mode this exists to prevent.
+    #[test]
+    #[should_panic(expected = "is not a positive integer")]
+    fn a_non_numeric_value_fails_loudly() {
+        with_env(Some("true"), segment_scheduler_from_env);
+    }
+
+    /// Zero is a plausible way to try to disable it, and it must not silently do
+    /// something else.
+    #[test]
+    #[should_panic(expected = "not a way to disable the scheduler")]
+    fn zero_fails_rather_than_meaning_off() {
+        with_env(Some("0"), segment_scheduler_from_env);
+    }
 }

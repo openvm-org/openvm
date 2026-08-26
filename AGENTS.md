@@ -76,6 +76,22 @@ cargo nextest run --cargo-profile=fast --features parallel
 
 ### Environment Variables for Tests
 
+- `OPENVM_SEGMENT_SCHEDULER_RESIDENT_PROVES`: Opts a process into the **scheduled
+  continuation prover**, which proves several segments concurrently on distinct CUDA
+  streams instead of one at a time. **Unset means off, and off is the serial path
+  unchanged** — so a benchmark or CI job that does not set it measures the old path,
+  however its logs are labelled. Set it to how many proves may be resident at once;
+  `2` is the width the soundness and A/B work measured:
+
+  ```bash
+  OPENVM_SEGMENT_SCHEDULER_RESIDENT_PROVES=2 cargo run --release --bin ...
+  ```
+
+  A value that is not a positive integer fails the boot rather than falling back to
+  serial, so a typo cannot quietly disable the thing under test. The width is a fixed
+  multiple of one prove's cost, not derived from the card's memory, so the same value
+  means the same width on every machine. `VmInstance::set_segment_scheduler` still
+  overrides it programmatically in either direction.
 - `OPENVM_SKIP_DEBUG=1`: Skips debug-mode constraint checking in `air_test` (faster CI runs)
 - `OPENVM_RUST_TOOLCHAIN`: Override the rustup toolchain name used by `cargo openvm build`. Default is the `openvm-<rustup-name>` compiled into `cargo-openvm`. Set this to swap in a custom rustc fork.
 - `OPENVM_RUSTC_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf`, the tier-3 target defined in the [openvm-org/rust](https://github.com/openvm-org/rust) fork. Any rv64im-flavored target works. If the chosen toolchain does not ship prebuilt target rlibs, it must be a nightly toolchain with the `rust-src` component installed so Cargo can use `-Z build-std`.
