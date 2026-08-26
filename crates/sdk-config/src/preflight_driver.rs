@@ -712,6 +712,23 @@ pub(crate) fn continuation_prover(
             prepared = Some(PreparedPreflight::new(instance)?);
         }
         let scheduler = instance.segment_scheduler();
+        // Announced on both arms, at info, once per app prove. The scheduler is an
+        // environment opt-in that defaults to off, so a build containing all of it
+        // may still prove serially; without this line the two are distinguishable
+        // only by how long the stage takes. A benchmark result is readable as
+        // evidence about a specific prover only if the log names which one ran.
+        tracing::info!(
+            continuation_prover = if scheduler.is_some() {
+                "scheduled"
+            } else {
+                "serial"
+            },
+            resident_proves = scheduler
+                .as_ref()
+                .map(|scheduler| scheduler.max_resident_proves())
+                .unwrap_or(1),
+            "continuation prover selected"
+        );
         if let Some(scheduler) = &scheduler {
             let shape = (
                 scheduler.max_resident_proves(),
