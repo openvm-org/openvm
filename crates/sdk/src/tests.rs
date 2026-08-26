@@ -1600,6 +1600,108 @@ fn per_prove_pk_residency_costs_a_key_per_prove() -> Result<()> {
     Ok(())
 }
 
+/// Every scheduled prove must hand release ownership of its traces to its own
+/// stream — and the serial driver must not.
+///
+/// The allocator's own tests cover what the handoff *does*: adopt the consumer's
+/// stream and a sibling cannot overwrite the trace; skip it and the sibling does.
+/// They cannot see whether production still calls it — they invoke the operation
+/// directly, so they stay green for any state of the call site. This test watches
+/// the production path instead of the primitive.
+///
+/// It counts handoffs across a real scheduled prove rather than reproducing the
+/// race, so it is deterministic — a counter comparison, not a timing lottery. The
+/// two halves are complementary and neither is sufficient alone: this one shows the
+/// wiring is present, the allocator tests show the wiring does something.
+///
+/// The serial half matters as much as the scheduled half. It pins the handoff to
+/// the scheduled path, so moving it somewhere shared — where the "previous stream
+/// is already complete" precondition is not established by the tracegen fence —
+/// fails here rather than silently becoming unsound.
+#[cfg(feature = "cuda")]
+#[test]
+fn scheduled_gpu_hands_every_prove_the_release_of_its_own_traces() -> Result<()> {
+    use openvm_circuit::arch::SegmentSchedulerConfig;
+    use openvm_cuda_common::memory_manager::release_stream_handoffs;
+    use openvm_sdk_config::SdkVmGpuBuilder;
+
+    use crate::prover::{vm::new_local_prover, AppProver};
+
+    setup_tracing();
+    let (app_pk, exe, stdin) = scheduled_gpu_fixture()?;
+    let app_vm_pk = &app_pk.app_vm_pk;
+    let app_vk = app_vm_pk.vm_pk.get_vk();
+
+    // --- serial: the handoff must not happen at all ---------------------
+    let serial_instance =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe.clone())?;
+    let mut serial_prover = AppProver::new_from_instance(serial_instance, app_vk.clone());
+    let serial_before = release_stream_handoffs();
+    let serial = serial_prover.prove(stdin.clone())?;
+    let serial_handoffs = release_stream_handoffs() - serial_before;
+    drop(serial_prover);
+    assert_eq!(
+        serial_handoffs, 0,
+        "the serial driver proves on the stream that generated the traces, so it must \
+         perform no release-stream handoff; saw {serial_handoffs}. A handoff here means \
+         the operation moved to a shared path, where the tracegen fence does not \
+         establish its precondition"
+    );
+
+    // --- scheduled: every prove must hand off every common_main ---------
+    let mut scheduled_instance =
+        new_local_prover::<E, SdkVmGpuBuilder>(SdkVmGpuBuilder, app_vm_pk, exe)?;
+    scheduled_instance.set_segment_scheduler(Some(SegmentSchedulerConfig::for_device(
+        SCHEDULED_DEVICE_GPU_BYTES,
+    )));
+    let mut scheduled_prover = AppProver::new_from_instance(scheduled_instance, app_vk.clone());
+    let scheduled_before = release_stream_handoffs();
+    let scheduled = scheduled_prover.prove(stdin)?;
+    let scheduled_handoffs = release_stream_handoffs() - scheduled_before;
+
+    let proves = scheduled.per_segment.len() as u64;
+    let max_concurrent = scheduled_prover.instance().max_concurrent_proves();
+    assert!(
+        max_concurrent >= 2,
+        "two proves must have run together, or this exercises a driver with no sibling \
+         stream and the handoff is not the thing under test; saw {max_concurrent}"
+    );
+    assert_eq!(
+        serial.per_segment.len(),
+        scheduled.per_segment.len(),
+        "both drivers must span the same segments for the counts to be comparable"
+    );
+
+    // Each scheduled prove hands off every `common_main` in its context, and every
+    // segment has at least one AIR with a trace. A lower bound rather than an
+    // equality because the counter is process-global: a concurrently running GPU
+    // test can only inflate it, never deflate it, so this direction stays sound
+    // under `--test-threads > 1`.
+    assert!(
+        scheduled_handoffs >= proves,
+        "the scheduled driver performed {scheduled_handoffs} release-stream handoffs \
+         across {proves} proves, so at least one prove read traces whose release was \
+         still ordered on the trace-generation stream. A sibling slot may then reuse \
+         that allocation mid-prove, which produces a well-formed but unverifiable \
+         proof. Was the handoff in `ProveSlot::prove` removed or bypassed?"
+    );
+
+    tracing::info!(
+        proves,
+        scheduled_handoffs,
+        serial_handoffs,
+        max_concurrent,
+        "release-stream handoff wiring"
+    );
+
+    verify_segments(
+        &scheduled_prover.vm().engine,
+        &app_vk,
+        &scheduled.per_segment,
+    )?;
+    Ok(())
+}
+
 /// Two proves admitted together must run on different CUDA streams.
 ///
 /// Seating two proves is not the same as running them concurrently. Every prove
