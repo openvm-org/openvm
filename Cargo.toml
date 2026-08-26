@@ -143,13 +143,13 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-scheduler = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
+openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
+openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
+openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
+openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
+openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
+openvm-scheduler = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/scheduler-engine", default-features = false }
 
 # OpenVM
 openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
