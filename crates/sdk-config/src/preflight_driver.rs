@@ -288,6 +288,67 @@ impl ProveSlot {
     ) -> &'a DeviceMultiStarkProvingKey<GpuBackend> {
         self.pk.as_ref().unwrap_or(shared)
     }
+
+    /// Proves `ctx` on this slot's stream, after moving release ownership of
+    /// every `common_main` trace onto that stream.
+    ///
+    /// Trace generation allocates those matrices on the VM's stream and, on the
+    /// way out, synchronizes it — see the fence in
+    /// `openvm_circuit::arch::VirtualMachine::preflight_tracegen`, which
+    /// synchronizes the transcript's stream before returning the context. So by
+    /// the time a context reaches a slot, no work is outstanding on the stream
+    /// that produced it.
+    ///
+    /// Release ordering is separate from that fence. A buffer's free is enqueued
+    /// against whichever stream its allocator record names; left as the producing
+    /// stream, which has already drained, the allocation is reusable by every
+    /// other stream — including the sibling slot proving concurrently — while
+    /// this slot is still reading it. Reuse then overwrites a trace mid-prove,
+    /// after commitment and transcript state are formed, so the result is a
+    /// well-formed proof that no longer satisfies the constraints it claims.
+    /// Adopting this slot's stream puts the free behind the reads queued here,
+    /// so reuse must wait for them.
+    ///
+    /// Only `common_main` moves. `cached_mains` and the device proving key are
+    /// deliberately left alone: their `Arc` ownership marks them as shared,
+    /// long-lived data with no single consuming stream to hand release to.
+    fn prove(
+        &self,
+        pk: &DeviceMultiStarkProvingKey<GpuBackend>,
+        mut ctx: ProvingContext<GpuBackend>,
+    ) -> Result<Proof<SC>, String> {
+        let device_ctx = &self.engine.device().device_ctx;
+        // Pre-scan before mutating anything, so a hidden alias stops the prove
+        // instead of leaving some traces handed off and others not. `DeviceMatrix`
+        // is cloneable, so sole ownership is a property of how tracegen builds
+        // the context rather than one the type guarantees.
+        if let Some((air_id, count)) = ctx
+            .per_trace
+            .iter()
+            .map(|(air_id, air_ctx)| (*air_id, air_ctx.common_main.strong_count()))
+            .find(|(_, count)| *count != 1)
+        {
+            return Err(format!(
+                "cannot prove on a dedicated stream: common_main for AIR {air_id} has \
+                 {count} owners, expected 1, so its release cannot be ordered on \
+                 this prove's stream"
+            ));
+        }
+        for (air_id, air_ctx) in ctx.per_trace.iter_mut() {
+            // SAFETY: the tracegen fence above has completed all work on the
+            // producing stream; the pre-scan established sole ownership; and the
+            // context is moved into this prove, so no alias outlives it.
+            unsafe {
+                air_ctx
+                    .common_main
+                    .adopt_release_stream_after_sync(device_ctx)
+            }
+            .map_err(|error| format!("common_main handoff failed for AIR {air_id}: {error}"))?;
+        }
+        self.engine
+            .prove(pk, ctx)
+            .map_err(|error| error.to_string())
+    }
 }
 
 /// Builds one engine per prove the budget admits, each owning a fresh CUDA stream.
@@ -587,10 +648,7 @@ impl SegmentDriver for GpuSegmentDriver<'_> {
                         // prove's wall rather than the batch's. Concurrent
                         // entries overlap and do not sum to the batch duration.
                         let started = Instant::now();
-                        let proof = slot
-                            .engine
-                            .prove(slot.pk(shared_pk), ctx)
-                            .map_err(|error| error.to_string());
+                        let proof = slot.prove(slot.pk(shared_pk), ctx);
                         (idx, proof, started.elapsed())
                     })
                 })
