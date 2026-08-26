@@ -41,17 +41,31 @@ use crate::SC;
 /// Fibonacci input that splits into more than one segment under
 /// [`test_rv64im_config`] while staying inside the app parameters' stacked height,
 /// so the graph has a real execute chain and an observable `per_segment` order.
-/// Four segments, not two. The driver seeds one segment before admitting anything
-/// and fills its lookahead while proves are in flight, so a two-segment program
-/// dispatches `[P0]` and then `[P1]` alone and never puts two proves in flight —
-/// which is what the concurrency witness below correctly reported. Four reaches two
-/// resident proves from the second batch, and is what makes "identical bytes
-/// despite two concurrent proves" an assertion about something that happened.
-const LOG_FIB_INPUT: usize = 13;
-const EXPECTED_SEGMENTS: usize = 4;
+///
+/// The driver seeds one segment before admitting anything and fills its lookahead
+/// while proves are in flight, so a two-segment program dispatches `[P0]` and then
+/// `[P1]` alone and never puts two proves in flight — which is what the concurrency
+/// witness below correctly reported. Four segments is the first count that reaches
+/// two resident proves from the second batch, and that is what makes "identical
+/// bytes despite two concurrent proves" an assertion about something that happened.
+///
+/// The pair below yields six. It is deliberately **not** asserted as an exact
+/// number: an exact count stops describing the workload as soon as segmentation
+/// moves, and a fixture whose ceiling no longer binds produces a single segment
+/// that tests nothing while still looking like a workload. What the test needs is
+/// a lower bound — enough segments to put two proves in flight — plus both arms
+/// agreeing, so that is what is checked.
+const LOG_FIB_INPUT: usize = 10;
+/// Fewest segments that put two proves in flight together. See [`LOG_FIB_INPUT`].
+const MIN_SEGMENTS: usize = 4;
 /// Segmentation ceiling low enough that a small input still splits, so the graph
 /// is real without paying for a large proof.
-const SEGMENTATION_MAX_MEMORY: usize = 1 << 27;
+///
+/// The transition is sharp rather than gradual: at `1 << 27` this workload fits in
+/// a single segment, and one halving splits it. A ceiling that has stopped binding
+/// produces a one-segment run that looks like a passing workload but tests nothing,
+/// so [`MIN_SEGMENTS`] is what stands between that and a vacuous green.
+const SEGMENTATION_MAX_MEMORY: usize = 1 << 26;
 /// A 32 GB card as `nvidia-smi` reports it: driver and CUDA context already
 /// counted, so this is the whole device rather than a workload-only remainder.
 const DEVICE_GPU_BYTES: u64 = 32_768 << 20;
@@ -123,10 +137,13 @@ fn scheduled_continuations_are_byte_identical_under_deterministic_tracegen() -> 
     // itself, so establish that first, on the same driver the scheduler replaces.
     let (mut first_instance, _, input) = multi_segment_instance()?;
     let first = first_instance.prove(vec![input.clone()])?;
-    assert_eq!(
-        first.per_segment.len(),
-        EXPECTED_SEGMENTS,
-        "the workload must keep spanning several segments for this test to mean anything"
+    assert!(
+        first.per_segment.len() >= MIN_SEGMENTS,
+        "the workload must keep spanning several segments for this test to mean \
+         anything: {} < {MIN_SEGMENTS}. Segmentation has moved under the fixture; \
+         retune SEGMENTATION_MAX_MEMORY or LOG_FIB_INPUT rather than lowering this \
+         bound, which exists to stop a one-segment run passing vacuously",
+        first.per_segment.len()
     );
     drop(first_instance);
 
@@ -213,7 +230,12 @@ fn scheduled_continuations_mean_the_same_in_default_mode() -> Result<()> {
         "the serial driver must be the default"
     );
     let serial = serial_instance.prove(vec![input.clone()])?;
-    assert_eq!(serial.per_segment.len(), EXPECTED_SEGMENTS);
+    assert!(
+        serial.per_segment.len() >= MIN_SEGMENTS,
+        "the workload must keep spanning several segments for this test to mean \
+         anything: {} < {MIN_SEGMENTS}",
+        serial.per_segment.len()
+    );
     let serial_payload = verify_segments(&serial_instance.vm.engine, &vk, &serial.per_segment)
         .map_err(|error| eyre::eyre!("serial segment proofs must verify: {error}"))?;
     let serial_instance_boundaries = serial_instance.segment_boundaries().to_vec();
