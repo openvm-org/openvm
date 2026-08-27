@@ -93,7 +93,7 @@ __global__ void jal_lui_replay_tracegen(
         static_cast<uint16_t>(rd),
         static_cast<uint16_t>(rd >> U16_BITS),
         is_jal ? static_cast<uint16_t>(rd >> (2 * U16_BITS)) : sign,
-        is_jal ? 0 : sign,
+        is_jal ? static_cast<uint16_t>(0) : sign,
     };
     ReplayPreviousValue previous = {};
     if (needs_write) {
