@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag to compare (e.g., v2.0.0)"
+        description: "Version tag to compare (e.g., v2.1.0)"
         required: true
-        default: "v2.0.0"
+        default: "v2.1.0"
         type: string
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set version fallback
-        run: echo "version=${{ github.event.inputs.version || 'v2.0.0' }}" >> $GITHUB_ENV
+        run: echo "version=${{ github.event.inputs.version || 'v2.1.0' }}" >> $GITHUB_ENV
 
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
@@ -181,37 +181,25 @@ jobs:
         run: |
           echo "🔍 Comparing ~/.openvm agg and halo2 outputs between base branch and ${{ env.version }}..."
 
-          failed=0
-
-          # Compare agg_stark.pk
-          if cmp ~/.openvm-base/agg_stark.pk ~/.openvm/agg_stark.pk; then
-            echo "✅ agg_stark.pk are identical"
-          else
-            echo "❌ agg_stark.pk differ"
-            failed=1
+          set -- "$HOME"/.openvm-base/v*/
+          if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
+            echo "Expected exactly one base version directory under $HOME/.openvm-base"
+            exit 1
           fi
+          base_version_dir="$1"
 
-          # Compare agg_halo2.pk
-          if cmp ~/.openvm-base/agg_halo2.pk ~/.openvm/agg_halo2.pk; then
-            echo "✅ agg_halo2.pk are identical"
-          else
-            echo "❌ agg_halo2.pk differ"
-            failed=1
+          set -- "$HOME"/.openvm/v*/
+          if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
+            echo "Expected exactly one tagged version directory under $HOME/.openvm"
+            exit 1
           fi
+          tagged_version_dir="$1"
 
-          # Compare halo2 directories recursively
-          if diff -r ~/.openvm-base/halo2 ~/.openvm/halo2; then
-            echo "✅ halo2 directories are identical"
+          if diff -r "$base_version_dir" "$tagged_version_dir"; then
+            echo "✅ Version-dependent setup artifacts are identical"
           else
-            echo "❌ halo2 directories differ"
-            failed=1
-          fi
-
-          if [ $failed -eq 1 ]; then
             echo "❌ ~/.openvm outputs differ"
             exit 1
-          else
-            echo "✅ All checked ~/.openvm outputs are identical"
           fi
 
       - name: Final summary

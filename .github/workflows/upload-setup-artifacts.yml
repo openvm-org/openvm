@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag (e.g., v2.0.0)"
+        description: "Version tag (e.g., v2.1.0)"
         required: true
-        default: "v2.0.0"
+        default: "v2.1.0"
         type: string
   release:
     types: [released]
@@ -72,7 +72,15 @@ jobs:
           install_s5cmd
 
       - name: Sync ~/.openvm with S3 bucket in tagged dir
-        run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/
+        run: |
+          set -- "$HOME"/.openvm/v*/
+          if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
+            echo "Expected exactly one version directory under $HOME/.openvm"
+            exit 1
+          fi
+          test -d "$HOME/.openvm/params"
+          s5cmd sync "$1" "s3://${S3_BUCKET%/}/${version}/"
+          s5cmd sync "$HOME/.openvm/params/" "s3://${S3_BUCKET%/}/${version}/params/"
 
       - name: Check uploaded artifacts via CLI download
         run: |

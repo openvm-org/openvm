@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Versioned directory name for the EVM halo2 verifier artifacts stored under
-/// `~/.openvm/halo2/src/` (e.g. `v2.0-base`). The `-base` suffix matches the
+/// `~/.openvm/v2.1/halo2/src/` (e.g. `v2.1-base`). The `-base` suffix matches the
 /// openvm-solidity-sdk layout for verifiers with deferrals disabled, which is the only
 /// config `cargo openvm setup --evm` generates.
 pub fn evm_verifier_version_dir() -> String {

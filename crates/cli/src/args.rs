@@ -78,7 +78,7 @@ pub struct ProvingKeyArgs {
     #[arg(
         long,
         action,
-        help = "Path to the internal recursive (aggregation) proving key, by default will be ${HOME}/.openvm/internal_recursive.pk",
+        help = "Path to the internal recursive (aggregation) proving key, by default uses ${HOME}/.openvm/v[OPENVM_VERSION]/internal_recursive.pk",
         help_heading = "OpenVM Options"
     )]
     pub agg_pk: Option<PathBuf>,
