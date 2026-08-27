@@ -9,6 +9,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - ".github/actions/lean-toolchain/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
     inputs:
@@ -18,7 +19,6 @@ on:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
-  LEAN_TOOLCHAIN: leanprover/lean4:v4.26.0
 
 jobs:
   docs:
@@ -34,12 +34,13 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/lean-toolchain
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: ./.github/actions/sccache
@@ -51,13 +52,6 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
-
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
 
       - name: Build documentation
         run: cargo +nightly-2026-01-18 doc --workspace --no-deps --exclude "openvm-benchmarks*" --exclude "*-tests" --features "cuda"

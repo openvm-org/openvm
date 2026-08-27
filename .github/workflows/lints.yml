@@ -8,8 +8,6 @@ on:
 concurrency:
   group: ${{ github.workflow_ref }}-lints-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
-env:
-  LEAN_TOOLCHAIN: leanprover/lean4:v4.26.0
 jobs:
   changes:
     name: Detect CUDA changes
@@ -36,6 +34,7 @@ jobs:
               - '.cargo/config.toml'
               - 'scripts/gpu_driver_setup.sh'
               - '.github/workflows/lints.yml'
+              - '.github/actions/lean-toolchain/**'
               - '.github/actions/sccache/**'
               - '.github/actions/rust-cache-cuda/**'
   lint:
@@ -46,12 +45,13 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/lean-toolchain
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf
@@ -62,13 +62,6 @@ jobs:
         with:
           cache-on-failure: true
           key: v1
-
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
 
       - name: Run fmt
         run: |
@@ -131,25 +124,19 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/lean-toolchain
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
           key: v1
-
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
 
       - name: Generate docs
         # full docs with dependencies are built by docs.yml on main/tags
@@ -172,12 +159,13 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/lean-toolchain
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
@@ -188,12 +176,6 @@ jobs:
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
       - name: Verify GPU setup
         run: |
           nvidia-smi
