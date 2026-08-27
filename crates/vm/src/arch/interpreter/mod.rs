@@ -224,7 +224,7 @@ where
     #[cfg(feature = "tco")]
     #[inline(always)]
     pub fn get_handler(&self, pc: u32) -> Option<Handler<Ctx>> {
-        let pc_idx = get_pc_index(pc);
+        let pc_idx = checked_pc_index(pc)?;
         self.handlers.get(pc_idx).copied()
     }
 }
@@ -344,7 +344,10 @@ unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
         }
         let pc = exec_state.pc();
         Ctx::on_instruction_start(exec_state, pc);
-        let pc_index = get_pc_index(pc);
+        let Some(pc_index) = checked_pc_index(pc) else {
+            exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
+            break;
+        };
 
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
@@ -358,6 +361,11 @@ unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
 #[inline(always)]
 pub fn get_pc_index(pc: u32) -> usize {
     (pc / DEFAULT_PC_STEP) as usize
+}
+
+#[inline(always)]
+fn checked_pc_index(pc: u32) -> Option<usize> {
+    pc.is_multiple_of(DEFAULT_PC_STEP).then(|| get_pc_index(pc))
 }
 
 /// Bytes allocated according to the given Layout.
@@ -652,7 +660,48 @@ pub(super) fn check_termination(
 
 #[cfg(test)]
 mod tests {
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
     use super::*;
+    use crate::{arch::execution_mode::MeteredCostCtx, system::SystemExecutor};
+
+    #[test]
+    fn misaligned_pc_is_rejected_before_dispatch() {
+        let terminate = Instruction {
+            opcode: SystemOpcode::TERMINATE.global_opcode(),
+            ..Default::default()
+        };
+        let exe = VmExe::new(Program::new_without_debug_infos(&[terminate], 0)).with_pc_start(2);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
+            .expect("terminate-only program should be statically valid");
+
+        assert!(matches!(
+            interpreter.execute(Streams::default()),
+            Err(ExecutionError::PcOutOfBounds(2))
+        ));
+    }
+
+    #[test]
+    fn metered_misaligned_pc_is_rejected_before_dispatch() {
+        let terminate = Instruction {
+            opcode: SystemOpcode::TERMINATE.global_opcode(),
+            ..Default::default()
+        };
+        let exe = VmExe::new(Program::new_without_debug_infos(&[terminate], 0)).with_pc_start(2);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
+            &inventory,
+            &exe,
+            &[],
+        )
+        .expect("terminate-only program should be statically valid");
+
+        assert!(matches!(
+            interpreter.execute_metered_cost(Streams::default(), MeteredCostCtx::new(vec![])),
+            Err(ExecutionError::PcOutOfBounds(2))
+        ));
+    }
 
     #[test]
     fn terminate_rejects_negative_exit_code() {
