@@ -75,6 +75,45 @@ members = [
   "crates/static-verifier",
   "scripts",
 ]
+# Keep this in sync with `members`, except for `openvm-certified-verifier`. That crate requires the
+# pinned Lean toolchain and is built and tested by `.github/workflows/certified-verifier.yml`.
+default-members = [
+  "benchmarks/execute",
+  "benchmarks/prove",
+  "benchmarks/utils",
+  "crates/prof",
+  "crates/cli",
+  "crates/sdk",
+  "crates/sdk-config",
+  "crates/circuits/*",
+  "crates/circuits/primitives/derive",
+  "crates/toolchain/*",
+  "crates/toolchain/instructions/derive",
+  "crates/continuations",
+  "crates/recursion",
+  "crates/recursion/derive",
+  "crates/verify",
+  "crates/vm",
+  "crates/vm/derive",
+  "crates/static-verifier",
+  "extensions/rv32-adapters",
+  "extensions/algebra/*",
+  "extensions/bigint/*",
+  "extensions/deferral/*",
+  "extensions/ecc/*",
+  "extensions/keccak256/*",
+  "extensions/pairing/*",
+  "extensions/rv32im/*",
+  "extensions/sha2/*",
+  "guest-libs/ff_derive",
+  "guest-libs/k256",
+  "guest-libs/p256",
+  "guest-libs/keccak256",
+  "guest-libs/pairing",
+  "guest-libs/sha2",
+  "guest-libs/verify-stark/*",
+  "scripts",
+]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
 

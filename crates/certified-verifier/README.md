@@ -31,10 +31,8 @@ cargo build -p openvm-certified-verifier
 cargo build -p openvm-sdk --features certified-verifier
 ```
 
-Overrides: `SWIRL_LEANC=<path to leanc>` picks the compiler explicitly.
-`SWIRL_VERIFY_BIN=<path>` selects an externally built verifier and is
-also honored at runtime. The parser tests expect `swirl_dump_proof` to
-be next to that verifier.
+The build always invokes `leanc` through the pinned elan toolchain. Compiler
+and verifier binary overrides are intentionally unsupported.
 
 ## Regenerating csrc/
 
