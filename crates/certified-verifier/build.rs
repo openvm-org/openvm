@@ -15,23 +15,14 @@ use std::{
 const LEAN_TOOLCHAIN: &str = "leanprover/lean4:v4.26.0";
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=SWIRL_VERIFY_BIN");
-    println!("cargo:rerun-if-env-changed=SWIRL_LEANC");
+    println!("cargo:rerun-if-env-changed=ELAN_HOME");
+    println!("cargo:rerun-if-env-changed=PATH");
     println!("cargo:rerun-if-changed=csrc");
-
-    // Escape hatch: point at externally built sibling executables and
-    // skip the vendored C build entirely.
-    if let Ok(path) = env::var("SWIRL_VERIFY_BIN") {
-        if !path.is_empty() {
-            println!("cargo:rustc-env=SWIRL_VERIFY_BIN={path}");
-            return;
-        }
-    }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let csrc = manifest_dir.join("csrc");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let leanc = find_leanc();
+    ensure_pinned_leanc();
 
     let mut sources = Vec::new();
     collect_c_files(&csrc, &mut sources);
@@ -44,7 +35,6 @@ fn main() {
         let jobs = std::thread::available_parallelism().map_or(4, |n| n.get());
         let mut handles = Vec::new();
         for chunk in sources.chunks(sources.len().div_ceil(jobs)) {
-            let leanc = &leanc;
             let csrc = &csrc;
             let out_dir = &out_dir;
             handles.push(scope.spawn(move || {
@@ -83,7 +73,6 @@ fn main() {
         .collect();
     link_args.extend(obj_strs.iter().map(String::as_str));
     run(leanc(&link_args));
-    println!("cargo:rustc-env=SWIRL_VERIFY_BIN={}", bin.display());
 
     let dump_main = csrc.join("Tools/SwirlDumpProof.c");
     let dump_obj = out_dir.join("dump_Tools_SwirlDumpProof.o");
@@ -111,52 +100,26 @@ fn main() {
     ]));
 }
 
-/// Locate `leanc`: `SWIRL_LEANC` env override, then the pinned toolchain
-/// via elan, then whatever `leanc` is on PATH.
-#[allow(clippy::type_complexity)]
-fn find_leanc() -> Box<dyn Fn(&[&str]) -> Command + Sync> {
-    if let Ok(path) = env::var("SWIRL_LEANC") {
-        if !path.is_empty() {
-            return Box::new(move |args| {
-                let mut cmd = Command::new(&path);
-                cmd.args(args);
-                cmd
-            });
-        }
-    }
-    let elan_works = Command::new("elan")
-        .args(["run", LEAN_TOOLCHAIN, "leanc", "--version"])
-        .output()
-        .is_ok_and(|o| o.status.success());
-    if elan_works {
-        return Box::new(|args| {
-            let mut cmd = Command::new("elan");
-            cmd.args(["run", LEAN_TOOLCHAIN, "leanc"]);
-            cmd.args(args);
-            cmd
-        });
-    }
-    let plain_works = Command::new("leanc")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success());
-    if plain_works {
-        println!(
-            "cargo:warning=using `leanc` from PATH; the vendored C expects \
-             toolchain {LEAN_TOOLCHAIN} — install it via elan for a \
-             reproducible build"
-        );
-        return Box::new(|args| {
-            let mut cmd = Command::new("leanc");
-            cmd.args(args);
-            cmd
-        });
-    }
-    panic!(
-        "building `openvm-certified-verifier` needs `leanc` (Lean toolchain \
-        {LEAN_TOOLCHAIN}). Install elan (https://github.com/leanprover/elan) \
-         and run `elan toolchain install {LEAN_TOOLCHAIN}`, set SWIRL_LEANC \
-         to a leanc binary, or set SWIRL_VERIFY_BIN to a prebuilt verifier."
+fn leanc(args: &[&str]) -> Command {
+    let mut cmd = Command::new("elan");
+    cmd.args(["run", LEAN_TOOLCHAIN, "leanc"]);
+    cmd.args(args);
+    cmd
+}
+
+fn ensure_pinned_leanc() {
+    let output = leanc(&["--version"]).output().unwrap_or_else(|e| {
+        panic!(
+            "building `openvm-certified-verifier` needs Lean toolchain \
+             {LEAN_TOOLCHAIN}, but failed to run `elan`: {e}. Install elan \
+             (https://github.com/leanprover/elan) and run \
+             `elan toolchain install {LEAN_TOOLCHAIN}`."
+        )
+    });
+    assert!(
+        output.status.success(),
+        "failed to run `leanc` from Lean toolchain {LEAN_TOOLCHAIN}: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
     );
 }
 

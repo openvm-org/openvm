@@ -21,7 +21,7 @@
 //! `leanprover/lean4:v4.26.0`) are vendored under `csrc/` and compiled
 //! by this crate's `build.rs` with `leanc` (see `README.md` in this
 //! crate's directory). The resulting exe is resolved by
-//! [`swirl_verify_bin`]; override with the `SWIRL_VERIFY_BIN` env var.
+//! [`swirl_verify_bin`].
 
 pub mod harness;
 pub mod magic;

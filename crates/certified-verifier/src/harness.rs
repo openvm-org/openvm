@@ -10,8 +10,7 @@
 //! The upstream crate's `build.rs` runs `lake build swirl_verify`
 //! against the Lean sources; here the crate's `build.rs` instead
 //! compiles the vendored Lean-generated C (`csrc/`) with `leanc` and
-//! bakes the resulting exe path in. A `SWIRL_VERIFY_BIN` env var
-//! overrides at runtime (and skips the C build at build time).
+//! bakes the resulting exe path in.
 
 use std::{
     io::{self, Write},
@@ -19,16 +18,10 @@ use std::{
     process::{Command, Stdio},
 };
 
-/// Resolve the `swirl_verify` Lean executable: the `SWIRL_VERIFY_BIN`
-/// env var if set, otherwise the exe compiled from the vendored C
+/// Resolve the `swirl_verify` Lean executable compiled from the vendored C
 /// sources by this crate's `build.rs`.
 pub fn swirl_verify_bin() -> PathBuf {
-    if let Ok(path) = std::env::var("SWIRL_VERIFY_BIN") {
-        if !path.is_empty() {
-            return PathBuf::from(path);
-        }
-    }
-    PathBuf::from(env!("SWIRL_VERIFY_BIN"))
+    PathBuf::from(env!("OUT_DIR")).join("swirl_verify")
 }
 
 /// Spawn the Lean verifier exe, write `bytes` to its stdin, and return
