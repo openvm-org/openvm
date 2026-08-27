@@ -105,7 +105,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to root proving key, by default will be ${HOME}/.openvm/root.pk",
+            help = "Path to root proving key, by default uses ${HOME}/.openvm/v[OPENVM_VERSION]/root.pk",
             help_heading = "OpenVM Options"
         )]
         root_pk: Option<PathBuf>,
@@ -113,7 +113,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to Halo2 proving key, by default will be ${HOME}/.openvm/halo2.pk",
+            help = "Path to Halo2 proving key, by default uses ${HOME}/.openvm/v[OPENVM_VERSION]/halo2.pk",
             help_heading = "OpenVM Options"
         )]
         halo2_pk: Option<PathBuf>,

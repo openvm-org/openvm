@@ -112,7 +112,9 @@ key generation for the aggregation proving keys and the EVM verifier contract, w
 cargo openvm setup [--evm]
 ```
 
-This will write the files necessary for STARK aggregation and EVM proving to `~/.openvm/`.
+This writes version-dependent STARK aggregation and EVM proving artifacts to
+`~/.openvm/v[OPENVM_VERSION]/`, where `OPENVM_VERSION` is the OpenVM major and minor version.
+Version-independent KZG parameters remain in `~/.openvm/params/`.
 
 :::warning
 `cargo openvm setup --evm` requires a large amount of compute and memory (~16 GB). Use `--download` to download the pre-built Halo2 proving key and verifier artifacts from S3 instead of generating them locally.
