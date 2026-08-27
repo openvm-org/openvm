@@ -1,20 +1,19 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
-    iter::repeat_n,
     ptr::NonNull,
 };
 
 use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(test)]
-use openvm_instructions::instruction::InstructionOperand;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
+#[cfg(test)]
+use openvm_instructions::{instruction::InstructionOperand, program::MAX_ALLOWED_PC};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 #[cfg(test)]
@@ -44,9 +43,7 @@ pub struct InterpretedInstance<'a, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     /// Instruction table of function pointers and pointers to the pre-computed buffer. Indexed by
-    /// `pc_index = pc / DEFAULT_PC_STEP`.
-    /// SAFETY: The first `pc_base / DEFAULT_PC_STEP` entries will be unreachable. We do this to
-    /// avoid needing to subtract `pc_base` during runtime.
+    /// the instruction slot `(pc - pc_base) / DEFAULT_PC_STEP`.
     #[cfg(not(feature = "tco"))]
     pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     #[cfg(feature = "tco")]
@@ -55,6 +52,7 @@ pub struct InterpretedInstance<'a, Ctx> {
     #[cfg(feature = "tco")]
     handlers: Vec<Handler<Ctx>>,
 
+    pc_base: u32,
     pc_start: u32,
 
     init_memory: SparseMemoryImage,
@@ -88,6 +86,7 @@ macro_rules! run {
                     $crate::arch::interpreter::execute_trampoline(
                         &mut $exec_state,
                         &$interpreter.pre_compute_insns,
+                        $interpreter.pc_base,
                     );
                 }
             }
@@ -155,14 +154,15 @@ where
         let pc_start = exe.pc_start;
         let init_memory = exe.init_memory.clone();
         #[cfg(feature = "tco")]
-        let handlers = repeat_n(&None, get_pc_index(program.pc_base))
-            .chain(program.instructions_and_debug_infos.iter())
+        let handlers = program
+            .instructions_and_debug_infos
+            .iter()
             .zip_eq(split_pre_compute_buf.iter_mut())
             .enumerate()
             .map(
-                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
+                |(slot, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
-                        let pc = pc_idx as u32 * DEFAULT_PC_STEP;
+                        let pc = program.pc_base + slot as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<Ctx>(pc, inst, pre_compute)?.is_some() {
                             Ok(terminate_execute_tco_handler)
                         } else {
@@ -183,6 +183,7 @@ where
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
+            pc_base: program.pc_base,
             pc_start,
             init_memory,
             #[cfg(feature = "tco")]
@@ -204,28 +205,28 @@ where
     #[cfg(feature = "tco")]
     #[inline(always)]
     pub fn get_pre_compute(&self, pc: u32) -> *const u8 {
-        let pc_idx = get_pc_index(pc);
+        debug_assert!(pc >= self.pc_base);
+        debug_assert!((pc - self.pc_base).is_multiple_of(DEFAULT_PC_STEP));
+        let slot = get_pc_index(pc.wrapping_sub(self.pc_base));
         // SAFETY:
         // - we assume that pc is in bounds
         // - pre_compute_buf is allocated for pre_compute_max_size * program_len bytes, with each
         //   instruction getting pre_compute_max_size bytes
         // - self.pre_compute_buf.ptr is non-null
         // - initialization of the contents of the slice is the responsibility of each Executor
-        debug_assert!(
-            (pc_idx + 1) * self.pre_compute_max_size <= self.pre_compute_buf.layout.size()
-        );
+        debug_assert!((slot + 1) * self.pre_compute_max_size <= self.pre_compute_buf.layout.size());
         unsafe {
             self.pre_compute_buf
                 .ptr
-                .add(pc_idx * self.pre_compute_max_size)
+                .add(slot * self.pre_compute_max_size)
         }
     }
 
     #[cfg(feature = "tco")]
     #[inline(always)]
     pub fn get_handler(&self, pc: u32) -> Option<Handler<Ctx>> {
-        let pc_idx = checked_pc_index(pc)?;
-        self.handlers.get(pc_idx).copied()
+        let slot = checked_program_slot(pc, self.pc_base)?;
+        self.handlers.get(slot).copied()
     }
 }
 
@@ -259,14 +260,15 @@ where
         let pc_start = exe.pc_start;
         let init_memory = exe.init_memory.clone();
         #[cfg(feature = "tco")]
-        let handlers = repeat_n(&None, get_pc_index(program.pc_base))
-            .chain(program.instructions_and_debug_infos.iter())
+        let handlers = program
+            .instructions_and_debug_infos
+            .iter()
             .zip_eq(split_pre_compute_buf.iter_mut())
             .enumerate()
             .map(
-                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
+                |(slot, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
-                        let pc = pc_idx as u32 * DEFAULT_PC_STEP;
+                        let pc = program.pc_base + slot as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<Ctx>(pc, inst, pre_compute)?.is_some() {
                             Ok(terminate_execute_tco_handler)
                         } else {
@@ -289,6 +291,7 @@ where
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
+            pc_base: program.pc_base,
             pc_start,
             init_memory,
             #[cfg(feature = "tco")]
@@ -300,9 +303,7 @@ where
 }
 
 pub(crate) fn alloc_pre_compute_buf(program: &Program, pre_compute_max_size: usize) -> AlignedBuf {
-    let base_idx = get_pc_index(program.pc_base);
-    let padded_program_len = base_idx + program.instructions_and_debug_infos.len();
-    let buf_len = padded_program_len * pre_compute_max_size;
+    let buf_len = program.instructions_and_debug_infos.len() * pre_compute_max_size;
     AlignedBuf::uninit(buf_len, pre_compute_max_size)
 }
 
@@ -311,9 +312,7 @@ pub(crate) fn split_pre_compute_buf<'a>(
     pre_compute_buf: &'a mut AlignedBuf,
     pre_compute_max_size: usize,
 ) -> Vec<&'a mut [u8]> {
-    let base_idx = get_pc_index(program.pc_base);
-    let padded_program_len = base_idx + program.instructions_and_debug_infos.len();
-    let buf_len = padded_program_len * pre_compute_max_size;
+    let buf_len = program.instructions_and_debug_infos.len() * pre_compute_max_size;
     // SAFETY:
     // - pre_compute_buf.ptr was allocated with exactly buf_len bytes
     // - lifetime 'a ensures the returned slices don't outlive the AlignedBuf
@@ -332,6 +331,7 @@ pub(crate) fn split_pre_compute_buf<'a>(
 unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<Ctx>],
+    pc_base: u32,
 ) {
     while exec_state
         .exit_code
@@ -344,12 +344,12 @@ unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
         }
         let pc = exec_state.pc();
         Ctx::on_instruction_start(exec_state, pc);
-        let Some(pc_index) = checked_pc_index(pc) else {
+        let Some(slot) = checked_program_slot(pc, pc_base) else {
             exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
             break;
         };
 
-        if let Some(inst) = fn_ptrs.get(pc_index) {
+        if let Some(inst) = fn_ptrs.get(slot) {
             // SAFETY: pre_compute assumed to live long enough
             unsafe { (inst.handler)(inst.pre_compute, exec_state) };
         } else {
@@ -364,8 +364,11 @@ pub fn get_pc_index(pc: u32) -> usize {
 }
 
 #[inline(always)]
-fn checked_pc_index(pc: u32) -> Option<usize> {
-    pc.is_multiple_of(DEFAULT_PC_STEP).then(|| get_pc_index(pc))
+fn checked_program_slot(pc: u32, pc_base: u32) -> Option<usize> {
+    let delta = pc.checked_sub(pc_base)?;
+    delta
+        .is_multiple_of(DEFAULT_PC_STEP)
+        .then(|| get_pc_index(delta))
 }
 
 /// Bytes allocated according to the given Layout.
@@ -514,8 +517,9 @@ where
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
     };
 
-    repeat_n(&None, get_pc_index(program.pc_base))
-        .chain(program.instructions_and_debug_infos.iter())
+    program
+        .instructions_and_debug_infos
+        .iter()
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
@@ -526,7 +530,7 @@ where
             let buf: &mut [u8] = unsafe { &mut *(*buf as *mut [u8]) };
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_pre_compute_instruction {inst:?}");
-                let pc = i as u32 * DEFAULT_PC_STEP;
+                let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(pc, inst, buf)? {
                     PreComputeInstruction {
                         handler,
@@ -570,8 +574,9 @@ where
     let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
     };
-    repeat_n(&None, get_pc_index(program.pc_base))
-        .chain(program.instructions_and_debug_infos.iter())
+    program
+        .instructions_and_debug_infos
+        .iter()
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
@@ -582,9 +587,7 @@ where
             let buf: &mut [u8] = unsafe { &mut *(*buf as *mut [u8]) };
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_metered_pre_compute_instruction {inst:?}");
-                // `i` already includes the `get_pc_index(pc_base)` padding, so it is the
-                // absolute pc slot (matching `get_pre_compute_instructions`).
-                let pc = i as u32 * DEFAULT_PC_STEP;
+                let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(pc, inst, buf)? {
                     PreComputeInstruction {
                         handler,
@@ -665,13 +668,68 @@ mod tests {
     use super::*;
     use crate::{arch::execution_mode::MeteredCostCtx, system::SystemExecutor};
 
-    #[test]
-    fn misaligned_pc_is_rejected_before_dispatch() {
+    fn terminate_exe(pc_base: u32, pc_start: u32) -> VmExe {
         let terminate = Instruction {
             opcode: SystemOpcode::TERMINATE.global_opcode(),
             ..Default::default()
         };
-        let exe = VmExe::new(Program::new_without_debug_infos(&[terminate], 0)).with_pc_start(2);
+        VmExe::new(Program::new_without_debug_infos(&[terminate], pc_base)).with_pc_start(pc_start)
+    }
+
+    #[test]
+    fn high_pc_program_uses_relative_table_for_execution() {
+        let exe = terminate_exe(MAX_ALLOWED_PC, MAX_ALLOWED_PC);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
+            .expect("terminate-only program should be statically valid");
+
+        assert_eq!(
+            interpreter.pre_compute_buf.layout.size(),
+            size_of::<TerminatePreCompute>()
+        );
+        assert_eq!(
+            interpreter.execute(Streams::default()).unwrap().pc(),
+            MAX_ALLOWED_PC
+        );
+    }
+
+    #[test]
+    fn metered_high_pc_program_uses_relative_table_for_execution() {
+        let exe = terminate_exe(MAX_ALLOWED_PC, MAX_ALLOWED_PC);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
+            &inventory,
+            &exe,
+            &[],
+        )
+        .expect("terminate-only program should be statically valid");
+
+        assert_eq!(
+            interpreter.pre_compute_buf.layout.size(),
+            size_of::<TerminatePreCompute>()
+        );
+        let (_, state) = interpreter
+            .execute_metered_cost(Streams::default(), MeteredCostCtx::new(vec![]))
+            .unwrap();
+        assert_eq!(state.pc(), MAX_ALLOWED_PC);
+    }
+
+    #[test]
+    fn pc_before_program_base_is_rejected() {
+        let exe = terminate_exe(DEFAULT_PC_STEP, 0);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
+            .expect("terminate-only program should be statically valid");
+
+        assert!(matches!(
+            interpreter.execute(Streams::default()),
+            Err(ExecutionError::PcOutOfBounds(0))
+        ));
+    }
+
+    #[test]
+    fn misaligned_pc_is_rejected_before_dispatch() {
+        let exe = terminate_exe(0, 2);
         let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
         let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
             .expect("terminate-only program should be statically valid");
@@ -684,11 +742,7 @@ mod tests {
 
     #[test]
     fn metered_misaligned_pc_is_rejected_before_dispatch() {
-        let terminate = Instruction {
-            opcode: SystemOpcode::TERMINATE.global_opcode(),
-            ..Default::default()
-        };
-        let exe = VmExe::new(Program::new_without_debug_infos(&[terminate], 0)).with_pc_start(2);
+        let exe = terminate_exe(0, 2);
         let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
         let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
             &inventory,
