@@ -423,7 +423,7 @@ fn invalid_cols_negative_tests() {
 }
 
 #[test]
-#[should_panic(expected = "upper 4 bytes must be zero")]
+#[should_panic(expected = "JALR source register has nonzero upper 32 bits")]
 fn rs1_upper_bytes_preflight_rejects_test() {
     run_negative_jalr_test(
         JALR,
