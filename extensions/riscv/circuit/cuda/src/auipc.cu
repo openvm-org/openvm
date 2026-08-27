@@ -13,7 +13,7 @@ using namespace program;
 
 template <typename T> struct AuipcCoreCols {
     T is_valid;
-    T is_sign_extend;
+    T imm_sign;
     // The immediate is split around the byte shift in AUIPC's `imm << 8`.
     T imm_low_8;
     T imm_high_16;
@@ -42,13 +42,12 @@ struct AuipcCore {
         uint32_t pc_high = pc_idx >> PC_IDX_LOW_BITS;
         uint64_t auipc = run_auipc(from_pc, imm);
         uint64_t auipc_hi = auipc >> 32;
-        assert(auipc_hi == 0ull || auipc_hi == 0xffffffffull);
+        assert(auipc_hi == 0ull || auipc_hi == 1ull || auipc_hi == 0xffffffffull);
         uint32_t auipc_lo = (uint32_t)auipc;
         uint16_t rd_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(rd_limbs, auipc_lo);
         uint32_t rd_lo = rd_limbs[0];
         uint32_t rd_hi = rd_limbs[1];
-        uint32_t is_sign_ext = (auipc_hi != 0) ? 1u : 0u;
         uint32_t imm_sign = (imm_high_16 >> (U16_BITS - 1)) & 1u;
 
         range_checker.add_count(pc_idx_low, PC_IDX_LOW_BITS);
@@ -65,7 +64,7 @@ struct AuipcCore {
         COL_WRITE_VALUE(row, AuipcCoreCols, imm_high_16, imm_high_16);
         COL_WRITE_VALUE(row, AuipcCoreCols, pc_high, pc_high);
         COL_WRITE_ARRAY(row, AuipcCoreCols, rd_data, rd_u16);
-        COL_WRITE_VALUE(row, AuipcCoreCols, is_sign_extend, is_sign_ext);
+        COL_WRITE_VALUE(row, AuipcCoreCols, imm_sign, imm_sign);
         COL_WRITE_VALUE(row, AuipcCoreCols, is_valid, 1);
     }
 };

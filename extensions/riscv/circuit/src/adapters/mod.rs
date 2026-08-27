@@ -448,6 +448,12 @@ pub fn u32_to_u16_block(value: u32) -> [u16; BLOCK_FE_WIDTH] {
     })
 }
 
+/// Converts an RV64 register value to one u16 block.
+#[inline(always)]
+pub fn u64_to_u16_block(value: u64) -> [u16; BLOCK_FE_WIDTH] {
+    std::array::from_fn(|i| (value >> (U16_BITS * i)) as u16)
+}
+
 /// Splits a 32-bit RV64 pointer into low-to-high u16 limbs.
 #[inline(always)]
 pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; PTR_U16_LIMBS] {

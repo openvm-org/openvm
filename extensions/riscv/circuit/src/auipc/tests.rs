@@ -38,8 +38,8 @@ use {
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        sext32_to_u64, u16_block_to_bytes, RdWriteAdapterAir, RdWriteAdapterCols, BYTE_BITS,
-        PTR_U16_LIMBS, WORD_NUM_LIMBS,
+        u16_block_to_bytes, RdWriteAdapterAir, RdWriteAdapterCols, BYTE_BITS, PTR_U16_LIMBS,
+        WORD_NUM_LIMBS,
     },
     auipc::{run_auipc, AuipcCoreCols},
     AuipcAir, AuipcChip, AuipcCoreAir, AuipcExecutor, AuipcFiller,
@@ -105,13 +105,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.random_range(1..32) << 3;
 
-    let initial_pc = initial_pc.unwrap_or_else(|| {
-        // An aligned byte pc over the full 32-bit range such that pc + sext(imm << 8) stays
-        // below 2^32 (larger results are rejected by tracegen).
-        let offset = sext32_to_u64((imm as u32) << BYTE_BITS) as i64;
-        let max_pc = ((u32::MAX as i64 - offset.max(0)) as u32) & !3;
-        (rng.random::<u32>() & !3).min(max_pc)
-    });
+    let initial_pc = initial_pc.unwrap_or_else(|| rng.random::<u32>() & !3);
     tester.execute_with_pc(
         executor,
         preflight,
@@ -159,9 +153,7 @@ fn rand_auipc_test() {
 
 #[test]
 fn auipc_max_pc_test() {
-    // AUIPC at the second-to-last instruction slot of the 32-bit PC address space (the last
-    // slot cannot fall through) with a negative offset (a positive offset would push the
-    // result past 2^32, which is rejected).
+    // 0xfffffff8 + 0x1000 = 0x1_00000ff8.
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
@@ -172,8 +164,8 @@ fn auipc_max_pc_test() {
         &mut harness.preflight,
         &mut rng,
         AUIPC,
-        Some((1 << 24) - 1),
-        Some((u32::MAX & !3) - 4),
+        Some(0x10),
+        Some(0xffff_fff8),
     );
 
     let tester = tester
@@ -193,7 +185,7 @@ fn auipc_max_pc_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
-    pub is_sign_extend: Option<u32>,
+    pub imm_sign: Option<u32>,
     pub rd_data: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_low_8: Option<u32>,
     pub imm_high_16: Option<u32>,
@@ -238,8 +230,8 @@ fn run_negative_auipc_test(
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut AuipcCoreCols<F> = core_row.borrow_mut();
 
-        if let Some(val) = prank_vals.is_sign_extend {
-            core_cols.is_sign_extend = F::from_u32(val);
+        if let Some(val) = prank_vals.imm_sign {
+            core_cols.imm_sign = F::from_u32(val);
         }
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_u32);
@@ -370,27 +362,23 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 }
 
 #[test]
-fn sign_extend_flag_negative_tests() {
-    // Prank is_sign_extend = 1 when the result has bit 31 unset (MSB of rd_data[1] is 0).
-    // pc=4, imm=0 ⟹ rd = 4 ⟹ rd low 32 bits = [4, 0].
+fn immediate_sign_flag_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         Some(0),
         Some(4),
         AuipcPrankValues {
-            is_sign_extend: Some(1),
+            imm_sign: Some(1),
             ..Default::default()
         },
         true,
     );
-    // Prank is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[1] is 1).
-    // pc=0, imm=2^23 ⟹ rd = 2^31 ⟹ rd low 32 bits = [0, 0x8000].
     run_negative_auipc_test(
         AUIPC,
         Some(1 << 23),
         Some(0),
         AuipcPrankValues {
-            is_sign_extend: Some(0),
+            imm_sign: Some(0),
             ..Default::default()
         },
         true,
@@ -398,13 +386,13 @@ fn sign_extend_flag_negative_tests() {
 }
 
 #[test]
-fn positive_offset_crossing_sign_extend_negative_tests() {
+fn positive_offset_imm_sign_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         Some(0x7f_fff0),
         Some(0x1000),
         AuipcPrankValues {
-            is_sign_extend: Some(1),
+            imm_sign: Some(1),
             ..Default::default()
         },
         true,
@@ -546,6 +534,15 @@ fn test_cuda_rand_auipc_tracegen() {
             None,
         );
     }
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        AUIPC,
+        Some(0x10),
+        Some(0xffff_fff8),
+    );
 
     tester
         .build()

@@ -15,7 +15,8 @@ template <typename T> struct JalLuiCoreCols {
     T imm_low_4;                       // low 4 bits of imm for LUI
     T is_jal;                          // core_row.is_jal
     T is_lui;                          // core_row.is_lui
-    T is_sign_extend;                  // 1 if upper cells are 0xFFFF, 0 if 0x0000
+    T is_sign_extend;
+    T rd_carry;
 };
 
 struct JalLuiCore {
@@ -29,8 +30,8 @@ struct JalLuiCore {
         uint32_t rd_lo = rd_data[0];
         uint32_t rd_hi = rd_data[1];
 
-        // JAL return addresses are zero-extended; only LUI sign-extends bit 31.
-        bool is_sign_extend = is_jal ? false : ((rd_hi >> (U16_BITS - 1)) & 1);
+        bool is_sign_extend = !is_jal && ((rd_hi >> (U16_BITS - 1)) & 1);
+        bool rd_carry = is_jal && rd_data[2];
         uint32_t imm_low_4 = is_jal ? 0u : (imm & 0xfu);
 
         range_checker.add_count(rd_lo, U16_BITS);
@@ -49,6 +50,7 @@ struct JalLuiCore {
 
         uint32_t rd_u16[2] = {rd_lo, rd_hi};
         COL_WRITE_VALUE(row, JalLuiCoreCols, is_sign_extend, is_sign_extend);
+        COL_WRITE_VALUE(row, JalLuiCoreCols, rd_carry, rd_carry);
         COL_WRITE_VALUE(row, JalLuiCoreCols, is_lui, !is_jal);
         COL_WRITE_VALUE(row, JalLuiCoreCols, is_jal, is_jal);
         COL_WRITE_VALUE(row, JalLuiCoreCols, imm_low_4, imm_low_4);

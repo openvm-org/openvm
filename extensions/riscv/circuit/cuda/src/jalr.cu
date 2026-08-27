@@ -12,7 +12,7 @@ using namespace program;
 template <typename T> struct JalrCoreCols {
     T imm;                                  // 2 bytes
     T rs1_data[PTR_U16_LIMBS];         // low 32 bits of rs1 as u16 cells
-    T rd_high[PTR_U16_LIMBS - 1];      // high u16 limb of low-32 rd
+    T rd_high[PTR_U16_LIMBS];          // high u16 limb and bit-32 carry of rd
     T is_valid;                             // 1 byte
     T to_pc_least_sig_bit;                  // 1 byte
     T to_pc_limbs[PTR_U16_LIMBS];      // target pc index after the low-bit split
@@ -36,12 +36,10 @@ __device__ void run_jalr(
     // RISC-V clears bit 0 before checking instruction alignment.
     assert(to_pc % DEFAULT_PC_STEP == 0);
     out_unaligned_pc = uint32_t(unaligned_to_pc);
-    uint32_t rd_val = pc + DEFAULT_PC_STEP;
-    rd_data[0] = uint16_t(rd_val);
-    rd_data[1] = uint16_t(rd_val >> U16_BITS);
+    uint64_t rd_val = uint64_t(pc) + DEFAULT_PC_STEP;
 #pragma unroll
-    for (size_t i = PTR_U16_LIMBS; i < BLOCK_FE_WIDTH; i++) {
-        rd_data[i] = 0;
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        rd_data[i] = uint16_t(rd_val >> (i * U16_BITS));
     }
 }
 
@@ -84,7 +82,7 @@ struct JalrCore {
         COL_WRITE_VALUE(row, JalrCoreCols, is_valid, 1);
 
         COL_WRITE_ARRAY(row, JalrCoreCols, rs1_data, rs1_limbs);
-        uint32_t rd_limbs[PTR_U16_LIMBS - 1] = {rd_low_u16_hi};
+        uint32_t rd_limbs[PTR_U16_LIMBS] = {rd_low_u16_hi, rd_data[2]};
         COL_WRITE_ARRAY(row, JalrCoreCols, rd_high, rd_limbs);
         COL_WRITE_VALUE(row, JalrCoreCols, imm, imm);
     }

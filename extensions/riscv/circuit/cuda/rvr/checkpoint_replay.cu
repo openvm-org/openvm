@@ -1381,7 +1381,7 @@ __device__ bool replay_chunk(
                     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
                     return false;
                 }
-                result = state.pc + 4;
+                result = uint64_t(state.pc) + 4;
                 if (needs_write) {
                     if (memory != nullptr) {
                         if (uint64_t(memory_start) + emitted + 1 > memory_capacity) {
@@ -1439,11 +1439,11 @@ __device__ bool replay_chunk(
                              : int64_t(instruction->words[3]);
                 uint64_t target =
                     (state.regs[rs1] + uint64_t(signed_offset)) & ~uint64_t(1);
-                if (target > UINT32_MAX) {
+                if (target > UINT32_MAX || target % DEFAULT_PC_STEP != 0) {
                     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
                     return false;
                 }
-                result = state.pc + 4;
+                result = uint64_t(state.pc) + 4;
                 if (memory != nullptr) {
                     uint32_t event_count = 1 + needs_write;
                     if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {

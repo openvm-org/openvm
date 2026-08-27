@@ -239,7 +239,7 @@ fn jalr_max_pc_test() {
         JALR,
         Some(0),
         Some(0),
-        Some(MAX_ALLOWED_PC - DEFAULT_PC_STEP),
+        Some(MAX_ALLOWED_PC),
         Some(into_limbs(MAX_ALLOWED_PC)),
         None,
     );
@@ -271,11 +271,11 @@ fn jalr_max_pc_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-// Prankable JALR core columns: rs1 low 32 as two u16 cells; rd stores only
-// the high u16 of pc + 4.
+// Prankable JALR core columns: rs1 low 32 as two u16 cells; rd stores its high u16
+// and bit-32 carry.
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_high: Option<[u32; PTR_U16_LIMBS - 1]>,
+    pub rd_high: Option<[u32; PTR_U16_LIMBS]>,
     pub rs1_data: Option<[u32; PTR_U16_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
     pub to_pc_limbs: Option<[u32; PTR_U16_LIMBS]>,
@@ -567,7 +567,7 @@ fn overflow_negative_tests() {
         None,
         None,
         JalrPrankValues {
-            rd_high: Some([1]),
+            rd_high: Some([1, 0]),
             ..Default::default()
         },
         true,
@@ -711,6 +711,18 @@ fn test_cuda_rand_jalr_tracegen() {
         Some(0),
         Some(0),
         Some(into_limbs(MAX_ALLOWED_PC + 1)),
+        None,
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        JALR,
+        Some(0),
+        Some(0),
+        Some(MAX_ALLOWED_PC),
+        Some(into_limbs(MAX_ALLOWED_PC)),
         None,
     );
 

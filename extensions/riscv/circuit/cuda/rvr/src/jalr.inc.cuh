@@ -110,19 +110,16 @@ __global__ void jalr_replay_tracegen(
         preflight_set_error(error, 209);
         return;
     }
-    if (from.pc >= MAX_ALLOWED_PC) {
-        preflight_set_error(error, 209);
-        return;
-    }
     if (to.pc != to_pc) {
         preflight_set_error(error, 207);
         return;
     }
 
+    uint64_t rd = uint64_t(from.pc) + DEFAULT_PC_STEP;
     uint16_t expected_rd[BLOCK_FE_WIDTH] = {
-        static_cast<uint16_t>(from.pc + DEFAULT_PC_STEP),
-        static_cast<uint16_t>((from.pc + DEFAULT_PC_STEP) >> U16_BITS),
-        0,
+        static_cast<uint16_t>(rd),
+        static_cast<uint16_t>(rd >> U16_BITS),
+        static_cast<uint16_t>(rd >> (2 * U16_BITS)),
         0,
     };
     ReplayPreviousValue write_previous = {};

@@ -13,7 +13,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 
 use super::{run_auipc, AuipcChip, AuipcCoreCols};
 use crate::adapters::{
-    sext32_to_u64, RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, PC_IDX_LOW_BITS, U16_BITS,
+    RdWriteAdapterCols, RdWriteAdapterFiller, BYTE_BITS, PC_IDX_LOW_BITS, U16_BITS,
 };
 
 /// Generates the AUIPC trace directly from immutable preflight history.
@@ -37,14 +37,6 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 "AUIPC immediate exceeds its 24-bit instruction encoding",
             ));
         }
-        // The circuit sign-extends negative results but cannot represent results at or above
-        // 2^32 (a positive-immediate carry out of the low 32 bits is unsatisfiable).
-        let result = from_pc as i64 + sext32_to_u64(immediate << BYTE_BITS) as i64;
-        if result > u32::MAX as i64 {
-            return Err(PostflightError::new(
-                "AUIPC result exceeds implemented PC address space",
-            ));
-        }
         let (rd_data, _) = RdWriteAdapterFiller::replay(
             postflight,
             step,
@@ -62,7 +54,6 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
         let pc_high = pc_idx >> PC_IDX_LOW_BITS;
         let rd_lo = rd_data[0];
         let rd_hi = rd_data[1];
-        let is_sign_extend = rd_data[2] != 0;
         let imm_sign = (imm_high_16 >> (U16_BITS - 1)) & 1;
         let imm_magnitude_check = 2u32 * imm_high_16 - imm_sign * (1 << U16_BITS);
 
@@ -87,7 +78,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             .add_count(imm_magnitude_check, U16_BITS);
 
         core_row.is_valid = F::ONE;
-        core_row.is_sign_extend = F::from_bool(is_sign_extend);
+        core_row.imm_sign = F::from_bool(imm_sign != 0);
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
         core_row.pc_high = F::from_u32(pc_high);

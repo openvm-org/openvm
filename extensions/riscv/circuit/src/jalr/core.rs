@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, PC_STEP_BITS},
+    program::{DEFAULT_PC_STEP, PC_BITS, PC_STEP_BITS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalrOpcode::{self, *};
@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    address_add_imm, expand_to_block, ptr_to_u16_limbs, u32_to_u16_block, PC_IDX_LOW_BITS,
+    address_add_imm, expand_to_block, ptr_to_u16_limbs, u64_to_u16_block, PC_IDX_LOW_BITS,
     PTR_U16_LIMBS, U16_BITS,
 };
 
@@ -29,8 +29,8 @@ pub struct JalrCoreCols<T> {
     pub imm: T,
     // Low 32 bits of rs1 as u16 cells.
     pub rs1_data: [T; PTR_U16_LIMBS],
-    // High u16 limb of low-32 rd; the low limb is derived from from_pc.
-    pub rd_high: [T; PTR_U16_LIMBS - 1],
+    // The high u16 limb and bit-32 carry of rd; the low limb is derived from from_pc.
+    pub rd_high: [T; PTR_U16_LIMBS],
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
@@ -81,17 +81,19 @@ where
 
         builder.assert_bool(is_valid);
 
-        // composed is the high u16 limb of low-32 rd.
-        let composed = rd_high[0] * AB::F::from_u32(1 << U16_BITS);
-
         let pc_step = AB::F::from_u32(DEFAULT_PC_STEP);
         let pc_step_inv = pc_step.inverse();
 
-        // The byte return address is 4 * (from_pc_idx + 1).
-        let least_sig_limb = (from_pc_idx + AB::F::ONE) * pc_step - composed;
-
-        // rd_data_low is the low-32-bit decomposition of the byte return address.
-        let rd_data_low: [AB::Expr; PTR_U16_LIMBS] = [least_sig_limb.clone(), rd_high[0].into()];
+        // The byte return address is 4 * (from_pc_idx + 1). Work in pc-index units so every
+        // coefficient remains below the field modulus, including the possible bit-32 carry.
+        let least_sig_limb = (from_pc_idx + AB::F::ONE
+            - rd_high[0] * AB::F::from_u32(1 << PC_IDX_LOW_BITS)
+            - rd_high[1] * AB::F::from_u32(1 << PC_BITS))
+            * pc_step;
+        // A carry leaves all low-32-bit return-address limbs zero. This prevents field wrap in
+        // the decomposition and pins the carry to the final pc index.
+        builder.when(rd_high[1]).assert_zero(least_sig_limb.clone());
+        builder.when(rd_high[1]).assert_zero(rd_high[0]);
 
         // The low limb is DEFAULT_PC_STEP-aligned with a PC_IDX_LOW_BITS-bit quotient (which
         // also implies it is a u16), and the high limb is a u16. This pins the decomposition:
@@ -102,8 +104,9 @@ where
             .range_check(least_sig_limb.clone() * pc_step_inv, PC_IDX_LOW_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd_data_low[1].clone(), U16_BITS)
+            .range_check(rd_high[0], U16_BITS)
             .eval(builder, is_valid);
+        builder.assert_bool(rd_high[1]);
 
         builder.assert_bool(imm_sign);
 
@@ -134,9 +137,14 @@ where
             .eval(builder, is_valid);
         let to_pc_idx = to_pc_limbs[0] + to_pc_limbs[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
 
-        // Zero-extend low-32 rs1/rd at the adapter interface.
+        // Zero-extend low-32 rs1; rd additionally includes its bit-32 carry.
         let rs1_data = expand_to_block(&rs1);
-        let rd_data = expand_to_block(&rd_data_low);
+        let rd_data = [
+            least_sig_limb,
+            rd_high[0].into(),
+            rd_high[1].into(),
+            AB::Expr::ZERO,
+        ];
 
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
@@ -211,7 +219,7 @@ impl JalrFiller {
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
         core_row.rs1_data = ptr_to_u16_limbs(rs1_val).map(F::from_u16);
-        core_row.rd_high = [F::from_u16(rd_low_u16_hi)];
+        core_row.rd_high = [F::from_u16(rd_low_u16_hi), F::from_u16(rd_data[2])];
         core_row.imm = F::from_u16(imm);
     }
 }
@@ -236,16 +244,20 @@ pub(super) fn try_run_jalr(
     imm_sign: bool,
 ) -> Option<(u32, [u16; BLOCK_FE_WIDTH])> {
     let imm_extended = imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS));
-    let unaligned_to_pc = u32::try_from(address_add_imm(rs1, imm_extended)).ok()?;
-    // RISC-V clears bit 0 before checking instruction alignment.
-    let to_pc = unaligned_to_pc & !1;
-    if !to_pc.is_multiple_of(DEFAULT_PC_STEP) {
-        return None;
-    }
+    let (unaligned_to_pc, _) = checked_jalr_target(rs1, imm_extended)?;
 
-    let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
-    let rd_data = u32_to_u16_block(rd_low_u32);
+    let rd_data = u64_to_u16_block(u64::from(pc) + u64::from(DEFAULT_PC_STEP));
     // Trace generation keeps the raw target so the AIR can witness its cleared low bit. The
     // adapter applies the mask when it checks the next execution state.
     Some((unaligned_to_pc, rd_data))
+}
+
+#[inline(always)]
+pub(super) fn checked_jalr_target(rs1: u32, imm_extended: u32) -> Option<(u32, u32)> {
+    let unaligned_to_pc = u32::try_from(address_add_imm(rs1, imm_extended)).ok()?;
+    // RISC-V clears bit 0 before checking instruction alignment.
+    let to_pc = unaligned_to_pc & !1;
+    to_pc
+        .is_multiple_of(DEFAULT_PC_STEP)
+        .then_some((unaligned_to_pc, to_pc))
 }

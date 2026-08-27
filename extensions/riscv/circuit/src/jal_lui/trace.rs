@@ -43,11 +43,6 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 .ok_or_else(|| PostflightError::new("JAL/LUI instruction has invalid immediate"))?;
             if is_jal {
                 let from_pc = postflight.pc(step);
-                if from_pc >= MAX_ALLOWED_PC {
-                    return Err(PostflightError::new(
-                        "JAL return address exceeds implemented PC address space",
-                    ));
-                }
                 let target = from_pc as i64 + signed_imm as i64;
                 if target < 0
                     || target > MAX_ALLOWED_PC as i64
@@ -72,12 +67,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             let core_row: &mut JalLuiCoreCols<F> = core_row.borrow_mut();
             let rd_lo = rd_data[0];
             let rd_hi = rd_data[1];
-            // JAL return addresses are zero-extended; only LUI sign-extends bit 31.
-            let is_sign_extend = if is_jal {
-                0
-            } else {
-                (rd_hi >> (U16_BITS - 1)) & 1
-            };
+            let is_sign_extend = !is_jal && (rd_hi >> (U16_BITS - 1)) & 1 != 0;
+            let rd_carry = if is_jal { rd_data[2] } else { 0 };
             let imm_low_4 = if is_jal {
                 0
             } else {
@@ -109,7 +100,8 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             core_row.imm_low_4 = F::from_u8(imm_low_4);
             core_row.is_jal = F::from_bool(is_jal);
             core_row.is_lui = F::from_bool(!is_jal);
-            core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
+            core_row.is_sign_extend = F::from_bool(is_sign_extend);
+            core_row.rd_carry = F::from_bool(rd_carry != 0);
             Ok(())
         })?;
         row_index += steps.len();

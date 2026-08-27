@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::InstructionOperand,
-    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
@@ -20,7 +20,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, u32_to_u16_block, PC_IDX_LOW_BITS, PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS,
+    ptr_to_u16_limbs, u64_to_u16_block, PC_IDX_LOW_BITS, PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS,
     RV_J_TYPE_IMM_BITS, U16_BITS,
 };
 
@@ -30,12 +30,13 @@ pub(super) const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct JalLuiCoreCols<T> {
     pub imm: T,
-    // Low 32 bits of rd as u16 cells. Upper register cells are sign extension.
+    // Low 32 bits of rd as u16 cells.
     pub rd_data: [T; PTR_U16_LIMBS],
     pub imm_low_4: T,
     pub is_jal: T,
     pub is_lui: T,
     pub is_sign_extend: T,
+    pub rd_carry: T,
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
@@ -74,6 +75,7 @@ where
             is_jal,
             is_lui,
             is_sign_extend,
+            rd_carry,
         } = *cols;
 
         builder.assert_bool(is_lui);
@@ -81,6 +83,7 @@ where
         let is_valid = is_lui + is_jal;
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(is_sign_extend);
+        builder.assert_bool(rd_carry);
 
         // LUI: constrain rd = imm << RV_IS_TYPE_IMM_BITS.
         builder
@@ -97,15 +100,20 @@ where
             .range_check(imm_low_4, LUI_IMM_LOW_BITS)
             .eval(builder, is_lui);
 
-        let limb_base = AB::F::from_u32(1 << U16_BITS);
         let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
 
-        // JAL: constrain rd_low_32 = 4 * (from_pc_idx + 1), the byte return address for the
-        // pc index `from_pc_idx`.
+        // JAL: constrain all 33 possible return-address bits. Dividing the aligned low limb by
+        // DEFAULT_PC_STEP keeps the equality below the field modulus.
         builder.when(is_jal).assert_eq(
-            rd[0],
-            (from_pc_idx + AB::F::ONE) * AB::F::from_u32(DEFAULT_PC_STEP) - rd[1] * limb_base,
+            rd[0] * pc_step_inv
+                + rd[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS)
+                + rd_carry * AB::F::from_u32(1 << PC_BITS),
+            from_pc_idx + AB::F::ONE,
         );
+        // A carry leaves all low-32-bit return-address limbs zero. This prevents field wrap in
+        // the decomposition and pins the carry to the final pc index.
+        builder.when(rd_carry).assert_zero(rd[0]);
+        builder.when(rd_carry).assert_zero(rd[1]);
 
         // Range-check the low 32-bit rd cells.
         self.range_bus
@@ -115,8 +123,7 @@ where
             .range_check(rd[1], U16_BITS)
             .eval(builder, is_valid.clone());
 
-        // Tie is_sign_extend to bit 31 of rd for LUI. JAL return addresses are zero-extended
-        // low-32-bit values (the bus address convention), so is_sign_extend must be 0.
+        // Tie is_sign_extend to bit 31 of rd for LUI. The two result flags are opcode-specific.
         self.range_bus
             .range_check(
                 AB::Expr::from_u32(2) * rd[1] - is_sign_extend * AB::Expr::from_u32(1 << U16_BITS),
@@ -124,22 +131,22 @@ where
             )
             .eval(builder, is_lui);
         builder.when(is_jal).assert_zero(is_sign_extend);
+        builder.when(is_lui).assert_zero(rd_carry);
 
         // JAL return addresses are DEFAULT_PC_STEP-aligned: rd[0] = 4 * x with
         // x < 2^PC_IDX_LOW_BITS. Together with rd[1] < 2^16 this makes the decomposition
         // rd = 4 * (from_pc_idx + 1) unique: the composed pc index rd[1] * 2^PC_IDX_LOW_BITS + x
-        // is < 2^PC_BITS < p, so it must equal from_pc_idx + 1 over the integers. A JAL at the
-        // last pc index (from_pc_idx + 1 = 2^PC_BITS) is unsatisfiable, hence unprovable.
+        // is at most 2^PC_BITS < p, so it must equal from_pc_idx + 1 over the integers.
         self.range_bus
             .range_check(rd[0] * pc_step_inv, PC_IDX_LOW_BITS)
             .eval(builder, is_jal);
 
-        // Sign-extend bit 31 into the upper RV64 register cells (LUI only; see above).
+        // LUI sign-extends bit 31; JAL writes its carry into bit 32.
         let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(u16::MAX as u32);
         let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
             rd[0].into(),
             rd[1].into(),
-            sign_extend_cell.clone(),
+            sign_extend_cell.clone() + rd_carry,
             sign_extend_cell,
         ];
 
@@ -192,10 +199,10 @@ pub(super) fn get_signed_imm(is_jal: bool, imm: InstructionOperand) -> Option<i3
 #[inline(always)]
 pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     if is_jal {
-        let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
+        let rd = u64::from(pc) + u64::from(DEFAULT_PC_STEP);
         let next_pc = (pc as i64).wrapping_add(imm as i64);
         debug_assert!(next_pc >= 0 && next_pc <= MAX_ALLOWED_PC as i64);
-        (next_pc as u32, u32_to_u16_block(rd_low))
+        (next_pc as u32, u64_to_u16_block(rd))
     } else {
         let imm = imm as u32;
         let rd_low = imm << RV_IS_TYPE_IMM_BITS;

@@ -73,7 +73,7 @@ __global__ void auipc_replay_tracegen(
     replay_u16_block(write.value, logged_data);
     uint64_t expected_result = run_auipc(from.pc, imm);
     uint64_t expected_high = expected_result >> 32;
-    if (expected_high != 0 && expected_high != UINT32_MAX) {
+    if (expected_high != 0 && expected_high != 1 && expected_high != UINT32_MAX) {
         preflight_set_error(error, 199);
         return;
     }

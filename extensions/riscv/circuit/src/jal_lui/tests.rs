@@ -199,8 +199,7 @@ fn rand_jal_lui_test(opcode: JalLuiOpcode, num_ops: usize) {
 
 #[test]
 fn jal_max_pc_test() {
-    // JAL from the second-to-last instruction slot of the 32-bit PC address space, jumping
-    // backward; the return address is the last slot.
+    // JAL at 0xfffffffc writes the 64-bit link address 0x1_00000000.
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
@@ -212,7 +211,7 @@ fn jal_max_pc_test() {
         &mut rng,
         JAL,
         Some(-4096),
-        Some(MAX_ALLOWED_PC - 2 * DEFAULT_PC_STEP),
+        Some(MAX_ALLOWED_PC),
         None,
     );
 
@@ -239,6 +238,7 @@ struct JalLuiPrankValues {
     pub is_jal: Option<bool>,
     pub is_lui: Option<bool>,
     pub is_sign_extend: Option<bool>,
+    pub rd_carry: Option<bool>,
     pub rd_ptr: Option<u32>,
     pub needs_write: Option<bool>,
 }
@@ -295,6 +295,9 @@ fn run_negative_jal_lui_test_with_rd_ptr(
         }
         if let Some(is_sign_extend) = prank_vals.is_sign_extend {
             core_cols.is_sign_extend = F::from_bool(is_sign_extend);
+        }
+        if let Some(rd_carry) = prank_vals.rd_carry {
+            core_cols.rd_carry = F::from_bool(rd_carry);
         }
         if let Some(rd_ptr) = prank_vals.rd_ptr {
             adapter_cols.inner.rd_ptr = F::from_u32(rd_ptr);
@@ -448,7 +451,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 }
 
 #[test]
-fn sign_extend_flag_negative_tests() {
+fn rd_high_flags_negative_tests() {
     // LUI with imm small enough that imm << 12 has bit 31 unset (MSB of rd[1] is 0).
     // is_sign_extend pranked to true should fail.
     run_negative_jal_lui_test(
@@ -461,14 +464,13 @@ fn sign_extend_flag_negative_tests() {
         },
         true,
     );
-    // JAL writes pc+4 with pc < 2^30, so MSB of rd[1] is always 0.
-    // is_sign_extend pranked to true should fail.
+    // This non-boundary JAL has no bit-32 carry, so rd_carry pranked to true should fail.
     run_negative_jal_lui_test(
         JAL,
         None,
         None,
         JalLuiPrankValues {
-            is_sign_extend: Some(true),
+            rd_carry: Some(true),
             ..Default::default()
         },
         true,
@@ -717,6 +719,18 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: JalLuiOpcode, num_ops: usize) {
             opcode,
             None,
             None,
+            None,
+        );
+    }
+    if opcode == JAL {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            JAL,
+            Some(-4096),
+            Some(MAX_ALLOWED_PC),
             None,
         );
     }

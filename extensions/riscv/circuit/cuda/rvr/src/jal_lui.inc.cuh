@@ -68,10 +68,7 @@ __global__ void jal_lui_replay_tracegen(
     uint32_t rd_low;
     uint32_t expected_pc;
     if (is_jal) {
-        // The return address 4 * (pc_idx + 1) and the jump target must both stay inside the
-        // implemented PC address space (mirrors the CPU trace filler).
-        if (from.pc >= ::program::MAX_ALLOWED_PC ||
-            !replay_branch_target_in_bounds(from.pc, encoded_imm)) {
+        if (!replay_branch_target_in_bounds(from.pc, encoded_imm)) {
             preflight_set_error(error, 189);
             return;
         }
@@ -90,12 +87,13 @@ __global__ void jal_lui_replay_tracegen(
         return;
     }
 
+    uint64_t rd = is_jal ? uint64_t(from.pc) + ::program::DEFAULT_PC_STEP : rd_low;
     uint16_t sign = !is_jal && (rd_low >> 31) ? UINT16_MAX : 0;
     uint16_t expected_data[BLOCK_FE_WIDTH] = {
-        static_cast<uint16_t>(rd_low),
-        static_cast<uint16_t>(rd_low >> U16_BITS),
-        sign,
-        sign,
+        static_cast<uint16_t>(rd),
+        static_cast<uint16_t>(rd >> U16_BITS),
+        is_jal ? static_cast<uint16_t>(rd >> (2 * U16_BITS)) : sign,
+        is_jal ? 0 : sign,
     };
     ReplayPreviousValue previous = {};
     if (needs_write) {
