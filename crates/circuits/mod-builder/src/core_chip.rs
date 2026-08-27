@@ -138,7 +138,7 @@ where
         &self,
         builder: &mut AB,
         local: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         assert_eq!(local.len(), BaseAir::<AB::F>::width(&self.expr));
         self.expr.eval(builder, local);
@@ -182,7 +182,7 @@ where
         };
 
         let ctx: AdapterAirContext<_, DynAdapterInterface<_>> = AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: reads.into(),
             writes: writes.into(),
             instruction: instruction.into(),

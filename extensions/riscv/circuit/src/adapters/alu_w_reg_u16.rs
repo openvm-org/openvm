@@ -144,7 +144,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWRegU16AdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 ctx.instruction.opcode,
                 [
                     local.rd_ptr.into(),
@@ -155,12 +155,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BaseAluWRegU16AdapterAir {
                 ],
                 local.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (1, ctx.to_pc_idx),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &BaseAluWRegU16AdapterCols<_> = local.borrow();
         cols.from_state.pc
     }

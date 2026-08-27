@@ -113,7 +113,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &DeferralCallCoreCols<_> = local_core.borrow();
         builder.assert_bool(cols.is_valid);
@@ -194,7 +194,7 @@ where
             .eval(builder, cols.is_valid);
 
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: DeferralCallReads {
                 input_commit: cols.reads.input_commit.map(Into::into),
                 old_input_acc: cols.reads.old_input_acc.map(Into::into),
@@ -516,7 +516,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 ctx.instruction.opcode,
                 [
                     cols.rd_ptr.into(),
@@ -527,12 +527,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 ],
                 cols.from_state,
                 AB::Expr::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (1, ctx.to_pc_idx),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &DeferralCallAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }

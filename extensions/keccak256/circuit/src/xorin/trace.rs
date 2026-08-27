@@ -138,7 +138,7 @@ impl XorinVmFiller {
         row_slice.fill(F::ZERO);
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
 
-        trace_row.instruction.pc = F::from_u32(pc_to_idx(from_pc));
+        trace_row.instruction.pc_idx = F::from_u32(pc_to_idx(from_pc));
         trace_row.instruction.is_enabled = F::ONE;
         trace_row.instruction.buffer_reg_ptr = F::from_u32(rd_ptr);
         trace_row.instruction.input_reg_ptr = F::from_u32(rs1_ptr);

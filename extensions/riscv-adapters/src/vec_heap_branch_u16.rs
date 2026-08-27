@@ -130,7 +130,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
         }
 
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 ctx.instruction.opcode,
                 [
                     cols.rs_ptr
@@ -147,12 +147,12 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                 ],
                 cols.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (1, ctx.to_pc),
+                (1, ctx.to_pc_idx),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &VecHeapBranchU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }

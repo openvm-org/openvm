@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
 use super::memory::online::GuestMemory;
-use crate::arch::{ExecutionBridge, ExecutionState, PcIncOrSet, PhantomSubExecutor, Streams};
+use crate::arch::{ExecutionBridge, ExecutionState, PcIdxIncOrSet, PhantomSubExecutor, Streams};
 
 mod execution;
 #[cfg(test)]
@@ -46,8 +46,8 @@ pub struct PhantomAir {
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
-    /// Circuit pc index (`byte_pc / DEFAULT_PC_STEP`).
-    pub pc: T,
+    /// Circuit PC index (`byte_pc / DEFAULT_PC_STEP`).
+    pub pc_idx: T,
     #[serde(with = "BigArray")]
     pub operands: [T; NUM_PHANTOM_OPERANDS],
     pub timestamp: T,
@@ -67,7 +67,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
         let &PhantomCols {
-            pc: pc_idx,
+            pc_idx,
             operands,
             timestamp,
             is_valid,
@@ -75,12 +75,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 
         builder.assert_bool(is_valid);
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 AB::F::from_usize(self.phantom_opcode.as_usize()),
                 operands,
                 ExecutionState::<AB::Expr>::new(pc_idx, timestamp),
                 AB::Expr::ONE,
-                PcIncOrSet::Inc(AB::Expr::ONE),
+                PcIdxIncOrSet::Inc(AB::Expr::ONE),
             )
             .eval(builder, is_valid);
     }

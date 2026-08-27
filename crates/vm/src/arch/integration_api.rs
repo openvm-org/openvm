@@ -43,7 +43,7 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     );
 
     /// Return the expression for the pc index (`pc_to_idx(from_pc)`) of the instruction.
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var;
 }
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
@@ -51,9 +51,7 @@ where
     AB: AirBuilder,
     I: VmAdapterInterface<AB::Expr>,
 {
-    /// Returns `(to_pc, interface)`. Pc values on the buses are pc indices (see `pc_to_idx`):
-    /// `from_pc_idx` is the pc index of the instruction, and the returned `to_pc` is also a
-    /// pc index.
+    /// Returns `(to_pc_idx, interface)`. PC values on the buses are PC indices (see `pc_to_idx`).
     fn eval(
         &self,
         builder: &mut AB,
@@ -80,9 +78,9 @@ where
 }
 
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
-    /// Circuit pc index after this instruction. Leave as `None` to allow the adapter to choose
+    /// Circuit PC index after this instruction. Leave as `None` to allow the adapter to choose
     /// the next index automatically.
-    pub to_pc: Option<T>,
+    pub to_pc_idx: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
@@ -155,9 +153,11 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let (local_adapter, local_core) = local.split_at(self.adapter.width());
 
-        let ctx = self
-            .core
-            .eval(builder, local_core, self.adapter.get_from_pc(local_adapter));
+        let ctx = self.core.eval(
+            builder,
+            local_core,
+            self.adapter.get_from_pc_idx(local_adapter),
+        );
         self.adapter.eval(builder, local_adapter, ctx);
     }
 }
@@ -353,7 +353,7 @@ mod conversions {
             >,
         ) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -384,7 +384,7 @@ mod conversions {
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -457,7 +457,7 @@ mod conversions {
             let mut writes_it = ctx.writes.into_iter();
             let writes = from_fn(|_| writes_it.next().unwrap());
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads,
                 writes,
                 instruction: ctx.instruction.into(),
@@ -506,7 +506,7 @@ mod conversions {
             let mut writes_it = ctx.writes.into_iter().flatten();
             let writes = from_fn(|_| writes_it.next().unwrap());
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads,
                 writes,
                 instruction: ctx.instruction,
@@ -534,7 +534,7 @@ mod conversions {
         /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
         fn from(
             AdapterAirContext {
-                to_pc,
+                to_pc_idx,
                 reads,
                 writes,
                 instruction,
@@ -560,7 +560,7 @@ mod conversions {
             let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
                 from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
             AdapterAirContext {
-                to_pc,
+                to_pc_idx,
                 reads,
                 writes,
                 instruction,
@@ -671,7 +671,7 @@ mod conversions {
             >,
         ) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -697,7 +697,7 @@ mod conversions {
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -712,7 +712,7 @@ mod conversions {
     {
         fn from(ctx: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.to_vec().into(),
                 writes: ctx.writes.to_vec().into(),
                 instruction: ctx.instruction.into(),
@@ -791,7 +791,7 @@ mod conversions {
             let mut reads_it = ctx.reads.into_iter();
             let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads,
                 writes: (),
                 instruction: ctx.instruction,

@@ -102,7 +102,9 @@ impl RdWriteAdapterAir {
             )
             .eval(builder, write_count);
 
-        let to_pc_idx = ctx.to_pc.unwrap_or(local_cols.from_state.pc + AB::F::ONE);
+        let to_pc_idx = ctx
+            .to_pc_idx
+            .unwrap_or(local_cols.from_state.pc + AB::F::ONE);
         // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
             .execute(
@@ -139,7 +141,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for RdWriteAdapterAir {
         self.conditional_eval(builder, local_cols, ctx, None);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &RdWriteAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
@@ -170,7 +172,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CondRdWriteAdapterAir {
         );
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &CondRdWriteAdapterCols<_> = local.borrow();
         cols.inner.from_state.pc
     }

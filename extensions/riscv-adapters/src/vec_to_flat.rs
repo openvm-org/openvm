@@ -187,7 +187,7 @@ where
             AB::Expr,
             InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, BLOCK_VALUE_WIDTH>,
         > = AdapterAirContext {
-            to_pc: ctx.to_pc,
+            to_pc_idx: ctx.to_pc_idx,
             reads: inner_reads,
             writes: inner_writes,
             instruction: ctx.instruction,
@@ -196,8 +196,8 @@ where
         self.0.eval(builder, local, inner_ctx)
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        self.0.get_from_pc(local)
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
+        self.0.get_from_pc_idx(local)
     }
 }
 
@@ -340,7 +340,7 @@ where
             AB::Expr,
             InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH>,
         > = AdapterAirContext {
-            to_pc: ctx.to_pc,
+            to_pc_idx: ctx.to_pc_idx,
             reads: inner_reads,
             writes: (),
             instruction: ctx.instruction,
@@ -349,8 +349,8 @@ where
         self.0.eval(builder, local, inner_ctx)
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        self.0.get_from_pc(local)
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
+        self.0.get_from_pc_idx(local)
     }
 }
 

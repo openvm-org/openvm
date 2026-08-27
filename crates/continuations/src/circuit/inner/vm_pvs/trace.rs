@@ -59,13 +59,13 @@ pub fn generate_proving_ctx(
                 .cached_commitments[PROGRAM_CACHED_TRACE_INDEX];
 
             let &VmConnectorPvs {
-                initial_pc,
-                final_pc,
+                initial_pc_idx,
+                final_pc_idx,
                 exit_code,
                 is_terminate,
             } = proof.public_values[CONNECTOR_AIR_ID].as_slice().borrow();
-            cols.child_pvs.initial_pc = initial_pc;
-            cols.child_pvs.final_pc = final_pc;
+            cols.child_pvs.initial_pc_idx = initial_pc_idx;
+            cols.child_pvs.final_pc_idx = final_pc_idx;
             cols.child_pvs.exit_code = exit_code;
             cols.child_pvs.is_terminate = is_terminate;
 
@@ -91,10 +91,10 @@ pub fn generate_proving_ctx(
             trace[(num_vm_proofs - 1) * width..(num_vm_proofs - 1) * width + base_width].borrow();
 
         pvs.program_commit = first_row.child_pvs.program_commit;
-        pvs.initial_pc = first_row.child_pvs.initial_pc;
+        pvs.initial_pc_idx = first_row.child_pvs.initial_pc_idx;
         pvs.initial_root = first_row.child_pvs.initial_root;
 
-        pvs.final_pc = last_row.child_pvs.final_pc;
+        pvs.final_pc_idx = last_row.child_pvs.final_pc_idx;
         pvs.exit_code = last_row.child_pvs.exit_code;
         pvs.is_terminate = last_row.child_pvs.is_terminate;
         pvs.final_root = last_row.child_pvs.final_root;

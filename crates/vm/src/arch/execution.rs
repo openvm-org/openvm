@@ -280,7 +280,7 @@ pub struct ExecutionBridgeInteractor<AB: InteractionBuilder> {
     to_state: ExecutionState<AB::Expr>,
 }
 
-pub enum PcIncOrSet<T> {
+pub enum PcIdxIncOrSet<T> {
     Inc(T),
     Set(T),
 }
@@ -317,7 +317,7 @@ impl<T> ExecutionState<T> {
 
 impl ExecutionBus {
     /// Caller must constrain that `enabled` is boolean.
-    pub fn execute_and_increment_pc<AB: InteractionBuilder>(
+    pub fn execute_and_increment_pc_idx<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         enabled: impl Into<AB::Expr>,
@@ -363,18 +363,18 @@ impl ExecutionBridge {
 
     /// If `to_pc_idx` is `Some`, then `pc_idx_inc` is ignored and `to_state` uses `to_pc_idx`.
     /// Otherwise `to_pc_idx = from_pc_idx + pc_idx_inc`.
-    pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
+    pub fn execute_and_increment_or_set_pc_idx<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
         from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
         timestamp_change: impl Into<AB::Expr>,
-        pc_kind: impl Into<PcIncOrSet<AB::Expr>>,
+        pc_idx_kind: impl Into<PcIdxIncOrSet<AB::Expr>>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: match pc_kind.into() {
-                PcIncOrSet::Set(to_pc_idx) => to_pc_idx,
-                PcIncOrSet::Inc(pc_idx_inc) => from_state.pc.clone().into() + pc_idx_inc,
+            pc: match pc_idx_kind.into() {
+                PcIdxIncOrSet::Set(to_pc_idx) => to_pc_idx,
+                PcIdxIncOrSet::Inc(pc_idx_inc) => from_state.pc.clone().into() + pc_idx_inc,
             },
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
@@ -383,7 +383,7 @@ impl ExecutionBridge {
 
     /// The `pc` in [ExecutionState] is a pc index (see `pc_to_idx`), so advancing to the next
     /// instruction increments it by one.
-    pub fn execute_and_increment_pc<AB: InteractionBuilder>(
+    pub fn execute_and_increment_pc_idx<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
@@ -434,11 +434,11 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
     }
 }
 
-impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
+impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIdxIncOrSet<T> {
     fn from((pc_idx_inc, to_pc_idx): (u32, Option<T>)) -> Self {
         match to_pc_idx {
-            None => PcIncOrSet::Inc(T::from_u32(pc_idx_inc)),
-            Some(to_pc_idx) => PcIncOrSet::Set(to_pc_idx),
+            None => PcIdxIncOrSet::Inc(T::from_u32(pc_idx_inc)),
+            Some(to_pc_idx) => PcIdxIncOrSet::Set(to_pc_idx),
         }
     }
 }

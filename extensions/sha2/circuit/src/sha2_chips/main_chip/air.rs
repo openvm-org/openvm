@@ -228,7 +228,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         }
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_pc_idx(
                 AB::Expr::from_usize(C::OPCODE as usize + self.offset),
                 [
                     (*local.instruction.dst_reg_ptr).into(),

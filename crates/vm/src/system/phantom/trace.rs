@@ -41,7 +41,7 @@ pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
 
         let row: &mut PhantomCols<F> =
             trace.values[row_index * width..(row_index + 1) * width].borrow_mut();
-        row.pc = F::from_u32(pc_to_idx(pc));
+        row.pc_idx = F::from_u32(pc_to_idx(pc));
         row.operands = operands.map(F::from_u32);
         row.timestamp = F::from_u32(timestamp);
         row.is_valid = F::ONE;

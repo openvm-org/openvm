@@ -428,7 +428,7 @@ where
         // Evaluate the execution interaction. Because a single opcode spans many
         // rows, we only execute this on the last one.
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 AB::Expr::from_usize(DeferralOpcode::OUTPUT.global_opcode_usize()),
                 [
                     local.rd_ptr.into(),

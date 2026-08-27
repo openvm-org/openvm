@@ -29,12 +29,12 @@ pub struct JalrCoreCols<T> {
     pub imm: T,
     // Low 32 bits of rs1 as u16 cells.
     pub rs1_data: [T; PTR_U16_LIMBS],
-    // The high u16 limb and bit-32 carry of rd; the low limb is derived from from_pc.
+    // The high u16 limb and bit-32 carry of rd; the low limb is derived from from_pc_idx.
     pub rd_high: [T; PTR_U16_LIMBS],
     pub is_valid: T,
 
     pub raw_target_bit0: T,
-    /// Limbs of the target pc *index* (`to_pc / DEFAULT_PC_STEP`) after the low-bit split:
+    /// Limbs of the target PC index (`target_pc / DEFAULT_PC_STEP`) after the low-bit split:
     /// `[to_pc_idx % 2^PC_IDX_LOW_BITS, to_pc_idx >> PC_IDX_LOW_BITS]`.
     pub to_pc_idx_limbs: [T; 2],
     pub imm_sign: T,
@@ -150,7 +150,7 @@ where
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
         AdapterAirContext {
-            to_pc: Some(to_pc_idx),
+            to_pc_idx: Some(to_pc_idx),
             reads: [rs1_data].into(),
             writes: [rd_data].into(),
             instruction: SignedImmInstruction {

@@ -121,13 +121,13 @@ pub fn compute_exe_commit<F: PrimeField32>(
     padded_pc_start_idx[0] = pc_start_idx;
     let program_hash = hasher.hash(program_commit);
     let memory_hash = hasher.hash(init_memory_root);
-    let pc_hash = hasher.hash(&padded_pc_start_idx);
-    hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
+    let pc_idx_hash = hasher.hash(&padded_pc_start_idx);
+    hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_idx_hash)
 }
 
 pub(crate) fn generate_cached_trace<F: PrimeField32>(program: &Program) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
-    // The pc column contains pc indices (see [pc_to_idx]): byte pcs span 32 bits and do not fit
+    // The pc_idx column contains PC indices (see [pc_to_idx]): byte PCs span 32 bits and do not fit
     // in a field element.
     let mut instructions = program
         .enumerate_by_pc()
@@ -149,7 +149,7 @@ pub(crate) fn generate_cached_trace<F: PrimeField32>(program: &Program) -> RowMa
         .for_each(|(row, (pc_idx, instruction))| {
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
-                pc: F::from_u32(pc_idx),
+                pc_idx: F::from_u32(pc_idx),
                 opcode: F::from_usize(instruction.opcode.as_usize()),
                 a: instruction_operand_to_field(instruction.a),
                 b: instruction_operand_to_field(instruction.b),

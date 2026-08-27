@@ -116,7 +116,7 @@ where
                 * pc_step_inv;
 
         AdapterAirContext {
-            to_pc: Some(to_pc_idx),
+            to_pc_idx: Some(to_pc_idx),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
             instruction: ImmInstruction {

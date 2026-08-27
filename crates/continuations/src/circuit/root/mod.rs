@@ -103,7 +103,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for R
 pub struct RootVerifierPvs<F> {
     /// Hashed combination of the app-level ProgramAir cached trace, the Merkle root commit of
     /// the starting app memory state (i.e. initial_root), and the initial app program-counter
-    /// index (i.e. initial_pc).
+    /// index (i.e. initial_pc_idx).
     pub app_exe_commit: [F; DIGEST_SIZE],
     /// Commit to the app-level verifying key, computed by hashing the cached_commit and
     /// vk_pre_hash components of the app, leaf, and internal-for-leaf vk commits.

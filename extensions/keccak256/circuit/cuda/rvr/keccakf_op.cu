@@ -163,7 +163,7 @@ __global__ void keccakf_op_replay_tracegen(
 
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
-    KECCAKF_OP_WRITE(pc, ::program::pc_to_idx(from.pc));
+    KECCAKF_OP_WRITE(pc_idx, ::program::pc_to_idx(from.pc));
     KECCAKF_OP_WRITE(is_valid, 1);
     KECCAKF_OP_WRITE(timestamp, from.timestamp);
     KECCAKF_OP_WRITE(rd_ptr, rd_ptr);

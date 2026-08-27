@@ -135,7 +135,7 @@ where
         ];
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: [].into(),
             writes: [write_data].into(),
             instruction: ImmInstruction {

@@ -226,8 +226,8 @@ impl ProgramDebugInfo {
     /// If `pc` is out of bounds.
     pub fn get(&self, pc: u32) -> &Option<DebugInfo> {
         let pc_base = self.pc_base;
-        let pc_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
-        &self.inner[pc_idx]
+        let slot_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
+        &self.inner[slot_idx]
     }
 }
 

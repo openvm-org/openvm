@@ -15,7 +15,7 @@ inline constexpr size_t NUM_OP_ROWS_PER_INS = 1; // 1 row per instruction
 
 // Column structure matching Rust KeccakfOpCols (from columns.rs)
 template <typename T> struct KeccakfOpCols {
-    T pc;
+    T pc_idx;
     T is_valid;
     T timestamp;
     T rd_ptr;

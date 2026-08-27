@@ -109,7 +109,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &StoreCoreCols<AB::Var, NUM_VALUE_CELLS> = (*local_core).borrow();
         let width = STORE_WIDTH / U16_CELL_SIZE;
@@ -216,7 +216,7 @@ where
             })
         });
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: (
                 cols.prev_data.map(|block| block.map(Into::into)),
                 cols.read_data.map(Into::into),

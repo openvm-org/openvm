@@ -160,7 +160,7 @@ where
         );
 
         AdapterAirContext {
-            to_pc: Some(to_pc_idx),
+            to_pc_idx: Some(to_pc_idx),
             reads: [].into(),
             writes: [write_data].into(),
             instruction: ImmInstruction {
@@ -195,7 +195,7 @@ pub(super) fn get_signed_imm(is_jal: bool, imm: InstructionOperand) -> Option<i3
     }
 }
 
-// returns (to_pc, rd_data)
+// Returns the target byte PC and rd data.
 #[inline(always)]
 pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     if is_jal {

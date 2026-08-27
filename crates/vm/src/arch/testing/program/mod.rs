@@ -38,7 +38,7 @@ impl<F: PrimeField32> ProgramTester<F> {
     /// `initial_state.pc` is a byte pc; the program bus carries pc indices.
     pub fn execute(&mut self, instruction: &Instruction, initial_state: &ExecutionState<u32>) {
         self.records.push(ProgramExecutionCols {
-            pc: F::from_u32(pc_to_idx(initial_state.pc)),
+            pc_idx: F::from_u32(pc_to_idx(initial_state.pc)),
             opcode: F::from_usize(instruction.opcode.as_usize()),
             a: instruction_operand_to_field(instruction.a),
             b: instruction_operand_to_field(instruction.b),
