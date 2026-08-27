@@ -4,7 +4,7 @@ use itertools::Itertools;
 use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 
-use crate::circuit::Circuit;
+use crate::circuit::{inner::VerifierCircuitType, Circuit};
 
 pub mod bus;
 pub mod def_pvs;
@@ -17,6 +17,7 @@ pub use trace::*;
 #[derive(derive_new::new, Clone)]
 pub struct DeferralInnerCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
+    pub verifier_type: VerifierCircuitType,
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
@@ -34,6 +35,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             pre_hash_bus: bus_inventory.pre_hash_bus,
             range_bus: bus_inventory.range_checker_bus,
             def_pvs_consistency_bus,
+            verifier_type: self.verifier_type,
         };
 
         let def_pvs_air = def_pvs::DeferralAggPvsAir::new(

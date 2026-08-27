@@ -3,6 +3,7 @@ use std::sync::Arc;
 use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{
+    circuit::inner::VerifierCircuitType,
     prover::{DeferralChildVkKind, DeferralCircuitProver},
     SC,
 };
@@ -69,7 +70,7 @@ impl MultiDeferralCircuitProver {
         let internal_recursive_prover = DeferralInnerProver::new::<E>(
             single_circuit_prover.internal_for_leaf_prover.get_vk(),
             agg_config.params.internal,
-            true,
+            VerifierCircuitType::InternalRecursive,
         );
         let internal_recursive_cached_commit = internal_recursive_prover
             .get_vk_commit(true)
@@ -115,7 +116,7 @@ impl MultiDeferralCircuitProver {
         let internal_recursive_prover = DeferralInnerProver::from_pk::<E>(
             single_circuit_prover.internal_for_leaf_prover.get_vk(),
             def_internal_recursive_pk,
-            true,
+            VerifierCircuitType::InternalRecursive,
         );
         let internal_recursive_cached_commit = internal_recursive_prover
             .get_vk_commit(true)

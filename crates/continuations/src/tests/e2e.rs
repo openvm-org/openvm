@@ -263,17 +263,20 @@ fn test_deferral_e2e() -> Result<()> {
     let (_, def_circuit_vk) = gpu_engine.keygen(&[empty_air]);
     let def_circuit_vk = Arc::new(def_circuit_vk);
 
-    let def_leaf_prover =
-        DeferralInnerProver::new::<GpuEngine>(def_circuit_vk.clone(), leaf_system_params(), false);
+    let def_leaf_prover = DeferralInnerProver::new::<GpuEngine>(
+        def_circuit_vk.clone(),
+        leaf_system_params(),
+        VerifierCircuitType::Leaf,
+    );
     let def_i0_prover = DeferralInnerProver::new::<GpuEngine>(
         def_leaf_prover.get_vk(),
         internal_system_params(),
-        false,
+        VerifierCircuitType::InternalForLeaf,
     );
     let def_i1_prover = DeferralInnerProver::new::<GpuEngine>(
         def_i0_prover.get_vk(),
         internal_system_params(),
-        true,
+        VerifierCircuitType::InternalRecursive,
     );
     let hook_prover_for_commit = DeferralHookProver::new::<GpuEngine>(
         def_i1_prover.get_vk(),
@@ -462,7 +465,7 @@ fn test_deferral_e2e() -> Result<()> {
         let leaf_prover = DeferralInnerProver::new::<GpuEngine>(
             def_circuit_vk.clone(),
             leaf_system_params(),
-            false,
+            VerifierCircuitType::Leaf,
         );
 
         let mut current_proofs = proofs;
@@ -485,7 +488,7 @@ fn test_deferral_e2e() -> Result<()> {
         let i4l_prover = DeferralInnerProver::new::<GpuEngine>(
             leaf_prover.get_vk(),
             internal_system_params(),
-            false,
+            VerifierCircuitType::InternalForLeaf,
         );
         let mut next = Vec::with_capacity(current_proofs.len().div_ceil(2));
         let layer_merkle_depth = if current_proofs.len() == 1 {
@@ -507,7 +510,7 @@ fn test_deferral_e2e() -> Result<()> {
         let ir_prover = DeferralInnerProver::new::<GpuEngine>(
             i4l_prover.get_vk(),
             internal_system_params(),
-            true,
+            VerifierCircuitType::InternalRecursive,
         );
         loop {
             let mut next = Vec::with_capacity(current_proofs.len().div_ceil(2));
