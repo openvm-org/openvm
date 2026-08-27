@@ -20,7 +20,7 @@ use crate::{
         inner::{InnerCircuit, InnerTraceGen, ProofsType, VerifierCircuitType},
         Circuit,
     },
-    prover::{keygen_all_required, trace_heights_tracing_info},
+    prover::{assert_all_airs_required, keygen_all_required, trace_heights_tracing_info},
     SC,
 };
 
@@ -161,6 +161,7 @@ where
         S: VerifierTraceGen<PB, SC, EngineDeviceCtx<E>>,
         T: InnerTraceGen<PB, EngineDeviceCtx<E>>,
     {
+        assert_all_airs_required(&pk);
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {

@@ -22,7 +22,7 @@ use crate::{
         root::{RootCircuit, RootTraceGen},
         Circuit,
     },
-    prover::{keygen_all_required, trace_heights_tracing_info},
+    prover::{assert_all_airs_required, keygen_all_required, trace_heights_tracing_info},
     CommitBytes, RootSC, VkCommitBytes, SC,
 };
 
@@ -150,6 +150,7 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         <E::PB as ProverBackend>::Val: Field + PrimeField32,
         <E::PB as ProverBackend>::Matrix: Clone,
     {
+        assert_all_airs_required(&pk);
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
