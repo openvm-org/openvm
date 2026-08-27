@@ -1,0 +1,28 @@
+name: "Setup Lean toolchain"
+description: "Installs elan and the Lean toolchain used to build the certified verifier."
+
+inputs:
+  toolchain:
+    description: "Lean toolchain to install."
+    required: false
+    default: "leanprover/lean4:v4.26.0"
+
+outputs:
+  toolchain:
+    description: "Lean toolchain installed by this action."
+    value: ${{ steps.install.outputs.toolchain }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Lean toolchain
+      id: install
+      shell: bash
+      env:
+        LEAN_TOOLCHAIN: ${{ inputs.toolchain }}
+      run: |
+        curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+        echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+        echo "LEAN_TOOLCHAIN=$LEAN_TOOLCHAIN" >> "$GITHUB_ENV"
+        echo "toolchain=$LEAN_TOOLCHAIN" >> "$GITHUB_OUTPUT"
+        "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"

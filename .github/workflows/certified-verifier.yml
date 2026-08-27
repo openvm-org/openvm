@@ -18,6 +18,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
+      - ".github/actions/lean-toolchain/**"
       - ".github/actions/sccache/**"
       - ".github/workflows/certified-verifier.yml"
       - "ci/scripts/check_swirl_verifier_c.sh"
@@ -28,7 +29,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  LEAN_TOOLCHAIN: leanprover/lean4:v4.26.0
 
 jobs:
   openvm-tests:
@@ -40,18 +40,14 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
+      - uses: actions/checkout@v5
+      - id: lean-toolchain
+        uses: ./.github/actions/lean-toolchain
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
@@ -97,18 +93,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Lean toolchain
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
-
+      - uses: actions/checkout@v5
+      - id: lean-toolchain
+        uses: ./.github/actions/lean-toolchain
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
 
       - name: Check out current swirl-rbr-fv
         id: checkout-swirl
@@ -120,7 +112,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: swirl-rbr-fv/.lake
-          key: ${{ runner.os }}-swirl-rbr-fv-${{ steps.checkout-swirl.outputs.revision }}-${{ env.LEAN_TOOLCHAIN }}
+          key: ${{ runner.os }}-swirl-rbr-fv-${{ steps.checkout-swirl.outputs.revision }}-${{ steps.lean-toolchain.outputs.toolchain }}
 
       - name: Build upstream Lean verifier executables
         working-directory: swirl-rbr-fv
