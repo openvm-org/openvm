@@ -34,6 +34,12 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - name: Install Lean toolchain
+        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -51,13 +57,6 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
-
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
 
       - name: Build documentation
         run: cargo +nightly-2026-01-18 doc --workspace --no-deps --exclude "openvm-benchmarks*" --exclude "*-tests" --features "cuda"

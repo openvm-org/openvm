@@ -12,6 +12,8 @@ on:
       - "crates/toolchain/build/**"
       - "crates/cli/**"
       - "crates/certified-verifier/**"
+      - "crates/continuations/**"
+      - "crates/recursion/**"
       - "crates/sdk/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -38,6 +40,12 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - name: Install Lean toolchain
+        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -50,13 +58,6 @@ jobs:
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
-
-      - name: Install Lean toolchain
-        # openvm-certified-verifier's build.rs needs leanc from the toolchain that generated csrc/.
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
 
       - name: Build cargo-openvm
         run: |
@@ -96,6 +97,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install Lean toolchain
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
+
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -109,12 +116,6 @@ jobs:
           git clone --filter=blob:none git@github.com:axiom-crypto/swirl-rbr-fv.git swirl-rbr-fv
           echo "revision=$(git -C swirl-rbr-fv rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Lean toolchain
-        run: |
-          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$LEAN_TOOLCHAIN"
-
       - name: Cache swirl-rbr-fv Lean build
         uses: actions/cache@v4
         with:
@@ -124,8 +125,9 @@ jobs:
       - name: Build upstream Lean verifier executables
         working-directory: swirl-rbr-fv
         run: |
-          lake build swirl_verify
-          lake build swirl_dump_proof
+          test "$(tr -d '\r\n' < lean-toolchain)" = "$LEAN_TOOLCHAIN"
+          elan run "$LEAN_TOOLCHAIN" lake build swirl_verify
+          elan run "$LEAN_TOOLCHAIN" lake build swirl_dump_proof
 
       - name: Check vendored C against Lean-generated C
         run: bash ci/scripts/check_swirl_verifier_c.sh swirl-rbr-fv
