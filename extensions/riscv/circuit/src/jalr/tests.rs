@@ -46,7 +46,7 @@ use crate::{
         limbs_to_u64, u16_block_to_bytes, JalrAdapterAir, JalrAdapterCols, BYTE_BITS,
         PTR_U16_LIMBS, REGISTER_NUM_LIMBS, WORD_NUM_LIMBS,
     },
-    jalr::{run_jalr, JalrChip, JalrCoreCols, JalrExecutor},
+    jalr::{run_jalr, try_run_jalr, JalrChip, JalrCoreCols, JalrExecutor},
     JalrAir, JalrFiller,
 };
 const IMM_BITS: usize = 16;
@@ -225,8 +225,8 @@ fn rand_jalr_test() {
 
 #[test]
 fn jalr_max_pc_test() {
-    // Jump to the last instruction slot of the 32-bit PC address space, from the
-    // second-to-last slot.
+    // Jump to the last instruction slot of the 32-bit PC address space, including a raw odd
+    // target that becomes the last slot after JALR clears bit 0.
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&mut tester);
@@ -241,6 +241,18 @@ fn jalr_max_pc_test() {
         Some(0),
         Some(MAX_ALLOWED_PC - DEFAULT_PC_STEP),
         Some(into_limbs(MAX_ALLOWED_PC)),
+        None,
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        JALR,
+        Some(0),
+        Some(0),
+        Some(0),
+        Some(into_limbs(MAX_ALLOWED_PC + 1)),
         None,
     );
 
@@ -597,7 +609,17 @@ fn run_jalr_sanity_test() {
 }
 
 #[test]
-#[should_panic(expected = "JALR target exceeds implemented PC address space")]
+fn run_jalr_clears_bit_zero_before_max_pc_check() {
+    let (raw_target, _) = run_jalr(0, MAX_ALLOWED_PC + 1, 0, false);
+    assert_eq!(raw_target, MAX_ALLOWED_PC + 1);
+    assert_eq!(raw_target & !1, MAX_ALLOWED_PC);
+
+    // Clearing bit 0 of u32::MAX leaves bit 1 set, so the result is still misaligned.
+    assert!(try_run_jalr(0, u32::MAX, 0, false).is_none());
+}
+
+#[test]
+#[should_panic(expected = "JALR target is outside implemented PC address space or misaligned")]
 fn run_jalr_rejects_low_32_wraparound_test() {
     run_jalr(0, 0xffff_fff8, 16, false);
 }
@@ -679,6 +701,18 @@ fn test_cuda_rand_jalr_tracegen() {
             None,
         );
     }
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        JALR,
+        Some(0),
+        Some(0),
+        Some(0),
+        Some(into_limbs(MAX_ALLOWED_PC + 1)),
+        None,
+    );
 
     tester
         .build()

@@ -98,10 +98,15 @@ __global__ void jalr_replay_tracegen(
     uint32_t imm_extended = imm + imm_sign * 0xffff0000u;
     int64_t unaligned_signed =
         static_cast<int64_t>(rs1_val) + static_cast<int64_t>(static_cast<int32_t>(imm_extended));
-    // The target (bit 0 cleared per RISC-V) must be an aligned slot in the implemented PC
-    // address space, and the return address must not overflow it (mirrors `try_run_jalr`).
-    if (unaligned_signed < 0 || unaligned_signed > int64_t(MAX_ALLOWED_PC) ||
-        (static_cast<uint32_t>(unaligned_signed) & ~1u) % DEFAULT_PC_STEP != 0) {
+    // The raw sum must fit in the implemented u32 PC domain. RISC-V then clears bit 0 before
+    // checking instruction alignment (mirrors `try_run_jalr`).
+    if (unaligned_signed < 0 || unaligned_signed > int64_t(UINT32_MAX)) {
+        preflight_set_error(error, 209);
+        return;
+    }
+    uint32_t unaligned_to_pc = static_cast<uint32_t>(unaligned_signed);
+    uint32_t to_pc = unaligned_to_pc & ~1u;
+    if (to_pc % DEFAULT_PC_STEP != 0) {
         preflight_set_error(error, 209);
         return;
     }
@@ -109,8 +114,7 @@ __global__ void jalr_replay_tracegen(
         preflight_set_error(error, 209);
         return;
     }
-    uint32_t unaligned_to_pc = static_cast<uint32_t>(unaligned_signed);
-    if (to.pc != (unaligned_to_pc & ~1u)) {
+    if (to.pc != to_pc) {
         preflight_set_error(error, 207);
         return;
     }

@@ -37,7 +37,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 }
                 let rs1_value = u32::from(rs1[0]) | (u32::from(rs1[1]) << U16_BITS);
                 try_run_jalr(from_pc, rs1_value, immediate, imm_sign).ok_or_else(|| {
-                    PostflightError::new("JALR target exceeds implemented PC address space")
+                    PostflightError::new(
+                        "JALR target is outside implemented PC address space or misaligned",
+                    )
                 })
             },
         )?;

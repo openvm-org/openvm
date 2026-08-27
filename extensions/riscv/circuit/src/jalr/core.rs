@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_STEP_BITS},
+    program::{DEFAULT_PC_STEP, PC_STEP_BITS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalrOpcode::{self, *};
@@ -225,7 +225,8 @@ pub(super) fn run_jalr(
     imm: u16,
     imm_sign: bool,
 ) -> (u32, [u16; BLOCK_FE_WIDTH]) {
-    try_run_jalr(pc, rs1, imm, imm_sign).expect("JALR target exceeds implemented PC address space")
+    try_run_jalr(pc, rs1, imm, imm_sign)
+        .expect("JALR target is outside implemented PC address space or misaligned")
 }
 
 pub(super) fn try_run_jalr(
@@ -235,18 +236,16 @@ pub(super) fn try_run_jalr(
     imm_sign: bool,
 ) -> Option<(u32, [u16; BLOCK_FE_WIDTH])> {
     let imm_extended = imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS));
-    let to_pc = address_add_imm(rs1, imm_extended);
-    if to_pc > u64::from(MAX_ALLOWED_PC) {
-        return None;
-    }
-    let to_pc = to_pc as u32;
-    // RISC-V clears bit 0 of the target; a set bit 1 leaves the target misaligned, which is
-    // rejected (and unprovable in the circuit).
-    if to_pc & 0b10 != 0 {
+    let unaligned_to_pc = u32::try_from(address_add_imm(rs1, imm_extended)).ok()?;
+    // RISC-V clears bit 0 before checking instruction alignment.
+    let to_pc = unaligned_to_pc & !1;
+    if !to_pc.is_multiple_of(DEFAULT_PC_STEP) {
         return None;
     }
 
     let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
     let rd_data = u32_to_u16_block(rd_low_u32);
-    Some((to_pc, rd_data))
+    // Trace generation keeps the raw target so the AIR can witness its cleared low bit. The
+    // adapter applies the mask when it checks the next execution state.
+    Some((unaligned_to_pc, rd_data))
 }

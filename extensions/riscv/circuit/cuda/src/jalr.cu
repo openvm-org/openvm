@@ -24,17 +24,18 @@ __device__ void run_jalr(
     uint32_t rs1,
     uint16_t imm,
     bool imm_sign,
-    uint32_t &out_pc,
+    uint32_t &out_unaligned_pc,
     uint16_t rd_data[BLOCK_FE_WIDTH]
 ) {
     uint32_t offset = imm + (imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
     int64_t signed_offset = (int64_t)(int32_t)offset;
-    uint64_t to_pc = uint64_t(rs1) + signed_offset;
+    uint64_t unaligned_to_pc = uint64_t(rs1) + signed_offset;
 
-    assert(to_pc <= uint64_t(MAX_ALLOWED_PC));
-    // Bit 0 is cleared per RISC-V; a set bit 1 (misaligned target) is rejected upstream.
-    assert((uint32_t(to_pc) & 0b10) == 0);
-    out_pc = uint32_t(to_pc);
+    assert(unaligned_to_pc <= uint64_t(UINT32_MAX));
+    uint32_t to_pc = uint32_t(unaligned_to_pc) & ~1u;
+    // RISC-V clears bit 0 before checking instruction alignment.
+    assert(to_pc % DEFAULT_PC_STEP == 0);
+    out_unaligned_pc = uint32_t(unaligned_to_pc);
     uint32_t rd_val = pc + DEFAULT_PC_STEP;
     rd_data[0] = uint16_t(rd_val);
     rd_data[1] = uint16_t(rd_val >> U16_BITS);
@@ -52,12 +53,12 @@ struct JalrCore {
     __device__ void fill_trace_row(
         RowSlice row, uint32_t from_pc, uint32_t rs1_val, uint16_t imm, bool imm_sign
     ) {
-        uint32_t to_pc;
+        uint32_t unaligned_to_pc;
         uint16_t rd_data[BLOCK_FE_WIDTH];
-        run_jalr(from_pc, rs1_val, imm, imm_sign, to_pc, rd_data);
+        run_jalr(from_pc, rs1_val, imm, imm_sign, unaligned_to_pc, rd_data);
 
         // to_pc_limbs decompose the target pc *index* (see the Rust filler).
-        uint32_t to_pc_idx = (to_pc & ~1u) >> PC_STEP_BITS;
+        uint32_t to_pc_idx = (unaligned_to_pc & ~1u) >> PC_STEP_BITS;
         uint32_t to_pc_limbs[2] = {
             to_pc_idx & ((1u << PC_IDX_LOW_BITS) - 1), to_pc_idx >> PC_IDX_LOW_BITS
         };
@@ -77,7 +78,9 @@ struct JalrCore {
 
         COL_WRITE_VALUE(row, JalrCoreCols, imm_sign, imm_sign);
         COL_WRITE_ARRAY(row, JalrCoreCols, to_pc_limbs, to_pc_limbs);
-        COL_WRITE_VALUE(row, JalrCoreCols, to_pc_least_sig_bit, (to_pc & 1) == 1 ? 1 : 0);
+        COL_WRITE_VALUE(
+            row, JalrCoreCols, to_pc_least_sig_bit, (unaligned_to_pc & 1) == 1 ? 1 : 0
+        );
         COL_WRITE_VALUE(row, JalrCoreCols, is_valid, 1);
 
         COL_WRITE_ARRAY(row, JalrCoreCols, rs1_data, rs1_limbs);
