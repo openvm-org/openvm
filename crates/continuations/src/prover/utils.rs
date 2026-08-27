@@ -10,6 +10,14 @@ use openvm_stark_backend::{
 
 use crate::circuit::Circuit;
 
+/// Panics if any AIR in the proving key is not marked as required.
+pub fn assert_all_airs_required<SC: StarkProtocolConfig>(pk: &MultiStarkProvingKey<SC>) {
+    assert!(
+        pk.per_air.iter().all(|air_pk| air_pk.vk.is_required),
+        "cached proving key must have all AIRs marked as required"
+    );
+}
+
 /// Generates keys with every AIR marked as required.
 pub fn keygen_all_required<E: StarkEngine>(
     engine: &E,
