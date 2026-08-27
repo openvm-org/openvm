@@ -3,7 +3,10 @@ use std::{borrow::Borrow, iter::once, sync::Arc};
 use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{
-    circuit::deferral::{hook::DeferralIoCommit, DeferralCircuitPvs, DEF_CIRCUIT_PVS_AIR_ID},
+    circuit::{
+        deferral::{hook::DeferralIoCommit, DeferralCircuitPvs, DEF_CIRCUIT_PVS_AIR_ID},
+        inner::VerifierCircuitType,
+    },
     prover::{DeferralChildVkKind, DeferralCircuitProver},
     SC,
 };
@@ -42,10 +45,16 @@ impl SingleDeferralCircuitProver {
         leaf_params: SystemParams,
         internal_params: SystemParams,
     ) -> Self {
-        let leaf_prover =
-            DeferralInnerProver::new::<E>(def_circuit_prover.get_vk(), leaf_params, false);
-        let internal_for_leaf_prover =
-            DeferralInnerProver::new::<E>(leaf_prover.get_vk(), internal_params, false);
+        let leaf_prover = DeferralInnerProver::new::<E>(
+            def_circuit_prover.get_vk(),
+            leaf_params,
+            VerifierCircuitType::Leaf,
+        );
+        let internal_for_leaf_prover = DeferralInnerProver::new::<E>(
+            leaf_prover.get_vk(),
+            internal_params,
+            VerifierCircuitType::InternalForLeaf,
+        );
         Self {
             def_circuit_prover: Box::new(def_circuit_prover),
             leaf_prover,
@@ -58,10 +67,16 @@ impl SingleDeferralCircuitProver {
         leaf_pk: Arc<MultiStarkProvingKey<SC>>,
         internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,
     ) -> Self {
-        let leaf_prover =
-            DeferralInnerProver::from_pk::<E>(def_circuit_prover.get_vk(), leaf_pk, false);
-        let internal_for_leaf_prover =
-            DeferralInnerProver::from_pk::<E>(leaf_prover.get_vk(), internal_for_leaf_pk, false);
+        let leaf_prover = DeferralInnerProver::from_pk::<E>(
+            def_circuit_prover.get_vk(),
+            leaf_pk,
+            VerifierCircuitType::Leaf,
+        );
+        let internal_for_leaf_prover = DeferralInnerProver::from_pk::<E>(
+            leaf_prover.get_vk(),
+            internal_for_leaf_pk,
+            VerifierCircuitType::InternalForLeaf,
+        );
         Self {
             def_circuit_prover: Box::new(def_circuit_prover),
             leaf_prover,
