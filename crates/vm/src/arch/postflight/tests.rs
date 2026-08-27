@@ -359,6 +359,26 @@ fn retains_a_terminated_boundary_and_frequency() {
 }
 
 #[test]
+fn rejects_misaligned_program_base_and_pc() {
+    let terminate =
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
+    let program = Program::new_without_debug_infos(&[terminate], 2);
+    let boundary = PreflightProgramEvent {
+        pc: 2,
+        timestamp: 1,
+    };
+    let history = PreflightHistory {
+        program: vec![boundary, boundary],
+        ..Default::default()
+    };
+
+    let error = Postflight::<BabyBear>::new(&program, &history, &MemoryConfig::default(), Some(0))
+        .err()
+        .unwrap();
+    assert!(error.to_string().contains("is not instruction-aligned"));
+}
+
+#[test]
 fn rejects_negative_terminate_exit_code() {
     let terminate = Instruction {
         opcode: SystemOpcode::TERMINATE.global_opcode(),

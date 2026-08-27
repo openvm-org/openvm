@@ -365,6 +365,9 @@ pub fn get_pc_index(pc: u32) -> usize {
 
 #[inline(always)]
 fn checked_program_slot(pc: u32, pc_base: u32) -> Option<usize> {
+    if !pc.is_multiple_of(DEFAULT_PC_STEP) {
+        return None;
+    }
     let delta = pc.checked_sub(pc_base)?;
     delta
         .is_multiple_of(DEFAULT_PC_STEP)
@@ -694,6 +697,52 @@ mod tests {
     }
 
     #[test]
+    fn high_pc_program_resolves_nonzero_relative_slot() {
+        let terminate = Instruction {
+            opcode: SystemOpcode::TERMINATE.global_opcode(),
+            ..Default::default()
+        };
+        let program = Program::new_without_debug_infos_with_option(
+            &[None, Some(terminate)],
+            MAX_ALLOWED_PC - DEFAULT_PC_STEP,
+        );
+        let exe = VmExe::new(program).with_pc_start(MAX_ALLOWED_PC);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
+            .expect("terminate-only program should be statically valid");
+
+        assert_eq!(
+            interpreter.execute(Streams::default()).unwrap().pc(),
+            MAX_ALLOWED_PC
+        );
+    }
+
+    #[test]
+    fn metered_high_pc_program_resolves_nonzero_relative_slot() {
+        let terminate = Instruction {
+            opcode: SystemOpcode::TERMINATE.global_opcode(),
+            ..Default::default()
+        };
+        let program = Program::new_without_debug_infos_with_option(
+            &[None, Some(terminate)],
+            MAX_ALLOWED_PC - DEFAULT_PC_STEP,
+        );
+        let exe = VmExe::new(program).with_pc_start(MAX_ALLOWED_PC);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
+            &inventory,
+            &exe,
+            &[],
+        )
+        .expect("terminate-only program should be statically valid");
+
+        let (_, state) = interpreter
+            .execute_metered_cost(Streams::default(), MeteredCostCtx::new(vec![]))
+            .unwrap();
+        assert_eq!(state.pc(), MAX_ALLOWED_PC);
+    }
+
+    #[test]
     fn metered_high_pc_program_uses_relative_table_for_execution() {
         let exe = terminate_exe(MAX_ALLOWED_PC, MAX_ALLOWED_PC);
         let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
@@ -743,6 +792,49 @@ mod tests {
     #[test]
     fn metered_misaligned_pc_is_rejected_before_dispatch() {
         let exe = terminate_exe(0, 2);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
+            &inventory,
+            &exe,
+            &[],
+        )
+        .expect("terminate-only program should be statically valid");
+
+        assert!(matches!(
+            interpreter.execute_metered_cost(Streams::default(), MeteredCostCtx::new(vec![])),
+            Err(ExecutionError::PcOutOfBounds(2))
+        ));
+    }
+
+    #[test]
+    fn pc_with_misaligned_delta_from_program_base_is_rejected() {
+        let exe = terminate_exe(2, DEFAULT_PC_STEP);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
+            .expect("terminate-only program should be statically valid");
+
+        assert!(matches!(
+            interpreter.execute(Streams::default()),
+            Err(ExecutionError::PcOutOfBounds(DEFAULT_PC_STEP))
+        ));
+    }
+
+    #[test]
+    fn misaligned_program_base_is_rejected_before_dispatch() {
+        let exe = terminate_exe(2, 2);
+        let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
+        let interpreter = InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe)
+            .expect("terminate-only program should be statically valid");
+
+        assert!(matches!(
+            interpreter.execute(Streams::default()),
+            Err(ExecutionError::PcOutOfBounds(2))
+        ));
+    }
+
+    #[test]
+    fn metered_misaligned_program_base_is_rejected_before_dispatch() {
+        let exe = terminate_exe(2, 2);
         let inventory = ExecutorInventory::<SystemExecutor>::new(SystemConfig::default());
         let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
             &inventory,

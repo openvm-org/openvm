@@ -201,7 +201,7 @@ fn test_program_negative() {
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_rows.extend(vec![
             BabyBear::from_u32(execution_frequencies[pc_idx]),
-            BabyBear::from_usize(pc_idx * DEFAULT_PC_STEP as usize),
+            BabyBear::from_usize(pc_idx),
             BabyBear::from_usize(instruction.opcode.as_usize()),
             instruction_operand_to_field(instruction.a),
             instruction_operand_to_field(instruction.b),
