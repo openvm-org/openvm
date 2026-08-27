@@ -1,5 +1,6 @@
 //! Chip to handle phantom instructions.
-//! The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.
+//! The AIR constrains a NOP that advances the circuit pc by one index. The runtime executor
+//! advances the architectural byte pc by `DEFAULT_PC_STEP`.
 //! The runtime executor will execute different phantom instructions that may
 //! affect trace generation based on the operand.
 use std::{borrow::Borrow, sync::Arc};
@@ -45,6 +46,7 @@ pub struct PhantomAir {
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
+    /// Circuit pc index (`byte_pc / DEFAULT_PC_STEP`).
     pub pc: T,
     #[serde(with = "BigArray")]
     pub operands: [T; NUM_PHANTOM_OPERANDS],
@@ -65,7 +67,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
         let &PhantomCols {
-            pc,
+            pc: pc_idx,
             operands,
             timestamp,
             is_valid,
@@ -76,7 +78,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
             .execute_and_increment_or_set_pc(
                 AB::F::from_usize(self.phantom_opcode.as_usize()),
                 operands,
-                ExecutionState::<AB::Expr>::new(pc, timestamp),
+                ExecutionState::<AB::Expr>::new(pc_idx, timestamp),
                 AB::Expr::ONE,
                 PcIncOrSet::Inc(AB::Expr::ONE),
             )

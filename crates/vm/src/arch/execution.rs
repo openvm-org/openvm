@@ -237,6 +237,11 @@ pub struct E2PreCompute<DATA> {
 #[derive(
     Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, StructReflection, Serialize, Deserialize,
 )]
+/// An execution state shared by runtime and circuit code.
+///
+/// In runtime and replay code, `pc` is an architectural byte address. In AIR columns and bus
+/// messages, `pc` is the circuit pc index returned by `pc_to_idx`. The field keeps the generic
+/// name because this type is used at both boundaries.
 pub struct ExecutionState<T> {
     pub pc: T,
     pub timestamp: T,
@@ -356,8 +361,8 @@ impl ExecutionBridge {
         }
     }
 
-    /// If `to_pc` is `Some`, then `pc_inc` is ignored and the `to_state` uses `to_pc`. Otherwise
-    /// `to_pc = from_pc + pc_inc`.
+    /// If `to_pc_idx` is `Some`, then `pc_idx_inc` is ignored and `to_state` uses `to_pc_idx`.
+    /// Otherwise `to_pc_idx = from_pc_idx + pc_idx_inc`.
     pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
@@ -368,8 +373,8 @@ impl ExecutionBridge {
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
             pc: match pc_kind.into() {
-                PcIncOrSet::Set(to_pc) => to_pc,
-                PcIncOrSet::Inc(pc_inc) => from_state.pc.clone().into() + pc_inc,
+                PcIncOrSet::Set(to_pc_idx) => to_pc_idx,
+                PcIncOrSet::Inc(pc_idx_inc) => from_state.pc.clone().into() + pc_idx_inc,
             },
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
@@ -430,10 +435,10 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
 }
 
 impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
-    fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
-        match to_pc {
-            None => PcIncOrSet::Inc(T::from_u32(pc_inc)),
-            Some(to_pc) => PcIncOrSet::Set(to_pc),
+    fn from((pc_idx_inc, to_pc_idx): (u32, Option<T>)) -> Self {
+        match to_pc_idx {
+            None => PcIncOrSet::Inc(T::from_u32(pc_idx_inc)),
+            Some(to_pc_idx) => PcIncOrSet::Set(to_pc_idx),
         }
     }
 }

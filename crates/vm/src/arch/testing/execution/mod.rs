@@ -42,14 +42,14 @@ impl<F: PrimeField32> ExecutionTester<F> {
         initial_state: ExecutionState<u32>,
         final_state: ExecutionState<u32>,
     ) {
-        let to_idx = |state: ExecutionState<u32>| ExecutionState {
+        let to_indexed_state = |state: ExecutionState<u32>| ExecutionState {
             pc: pc_to_idx(state.pc),
             timestamp: state.timestamp,
         };
         self.records.push(DummyExecutionInteractionCols {
             count: F::NEG_ONE, // send
-            initial_state: to_idx(initial_state).map(F::from_u32),
-            final_state: to_idx(final_state).map(F::from_u32),
+            initial_state: to_indexed_state(initial_state).map(F::from_u32),
+            final_state: to_indexed_state(final_state).map(F::from_u32),
         });
         self.last_states = Some((initial_state, final_state));
     }

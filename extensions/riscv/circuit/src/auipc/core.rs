@@ -84,7 +84,7 @@ where
         let pc_idx_low = from_pc_idx - pc_high * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
         let pc_low = pc_idx_low.clone() * AB::F::from_u32(DEFAULT_PC_STEP);
 
-        // `from_pc_idx` is bounded to `PC_BITS` by the program bus, so the split into a
+        // `from_pc_idx` is bounded to `PC_IDX_BITS` by the program bus, so the split into a
         // PC_IDX_LOW_BITS-bit low part and a u16 high part is unique.
         self.range_bus
             .range_check(pc_idx_low, PC_IDX_LOW_BITS)

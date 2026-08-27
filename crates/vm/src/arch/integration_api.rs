@@ -80,7 +80,8 @@ where
 }
 
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
-    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
+    /// Circuit pc index after this instruction. Leave as `None` to allow the adapter to choose
+    /// the next index automatically.
     pub to_pc: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,

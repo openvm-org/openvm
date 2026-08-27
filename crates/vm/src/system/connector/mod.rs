@@ -43,9 +43,9 @@ pub struct VmConnectorAir {
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
-    /// The initial PC of this segment.
+    /// The initial circuit pc index of this segment.
     pub initial_pc: F,
-    /// The final PC of this segment.
+    /// The final circuit pc index of this segment.
     pub final_pc: F,
     /// The exit code of the whole program. 0 means exited normally. This is only meaningful when
     /// `is_terminate` is 1.
@@ -116,6 +116,7 @@ impl VmConnectorAir {
 #[derive(Debug, Copy, Clone, AlignedBorrow, StructReflection, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ConnectorCols<T> {
+    /// Circuit pc index (`byte_pc / DEFAULT_PC_STEP`).
     pub pc: T,
     pub timestamp: T,
     pub is_terminate: T,
@@ -163,14 +164,16 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         let next: &ConnectorCols<AB::Var> = (*next).borrow();
 
         let &VmConnectorPvs {
-            initial_pc,
-            final_pc,
+            initial_pc: initial_pc_idx,
+            final_pc: final_pc_idx,
             exit_code,
             is_terminate,
         } = builder.public_values().borrow();
 
-        builder.when_transition().assert_eq(local.pc, initial_pc);
-        builder.when_transition().assert_eq(next.pc, final_pc);
+        builder
+            .when_transition()
+            .assert_eq(local.pc, initial_pc_idx);
+        builder.when_transition().assert_eq(next.pc, final_pc_idx);
         builder
             .when_transition()
             .when(next.is_terminate)
@@ -287,7 +290,7 @@ where
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
-        let [initial_state, final_state] = self.boundary_states.map(|state| {
+        let [initial_row, final_row] = self.boundary_states.map(|state| {
             let mut state = state.unwrap();
             // Decompose and range check timestamp
             let range_max_bits = self.range_checker.range_max_bits();
@@ -302,16 +305,16 @@ where
         });
 
         let trace = RowMajorMatrix::new(
-            [initial_state.flatten(), final_state.flatten()].concat(),
+            [initial_row.flatten(), final_row.flatten()].concat(),
             ConnectorCols::<Val<SC>>::width(),
         );
 
         let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
-            initial_pc: initial_state.pc,
-            final_pc: final_state.pc,
-            exit_code: final_state.exit_code,
-            is_terminate: final_state.is_terminate,
+            initial_pc: initial_row.pc,
+            final_pc: final_row.pc,
+            exit_code: final_row.exit_code,
+            is_terminate: final_row.is_terminate,
         };
         AirProvingContext::simple(trace, public_values)
     }

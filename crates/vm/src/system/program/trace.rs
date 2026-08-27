@@ -115,13 +115,13 @@ pub fn compute_exe_commit<F: PrimeField32>(
     hasher: &Poseidon2Hasher<F>,
     program_commit: &[F; VM_DIGEST_WIDTH],
     init_memory_root: &[F; VM_DIGEST_WIDTH],
-    pc_start: F,
+    pc_start_idx: F,
 ) -> [F; VM_DIGEST_WIDTH] {
-    let mut padded_pc_start = [F::ZERO; VM_DIGEST_WIDTH];
-    padded_pc_start[0] = pc_start;
+    let mut padded_pc_start_idx = [F::ZERO; VM_DIGEST_WIDTH];
+    padded_pc_start_idx[0] = pc_start_idx;
     let program_hash = hasher.hash(program_commit);
     let memory_hash = hasher.hash(init_memory_root);
-    let pc_hash = hasher.hash(&padded_pc_start);
+    let pc_hash = hasher.hash(&padded_pc_start_idx);
     hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
 }
 

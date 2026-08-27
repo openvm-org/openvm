@@ -104,8 +104,8 @@ __global__ void jalr_replay_tracegen(
         preflight_set_error(error, 209);
         return;
     }
-    uint32_t unaligned_to_pc = static_cast<uint32_t>(unaligned_signed);
-    uint32_t to_pc = unaligned_to_pc & ~1u;
+    uint32_t raw_target_pc = static_cast<uint32_t>(unaligned_signed);
+    uint32_t to_pc = raw_target_pc & ~1u;
     if (to_pc % DEFAULT_PC_STEP != 0) {
         preflight_set_error(error, 209);
         return;

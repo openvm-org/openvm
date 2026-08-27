@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::InstructionOperand,
-    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_IDX_BITS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::JalLuiOpcode::{self, *};
@@ -107,7 +107,7 @@ where
         builder.when(is_jal).assert_eq(
             rd[0] * pc_step_inv
                 + rd[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS)
-                + rd_carry * AB::F::from_u32(1 << PC_BITS),
+                + rd_carry * AB::F::from_u32(1 << PC_IDX_BITS),
             from_pc_idx + AB::F::ONE,
         );
         // A carry leaves all low-32-bit return-address limbs zero. This prevents field wrap in
@@ -136,7 +136,7 @@ where
         // JAL return addresses are DEFAULT_PC_STEP-aligned: rd[0] = 4 * x with
         // x < 2^PC_IDX_LOW_BITS. Together with rd[1] < 2^16 this makes the decomposition
         // rd = 4 * (from_pc_idx + 1) unique: the composed pc index rd[1] * 2^PC_IDX_LOW_BITS + x
-        // is at most 2^PC_BITS < p, so it must equal from_pc_idx + 1 over the integers.
+        // is at most 2^PC_IDX_BITS < p, so it must equal from_pc_idx + 1 over the integers.
         self.range_bus
             .range_check(rd[0] * pc_step_inv, PC_IDX_LOW_BITS)
             .eval(builder, is_jal);

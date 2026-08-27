@@ -274,8 +274,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * The app_exe_commit is a commit to the app program, initial memory state, and initial
-         * PC. Child public values program_commit, initial_root, and initial_pc are individually
-         * hashed and then permuted together to produce app_exe_commit.
+         * PC index. Child public values program_commit, initial_root, and initial_pc are
+         * individually hashed and then permuted together to produce app_exe_commit.
          */
         self.poseidon2_compress_bus.lookup_key(
             builder,

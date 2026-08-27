@@ -189,7 +189,7 @@ impl JalrAdapterFiller {
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(REGISTER_AS, rs1_u16_ptr)?;
-        let (to_pc, rd_data) = compute(from_pc, rs1.value, immediate as u16, imm_sign)?;
+        let (raw_target_pc, rd_data) = compute(from_pc, rs1.value, immediate as u16, imm_sign)?;
 
         adapter_row.needs_write = F::from_bool(needs_write);
         if needs_write {
@@ -208,7 +208,7 @@ impl JalrAdapterFiller {
             mem_helper.fill_zero(adapter_row.rd_aux_cols.as_mut());
             adapter_row.rd_ptr = F::ZERO;
         }
-        replay.finish(to_pc & !1)?;
+        replay.finish(raw_target_pc & !1)?;
 
         mem_helper.fill(
             rs1.previous_timestamp,
@@ -219,6 +219,6 @@ impl JalrAdapterFiller {
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
-        Ok((rs1.value, to_pc, rd_data))
+        Ok((rs1.value, raw_target_pc, rd_data))
     }
 }

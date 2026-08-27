@@ -27,8 +27,8 @@ inline constexpr size_t RV_IS_TYPE_IMM_BITS = 12;
 
 namespace program {
 // Number of bits of a pc index (`pc / DEFAULT_PC_STEP`), the circuit representation of the
-// program counter. Byte pcs span PC_BITS + PC_STEP_BITS = 32 bits.
-inline constexpr size_t PC_BITS = 30;
+// program counter. Byte pcs span PC_IDX_BITS + PC_STEP_BITS = 32 bits.
+inline constexpr size_t PC_IDX_BITS = 30;
 inline constexpr size_t DEFAULT_PC_STEP = 4;
 // log2 of DEFAULT_PC_STEP.
 inline constexpr size_t PC_STEP_BITS = 2;

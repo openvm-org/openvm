@@ -170,7 +170,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
 
     let rs1 = limbs_to_u64(rs1) as u32;
 
-    let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
+    let (raw_target_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
     // The register write is suppressed for x0.
     let rd_data = if a == 0 {
         [0u16; BLOCK_FE_WIDTH]
@@ -178,7 +178,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
         rd_data
     };
 
-    assert_eq!(next_pc & !1, final_pc);
+    assert_eq!(raw_target_pc & !1, final_pc);
     // Compare against the raw 8-byte register value stored in memory.
     let rd_bytes = u16_block_to_bytes(rd_data);
     assert_eq!(
@@ -277,8 +277,8 @@ fn jalr_max_pc_test() {
 struct JalrPrankValues {
     pub rd_high: Option<[u32; PTR_U16_LIMBS]>,
     pub rs1_data: Option<[u32; PTR_U16_LIMBS]>,
-    pub to_pc_least_sig_bit: Option<u32>,
-    pub to_pc_limbs: Option<[u32; PTR_U16_LIMBS]>,
+    pub raw_target_bit0: Option<u32>,
+    pub to_pc_idx_limbs: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_sign: Option<u32>,
     pub rd_ptr: Option<u32>,
     pub needs_write: Option<bool>,
@@ -326,11 +326,11 @@ fn run_negative_jalr_test_with_rd_ptr(
         if let Some(data) = prank_vals.rs1_data {
             core_cols.rs1_data = data.map(F::from_u32);
         }
-        if let Some(data) = prank_vals.to_pc_least_sig_bit {
-            core_cols.to_pc_least_sig_bit = F::from_u32(data);
+        if let Some(data) = prank_vals.raw_target_bit0 {
+            core_cols.raw_target_bit0 = F::from_u32(data);
         }
-        if let Some(data) = prank_vals.to_pc_limbs {
-            core_cols.to_pc_limbs = data.map(F::from_u32);
+        if let Some(data) = prank_vals.to_pc_idx_limbs {
+            core_cols.to_pc_idx_limbs = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.imm_sign {
             core_cols.imm_sign = F::from_u32(data);
@@ -415,7 +415,7 @@ fn invalid_cols_negative_tests() {
         Some(0xfe10),
         Some(1),
         JalrPrankValues {
-            to_pc_least_sig_bit: Some(0),
+            raw_target_bit0: Some(0),
             ..Default::default()
         },
         false,
@@ -580,7 +580,7 @@ fn overflow_negative_tests() {
         Some((1 << 11) - 4),
         Some(0),
         JalrPrankValues {
-            to_pc_limbs: Some([
+            to_pc_idx_limbs: Some([
                 (F::NEG_ONE * F::from_u32((1 << 14) + 1)).as_canonical_u32(),
                 1,
             ]),
@@ -602,17 +602,17 @@ fn run_jalr_sanity_test() {
     let imm = -1235_i32 as u32;
     // Chosen so the target (after clearing bit 0) is DEFAULT_PC_STEP-aligned.
     let rs1 = 736482908;
-    let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
-    assert_eq!(next_pc & !1, 736481672);
+    let (raw_target_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
+    assert_eq!(raw_target_pc & !1, 736481672);
     // u32 pc+4 = 789456124 = 0x2f0e24fc => low u16=0x24fc, high u16=0x2f0e.
     assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
 }
 
 #[test]
 fn run_jalr_clears_bit_zero_before_max_pc_check() {
-    let (raw_target, _) = run_jalr(0, MAX_ALLOWED_PC + 1, 0, false);
-    assert_eq!(raw_target, MAX_ALLOWED_PC + 1);
-    assert_eq!(raw_target & !1, MAX_ALLOWED_PC);
+    let (raw_target_pc, _) = run_jalr(0, MAX_ALLOWED_PC + 1, 0, false);
+    assert_eq!(raw_target_pc, MAX_ALLOWED_PC + 1);
+    assert_eq!(raw_target_pc & !1, MAX_ALLOWED_PC);
 
     // Clearing bit 0 of u32::MAX leaves bit 1 set, so the result is still misaligned.
     assert!(try_run_jalr(0, u32::MAX, 0, false).is_none());

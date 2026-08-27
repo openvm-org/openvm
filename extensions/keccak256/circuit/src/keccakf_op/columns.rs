@@ -8,7 +8,7 @@ use crate::{KECCAK_WIDTH_MEM_OPS, KECCAK_WIDTH_U16S};
 #[repr(C)]
 #[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
 pub struct KeccakfOpCols<T> {
-    /// Program counter
+    /// Circuit pc index (`byte_pc / DEFAULT_PC_STEP`).
     pub pc: T,
     /// True on the row handling execution for an instruction.
     pub is_valid: T,
