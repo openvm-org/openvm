@@ -15,7 +15,8 @@ use openvm_riscv_transpiler::JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::{checked_jalr_target, JalrExecutor};
-use crate::adapters::bytes_to_u32;
+use crate::adapters::try_bytes_to_u32;
+
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct JalrPreCompute {
@@ -150,7 +151,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     let rs1 = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
-    let rs1 = bytes_to_u32(rs1);
+    let rs1 = try_bytes_to_u32(rs1).ok_or(ExecutionError::Fail {
+        pc,
+        msg: "JALR source register has nonzero upper 32 bits",
+    })?;
     let (_, to_pc) =
         checked_jalr_target(rs1, pre_compute.imm_extended).ok_or(ExecutionError::Fail {
             pc,
@@ -196,7 +200,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const ENABLED: bool>(
 #[cfg(test)]
 mod tests {
     use openvm_circuit::arch::{
-        execution_mode::{ExecutionCtx, MeteredCostCtx},
+        execution_mode::{ExecutionCtx, MeteredCostCtx, PreflightCtx},
         InterpretedInstance, Streams, VmExecutionConfig,
     };
     use openvm_instructions::{
@@ -209,7 +213,7 @@ mod tests {
     use super::*;
     use crate::Rv64IConfig;
 
-    fn jalr_exe(rs1: u32, imm: usize) -> VmExe {
+    fn jalr_exe(rs1: u64, imm: usize) -> VmExe {
         let jalr = Instruction::from_usize(
             JalrOpcode::JALR.global_opcode(),
             [16, 8, imm, REGISTER_AS as usize, 0, 1, 0],
@@ -219,7 +223,7 @@ mod tests {
             ..Default::default()
         };
         let mut init_memory = SparseMemoryImage::new();
-        for (i, byte) in u64::from(rs1).to_le_bytes().into_iter().enumerate() {
+        for (i, byte) in rs1.to_le_bytes().into_iter().enumerate() {
             init_memory.insert((REGISTER_AS, 8 + i as u32), byte);
         }
         VmExe::new(Program::new_without_debug_infos(
@@ -229,13 +233,13 @@ mod tests {
         .with_init_memory(init_memory)
     }
 
-    fn assert_invalid_target(error: ExecutionError) {
+    fn assert_jalr_failure(error: ExecutionError, expected_msg: &'static str) {
         assert!(matches!(
             error,
             ExecutionError::Fail {
                 pc: 0,
-                msg: "JALR target is outside implemented PC address space or misaligned"
-            }
+                msg
+            } if msg == expected_msg
         ));
     }
 
@@ -244,14 +248,27 @@ mod tests {
         let config = Rv64IConfig::default();
         let inventory =
             <Rv64IConfig as VmExecutionConfig<BabyBear>>::create_executors(&config).unwrap();
-        for exe in [jalr_exe(0xffff_fff8, 16), jalr_exe(0, 2)] {
+        for (exe, expected_msg) in [
+            (
+                jalr_exe(0xffff_fff8, 16),
+                "JALR target is outside implemented PC address space or misaligned",
+            ),
+            (
+                jalr_exe(0, 2),
+                "JALR target is outside implemented PC address space or misaligned",
+            ),
+            (
+                jalr_exe(0x1_0000_0000, 0),
+                "JALR source register has nonzero upper 32 bits",
+            ),
+        ] {
             let interpreter =
                 InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe).unwrap();
             let error = interpreter
                 .execute(Streams::default())
                 .err()
-                .expect("invalid JALR target must fail");
-            assert_invalid_target(error);
+                .expect("invalid JALR execution must fail");
+            assert_jalr_failure(error, expected_msg);
         }
     }
 
@@ -261,7 +278,20 @@ mod tests {
         let inventory =
             <Rv64IConfig as VmExecutionConfig<BabyBear>>::create_executors(&config).unwrap();
         let executor_idx_to_air_idx = vec![0; inventory.executors.len()];
-        for exe in [jalr_exe(0xffff_fff8, 16), jalr_exe(0, 2)] {
+        for (exe, expected_msg) in [
+            (
+                jalr_exe(0xffff_fff8, 16),
+                "JALR target is outside implemented PC address space or misaligned",
+            ),
+            (
+                jalr_exe(0, 2),
+                "JALR target is outside implemented PC address space or misaligned",
+            ),
+            (
+                jalr_exe(0x1_0000_0000, 0),
+                "JALR source register has nonzero upper 32 bits",
+            ),
+        ] {
             let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
                 &inventory,
                 &exe,
@@ -271,8 +301,25 @@ mod tests {
             let error = interpreter
                 .execute_metered_cost(Streams::default(), MeteredCostCtx::new(vec![0]))
                 .err()
-                .expect("invalid JALR target must fail");
-            assert_invalid_target(error);
+                .expect("invalid JALR execution must fail");
+            assert_jalr_failure(error, expected_msg);
         }
+    }
+
+    #[test]
+    fn jalr_invalid_source_preflight_execution() {
+        let config = Rv64IConfig::default();
+        let inventory =
+            <Rv64IConfig as VmExecutionConfig<BabyBear>>::create_executors(&config).unwrap();
+        let exe = jalr_exe(0x1_0000_0000, 0);
+        let interpreter =
+            InterpretedInstance::<PreflightCtx>::new::<BabyBear, _>(&inventory, &exe).unwrap();
+        let state = interpreter.create_initial_vm_state(Streams::default());
+        let error = interpreter
+            .execute_preflight_from_state::<BabyBear>(state, Some(1))
+            .err()
+            .expect("invalid JALR source must fail");
+
+        assert_jalr_failure(error, "JALR source register has nonzero upper 32 bits");
     }
 }
