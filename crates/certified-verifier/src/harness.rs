@@ -66,15 +66,22 @@ pub struct SwirlVerifyOutcome {
 /// ```text
 /// u32 LE vk_len | vk_bytes | u32 LE proof_len | proof_bytes | u32 LE pv_len | pv_bytes
 /// ```
-fn frame_three_blobs(vk_bytes: &[u8], proof_bytes: &[u8], pv_bytes: &[u8]) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(12 + vk_bytes.len() + proof_bytes.len() + pv_bytes.len());
+fn frame_three_blobs(vk_bytes: &[u8], proof_bytes: &[u8], pv_bytes: &[u8]) -> io::Result<Vec<u8>> {
+    let total_bytes = 12 + vk_bytes.len() + proof_bytes.len() + pv_bytes.len();
+    if total_bytes >= u32::MAX as usize {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "framed input exceeds u32 range",
+        ));
+    }
+    let mut buf = Vec::with_capacity(total_bytes);
     buf.extend_from_slice(&(vk_bytes.len() as u32).to_le_bytes());
     buf.extend_from_slice(vk_bytes);
     buf.extend_from_slice(&(proof_bytes.len() as u32).to_le_bytes());
     buf.extend_from_slice(proof_bytes);
     buf.extend_from_slice(&(pv_bytes.len() as u32).to_le_bytes());
     buf.extend_from_slice(pv_bytes);
-    buf
+    Ok(buf)
 }
 
 /// Spawn `swirl_verify`, pipe `(vk_bytes, proof_bytes, pv_bytes)` to its
@@ -86,7 +93,7 @@ pub fn run_swirl_verify(
     pv_bytes: &[u8],
 ) -> io::Result<SwirlVerifyOutcome> {
     let bin = swirl_verify_bin();
-    let framed = frame_three_blobs(vk_bytes, proof_bytes, pv_bytes);
+    let framed = frame_three_blobs(vk_bytes, proof_bytes, pv_bytes)?;
     let mut child = Command::new(bin)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
