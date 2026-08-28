@@ -12,7 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
+use openvm_instructions::{program::pc_to_idx, riscv::REGISTER_AS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -102,9 +102,9 @@ impl RdWriteAdapterAir {
             )
             .eval(builder, write_count);
 
-        let to_pc = ctx
-            .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP));
+        let to_pc_idx = ctx
+            .to_pc_idx
+            .unwrap_or(local_cols.from_state.pc + AB::F::ONE);
         // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
             .execute(
@@ -119,7 +119,7 @@ impl RdWriteAdapterAir {
                 ],
                 local_cols.from_state,
                 ExecutionState {
-                    pc: to_pc,
+                    pc: to_pc_idx,
                     timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )
@@ -141,7 +141,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for RdWriteAdapterAir {
         self.conditional_eval(builder, local_cols, ctx, None);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &RdWriteAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
@@ -172,7 +172,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for CondRdWriteAdapterAir {
         );
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &CondRdWriteAdapterCols<_> = local.borrow();
         cols.inner.from_state.pc
     }
@@ -268,7 +268,7 @@ fn replay_rd_write<F: PrimeField32>(
     }
     replay.finish(next_pc)?;
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
     Ok((output, next_pc))
 }

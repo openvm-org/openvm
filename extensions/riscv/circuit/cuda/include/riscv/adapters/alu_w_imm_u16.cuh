@@ -82,7 +82,7 @@ struct BaseAluWImmU16Adapter {
         COL_WRITE_VALUE(
             row, BaseAluWImmU16AdapterCols, from_state.timestamp, from_timestamp
         );
-        COL_WRITE_VALUE(row, BaseAluWImmU16AdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, BaseAluWImmU16AdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
     }
 
     __device__ void fill_trace_row(RowSlice row, BaseAluWImmU16AdapterRecord record) {

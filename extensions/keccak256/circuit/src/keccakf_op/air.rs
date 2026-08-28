@@ -128,7 +128,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
 
         // ======== Execution bus =========
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_pc_idx(
                 AB::Expr::from_usize(KeccakfOpcode::KECCAKF as usize + self.offset),
                 [
                     rd_ptr.into(),
@@ -137,7 +137,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                     AB::Expr::from_u32(REGISTER_AS),
                     AB::Expr::from_u32(MEMORY_AS),
                 ],
-                ExecutionState::new(local.pc, local.timestamp),
+                ExecutionState::new(local.pc_idx, local.timestamp),
                 AB::F::from_usize(timestamp_delta),
             )
             .eval(builder, is_valid);

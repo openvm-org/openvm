@@ -552,10 +552,13 @@ __device__ bool int256_u8_write_matches(
     return true;
 }
 
-__device__ __forceinline__ uint32_t int256_branch_target(uint32_t pc, uint32_t immediate) {
-    uint64_t sum = uint64_t(pc) + immediate;
-    if (sum >= INT256_REPLAY_FIELD_ORDER) sum -= INT256_REPLAY_FIELD_ORDER;
-    return static_cast<uint32_t>(sum);
+// Taken targets must stay inside the implemented PC address space on an aligned slot
+// (mirrors the CPU trace filler's `checked_branch_target`).
+__device__ __forceinline__ bool int256_valid_branch_target(
+    uint32_t pc, uint32_t immediate, uint32_t to_pc
+) {
+    return replay_branch_target_in_bounds(pc, immediate) &&
+           to_pc == replay_taken_branch_pc(pc, immediate);
 }
 
 __global__ void add_sub256_replay_tracegen(
@@ -1175,7 +1178,7 @@ __global__ void branch_equal256_replay_tracegen(
     for (size_t i = 0; i < INT256_NUM_U16_LIMBS; i++) equal &= a[i] == b[i];
     bool take = replay.local_opcode == 0 ? equal : !equal;
     bool valid_pc =
-        take ? replay.to_pc == int256_branch_target(replay.from_pc, replay.immediate)
+        take ? int256_valid_branch_target(replay.from_pc, replay.immediate, replay.to_pc)
              : int256_sequential_pc(replay.from_pc, replay.to_pc);
     if (!valid_pc) {
         preflight_set_error(inputs.error, INT256_REPLAY_BAD_BRANCH);
@@ -1243,7 +1246,7 @@ __global__ void branch_less_than256_replay_tracegen(
     int256_flatten_u16_reads(replay, a, b);
     bool take = int256_branch_less_than(a, b, replay.local_opcode);
     bool valid_pc =
-        take ? replay.to_pc == int256_branch_target(replay.from_pc, replay.immediate)
+        take ? int256_valid_branch_target(replay.from_pc, replay.immediate, replay.to_pc)
              : int256_sequential_pc(replay.from_pc, replay.to_pc);
     if (!valid_pc) {
         preflight_set_error(inputs.error, INT256_REPLAY_BAD_BRANCH);

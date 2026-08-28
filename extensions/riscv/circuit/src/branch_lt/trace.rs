@@ -10,7 +10,9 @@ use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{run_cmp, BranchLessThanChip, BranchLessThanCoreCols};
-use crate::adapters::{BranchAdapterCols, BranchAdapterFiller, U16_BITS};
+use crate::adapters::{
+    checked_branch_target, taken_branch_pc, BranchAdapterCols, BranchAdapterFiller, U16_BITS,
+};
 
 /// Generates the RV64 less-than-branch trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
@@ -47,12 +49,16 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 |from_pc, [rs1, rs2], immediate| {
                     comparison = run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(local_opcode_u8, &rs1, &rs2);
                     if comparison.0 {
-                        from_pc.wrapping_add_signed(immediate)
+                        taken_branch_pc(from_pc, immediate)
                     } else {
                         from_pc.wrapping_add(DEFAULT_PC_STEP)
                     }
                 },
             )?;
+            if comparison.0 {
+                let instruction = postflight.instruction(step);
+                checked_branch_target(postflight.pc(step), instruction.c.as_i32())?;
+            }
             let [a, b] = inputs;
             let core_row: &mut BranchLessThanCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
                 core_row.borrow_mut();

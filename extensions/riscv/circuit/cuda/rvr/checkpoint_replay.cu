@@ -528,9 +528,10 @@ __device__ __forceinline__ bool validate_reveal(
 }
 
 __device__ __forceinline__ uint32_t branch_target(uint32_t pc, uint32_t encoded_offset) {
-    uint64_t sum = uint64_t(pc) + encoded_offset;
-    if (sum >= BABY_BEAR_ORDER) sum -= BABY_BEAR_ORDER;
-    return uint32_t(sum);
+    // `encoded_offset` is the canonical field encoding of a signed byte offset; byte pcs span
+    // the full 32-bit range, so the target is computed with integer arithmetic (wrapping like
+    // the host interpreter), not field arithmetic.
+    return replay_taken_branch_pc(pc, encoded_offset);
 }
 
 __device__ __forceinline__ bool execute_branch_condition(
@@ -1380,7 +1381,7 @@ __device__ bool replay_chunk(
                     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
                     return false;
                 }
-                result = state.pc + 4;
+                result = uint64_t(state.pc) + 4;
                 if (needs_write) {
                     if (memory != nullptr) {
                         if (uint64_t(memory_start) + emitted + 1 > memory_capacity) {
@@ -1438,11 +1439,12 @@ __device__ bool replay_chunk(
                              : int64_t(instruction->words[3]);
                 uint64_t target =
                     (state.regs[rs1] + uint64_t(signed_offset)) & ~uint64_t(1);
-                if (target > UINT32_MAX) {
+                if (target > UINT32_MAX ||
+                    target % ::program::DEFAULT_PC_STEP != 0) {
                     preflight_set_error(error, ERROR_BAD_INSTRUCTION);
                     return false;
                 }
-                result = state.pc + 4;
+                result = uint64_t(state.pc) + ::program::DEFAULT_PC_STEP;
                 if (memory != nullptr) {
                     uint32_t event_count = 1 + needs_write;
                     if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {

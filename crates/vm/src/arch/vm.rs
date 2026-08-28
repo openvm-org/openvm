@@ -806,8 +806,8 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
         actual: [u32; VM_DIGEST_WIDTH],
     },
 
-    #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
-    InitialPcMismatch { initial: u32, prev_final: u32 },
+    #[error("initial pc index mismatch (initial: {initial}, prev_final: {prev_final})")]
+    InitialPcIdxMismatch { initial: u32, prev_final: u32 },
 
     #[error("initial memory root mismatch")]
     InitialMemoryRootMismatch,
@@ -2076,8 +2076,8 @@ where
         return Err(VmVerificationError::ProofNotFound);
     }
     let mut prev_final_memory_root = None;
-    let mut prev_final_pc = None;
-    let mut start_pc = None;
+    let mut prev_final_pc_idx = None;
+    let mut start_pc_idx = None;
     let mut initial_memory_root = None;
     let mut program_commit = None;
 
@@ -2116,17 +2116,17 @@ where
                 let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
                 if i != 0 {
-                    // Check initial pc matches the previous final pc.
-                    if pvs.initial_pc != prev_final_pc.unwrap() {
-                        return Err(VmVerificationError::InitialPcMismatch {
-                            initial: pvs.initial_pc.as_canonical_u32(),
-                            prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                    // Check the initial PC index against the previous final PC index.
+                    if pvs.initial_pc_idx != prev_final_pc_idx.unwrap() {
+                        return Err(VmVerificationError::InitialPcIdxMismatch {
+                            initial: pvs.initial_pc_idx.as_canonical_u32(),
+                            prev_final: prev_final_pc_idx.unwrap().as_canonical_u32(),
                         });
                     }
                 } else {
-                    start_pc = Some(pvs.initial_pc);
+                    start_pc_idx = Some(pvs.initial_pc_idx);
                 }
-                prev_final_pc = Some(pvs.final_pc);
+                prev_final_pc_idx = Some(pvs.final_pc_idx);
 
                 let expected_is_terminate = i == proofs.len() - 1;
                 if pvs.is_terminate != PrimeCharacteristicRing::from_bool(expected_is_terminate) {
@@ -2204,7 +2204,7 @@ where
         &vm_poseidon2_hasher(),
         &program_commit.unwrap().into(),
         initial_memory_root.as_ref().unwrap(),
-        start_pc.unwrap(),
+        start_pc_idx.unwrap(),
     );
     Ok(VerifiedExecutionPayload {
         exe_commit,

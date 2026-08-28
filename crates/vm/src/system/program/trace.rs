@@ -6,7 +6,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     instruction::InstructionOperand,
-    program::{Program, DEFAULT_PC_STEP},
+    program::{pc_to_idx, Program},
     LocalOpcode, SystemOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
@@ -100,14 +100,14 @@ pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
         &hasher,
         program_commitment,
         &init_memory_commit,
-        F::from_u32(exe.pc_start),
+        F::from_u32(pc_to_idx(exe.pc_start)),
     )
 }
 
 /// Computes a Merklelized hash of:
 /// - Program code commitment (commitment of the cached trace)
 /// - Merkle root of the initial memory
-/// - Starting program counter (`pc_start`)
+/// - Starting program counter as a pc index (`pc_to_idx(pc_start)`)
 ///
 /// The Merklelization uses [Poseidon2Hasher] as a cryptographic hash function (for the leaves)
 /// and a cryptographic compression function (for internal nodes).
@@ -115,28 +115,30 @@ pub fn compute_exe_commit<F: PrimeField32>(
     hasher: &Poseidon2Hasher<F>,
     program_commit: &[F; VM_DIGEST_WIDTH],
     init_memory_root: &[F; VM_DIGEST_WIDTH],
-    pc_start: F,
+    pc_start_idx: F,
 ) -> [F; VM_DIGEST_WIDTH] {
-    let mut padded_pc_start = [F::ZERO; VM_DIGEST_WIDTH];
-    padded_pc_start[0] = pc_start;
+    let mut padded_pc_start_idx = [F::ZERO; VM_DIGEST_WIDTH];
+    padded_pc_start_idx[0] = pc_start_idx;
     let program_hash = hasher.hash(program_commit);
     let memory_hash = hasher.hash(init_memory_root);
-    let pc_hash = hasher.hash(&padded_pc_start);
-    hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
+    let pc_idx_hash = hasher.hash(&padded_pc_start_idx);
+    hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_idx_hash)
 }
 
 pub(crate) fn generate_cached_trace<F: PrimeField32>(program: &Program) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
+    // The pc_idx column contains PC indices (see [pc_to_idx]): byte PCs span 32 bits and do not fit
+    // in a field element.
     let mut instructions = program
         .enumerate_by_pc()
         .into_iter()
-        .map(|(pc, instruction, _)| (pc, instruction))
+        .map(|(pc, instruction, _)| (pc_to_idx(pc), instruction))
         .collect_vec();
 
     let padding = padding_instruction();
     while !instructions.len().is_power_of_two() {
         instructions.push((
-            program.pc_base + instructions.len() as u32 * DEFAULT_PC_STEP,
+            pc_to_idx(program.pc_base) + instructions.len() as u32,
             padding.clone(),
         ));
     }
@@ -144,10 +146,10 @@ pub(crate) fn generate_cached_trace<F: PrimeField32>(program: &Program) -> RowMa
     let mut rows = F::zero_vec(instructions.len() * width);
     rows.par_chunks_mut(width)
         .zip(instructions)
-        .for_each(|(row, (pc, instruction))| {
+        .for_each(|(row, (pc_idx, instruction))| {
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
-                pc: F::from_u32(pc),
+                pc_idx: F::from_u32(pc_idx),
                 opcode: F::from_usize(instruction.opcode.as_usize()),
                 a: instruction_operand_to_field(instruction.a),
                 b: instruction_operand_to_field(instruction.b),

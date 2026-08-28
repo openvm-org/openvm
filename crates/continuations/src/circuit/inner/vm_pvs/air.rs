@@ -149,7 +149,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
         // when local and next are valid, constrain increasing proof_idx and adjacency
         let mut when_both_valid = builder.when(and(local.is_valid, not(local.is_last)));
-        when_both_valid.assert_eq(local.child_pvs.final_pc, next.child_pvs.initial_pc);
+        when_both_valid.assert_eq(local.child_pvs.final_pc_idx, next.child_pvs.initial_pc_idx);
         assert_array_eq(
             &mut when_both_valid,
             local.child_pvs.final_root,
@@ -200,7 +200,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             PublicValuesBusMessage {
                 air_idx: cond_connector_air_id.clone(),
                 pv_idx: internal_pp(),
-                value: local.child_pvs.initial_pc.into(),
+                value: local.child_pvs.initial_pc_idx.into(),
             },
             local.is_valid,
         );
@@ -211,7 +211,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             PublicValuesBusMessage {
                 air_idx: cond_connector_air_id.clone(),
                 pv_idx: is_leaf.clone() + internal_pp(),
-                value: local.child_pvs.final_pc.into(),
+                value: local.child_pvs.final_pc_idx.into(),
             },
             local.is_valid,
         );
@@ -305,8 +305,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          */
         let &VmPvs::<_> {
             program_commit,
-            initial_pc,
-            final_pc,
+            initial_pc_idx,
+            final_pc_idx,
             exit_code,
             is_terminate,
             initial_root,
@@ -316,7 +316,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         // constrain first proof pvs
         builder
             .when_first_row()
-            .assert_eq(local.child_pvs.initial_pc, initial_pc);
+            .assert_eq(local.child_pvs.initial_pc_idx, initial_pc_idx);
         assert_array_eq(
             &mut builder.when_first_row(),
             local.child_pvs.initial_root,
@@ -326,7 +326,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         // constrain last proof pvs
         builder
             .when(local.is_last)
-            .assert_eq(local.child_pvs.final_pc, final_pc);
+            .assert_eq(local.child_pvs.final_pc_idx, final_pc_idx);
         builder
             .when(local.is_last)
             .assert_eq(local.child_pvs.exit_code, exit_code);

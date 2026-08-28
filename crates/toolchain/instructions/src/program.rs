@@ -9,11 +9,36 @@ use serde::{de::Deserializer, Deserialize, Serialize, Serializer};
 
 use crate::instruction::{DebugInfo, Instruction};
 
-pub const PC_BITS: usize = 30;
+/// Number of bits of a pc *index* (`pc / DEFAULT_PC_STEP`), the representation of the program
+/// counter used in circuits: trace columns, execution/program bus messages, and public values.
+/// Byte program counters span `PC_IDX_BITS + PC_STEP_BITS = 32` bits, which does not fit in a
+/// 31-bit field element; since instructions are `DEFAULT_PC_STEP`-aligned, circuits track pc
+/// indices.
+pub const PC_IDX_BITS: usize = 30;
 /// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
 /// from the fact that each standard RISC-V instruction is 32-bits = 4 bytes.
 pub const DEFAULT_PC_STEP: u32 = 4;
-pub const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
+/// log2 of [DEFAULT_PC_STEP].
+pub const PC_STEP_BITS: usize = DEFAULT_PC_STEP.trailing_zeros() as usize;
+/// Maximum allowed byte program counter: the last `DEFAULT_PC_STEP`-aligned address in the
+/// 32-bit byte address space.
+pub const MAX_ALLOWED_PC: u32 = u32::MAX - (DEFAULT_PC_STEP - 1);
+
+/// Converts a byte program counter (a multiple of [DEFAULT_PC_STEP]) into the pc index used by
+/// circuits. The index fits in [PC_IDX_BITS] bits, so it fits in a field element even though byte
+/// program counters span the full 32-bit range.
+#[inline(always)]
+pub const fn pc_to_idx(pc: u32) -> u32 {
+    debug_assert!(pc.is_multiple_of(DEFAULT_PC_STEP));
+    pc >> PC_STEP_BITS
+}
+
+/// Converts a pc index (see [pc_to_idx]) back into a byte program counter.
+#[inline(always)]
+pub const fn idx_to_pc(idx: u32) -> u32 {
+    debug_assert!(idx < (1 << PC_IDX_BITS));
+    idx << PC_STEP_BITS
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Program {
@@ -201,8 +226,8 @@ impl ProgramDebugInfo {
     /// If `pc` is out of bounds.
     pub fn get(&self, pc: u32) -> &Option<DebugInfo> {
         let pc_base = self.pc_base;
-        let pc_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
-        &self.inner[pc_idx]
+        let slot_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
+        &self.inner[slot_idx]
     }
 }
 

@@ -238,10 +238,13 @@ pub trait TestBuilder<F: PrimeField32> {
     /// Bit width for RISC-V byte pointers used by extension tests and adapter configs.
     fn address_bits(&self) -> usize;
 
-    fn last_to_pc(&self) -> F;
-    fn last_from_pc(&self) -> F;
+    /// Byte pc of the last execution's final state (byte pcs do not fit in a field element).
+    fn last_to_pc(&self) -> u32;
+    /// Byte pc of the last execution's initial state.
+    fn last_from_pc(&self) -> u32;
 
-    fn execution_final_state(&self) -> ExecutionState<F>;
+    /// Byte-pc state of the last execution's final state.
+    fn execution_final_state(&self) -> ExecutionState<u32>;
     fn streams_mut(&mut self) -> &mut Streams;
 
     fn get_default_register(&mut self, increment: usize) -> usize;

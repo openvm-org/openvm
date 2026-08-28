@@ -137,6 +137,11 @@ pub(super) fn resolve_program_slot(
     program_index: usize,
 ) -> Result<usize, PostflightError> {
     let pc = history.program[program_index].pc;
+    if !pc.is_multiple_of(DEFAULT_PC_STEP) {
+        return Err(PostflightError::new(format!(
+            "program log PC {pc:#x} is not instruction-aligned"
+        )));
+    }
     let delta = pc.checked_sub(program.pc_base).ok_or_else(|| {
         PostflightError::new(format!("program log PC {pc:#x} precedes the program base"))
     })?;

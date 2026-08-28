@@ -21,7 +21,7 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP, PC_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     riscv::BYTE_BITS,
     LocalOpcode,
 };
@@ -39,7 +39,7 @@ use openvm_riscv_circuit::{
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
@@ -339,7 +339,10 @@ fn set_and_execute_rand<E: Executor<F> + Clone>(
     let b = generate_long_number::<INT256_NUM_U8_LIMBS, BYTE_BITS>(rng);
     let c = generate_long_number::<INT256_NUM_U8_LIMBS, BYTE_BITS>(rng);
     if branch {
-        let imm = rng.random_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
+        // Branch offsets are DEFAULT_PC_STEP-aligned byte offsets.
+        let imm = rng.random_range(
+            (-ABS_MAX_BRANCH / DEFAULT_PC_STEP as i32)..(ABS_MAX_BRANCH / DEFAULT_PC_STEP as i32),
+        ) * DEFAULT_PC_STEP as i32;
         let instruction = heap_branch_default(
             tester,
             vec![b.map(F::from_u32)],
@@ -348,17 +351,20 @@ fn set_and_execute_rand<E: Executor<F> + Clone>(
             opcode,
         );
 
+        // An aligned byte pc over the full 32-bit range, keeping the taken target in bounds.
+        let lo = (-imm).max(0) as u32 / DEFAULT_PC_STEP;
+        let hi = (MAX_ALLOWED_PC - DEFAULT_PC_STEP - imm.max(0) as u32) / DEFAULT_PC_STEP;
         tester.execute_with_pc(
             executor,
             preflight,
             &instruction,
-            rng.random_range((ABS_MAX_BRANCH as u32)..(1 << (PC_BITS - 1))),
+            rng.random_range(lo..=hi) * DEFAULT_PC_STEP,
         );
 
         let cmp_result = branch_fn.unwrap()(opcode, &b, &c);
-        let from_pc = tester.last_from_pc().as_canonical_u32() as i32;
-        let to_pc = tester.last_to_pc().as_canonical_u32() as i32;
-        assert_eq!(to_pc, from_pc + if cmp_result { imm } else { 4 });
+        let from_pc = tester.last_from_pc() as i64;
+        let to_pc = tester.last_to_pc() as i64;
+        assert_eq!(to_pc, from_pc + if cmp_result { imm as i64 } else { 4 });
     } else {
         let instruction = write_heap_default(
             tester,
