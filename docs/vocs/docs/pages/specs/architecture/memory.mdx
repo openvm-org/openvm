@@ -13,7 +13,7 @@
 
 ---
 
-Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `pointer`), data, and timestamp. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{\text{timestamp\_max\_bits}}$ (in the current implementation, `timestamp_max_bits <= 29`). The memory boundary chip represents the initial memory state on the memory bus at timestamp $0$.
+Chips in the VM need to perform memory read and write operations. The goal of memory checking is to ensure memory consistency across all chips. Every memory operation consists of an operation type (Read or Write), address (`address_space` and `block_index`), data, and timestamp. Each block contains `BLOCK_FE_WIDTH` cells, and `block_index` is the aligned cell pointer divided by `BLOCK_FE_WIDTH`. All memory operations across all chips should happen at distinct timestamps between $1$ and $2^{\text{timestamp\_max\_bits}}$ (in the current implementation, `timestamp_max_bits <= 29`). The memory boundary chip represents the initial memory state on the memory bus at timestamp $0$.
 
 There is no single global memory trace. Instead, chips that access memory post interactions on the
 memory bus, and the boundary chips account for the initial and final memory states. The soundness
@@ -86,7 +86,9 @@ The memory boundary chip performs, for every touched memory chunk, a send intera
 The following invariants **must** be maintained by the memory architecture:
 1. In the MEMORY_BUS, the `timestamp` is always in range `[0, 2^timestamp_max_bits)` where `timestamp_max_bits <= F::bits() - 2` is a configuration constant.
 2. In the MEMORY_BUS, the `address_space` is always in range `[1, 1 + 2^addr_space_height)` where `addr_space_height` is a configuration constant satisfying `addr_space_height < F::bits() - 2`. (Our current implementation only supports `addr_space_height` less than the max bits supported by the VariableRangeCheckerBus).
-3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
+3. In the MEMORY_BUS, `block_index` lies in `[0, 2^(pointer_max_bits - log2(BLOCK_FE_WIDTH)))`. The current implementation supports `16 <= pointer_max_bits <= 32`; the default is 31.
+
+`pointer_max_bits` counts cells, not guest bytes. The default RV64 user-memory address space contains `2^31` u16 cells, covering `2^32` guest bytes.
 
 Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during a single logical instruction execution is bounded by `num_interactions * num_rows_per_execution`, where `num_interactions` is the number of interactions contributed by one trace row.
 

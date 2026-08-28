@@ -9,6 +9,12 @@ The RV64IM chips is composed of two main components: an adapter chip and a core 
 - The adapter chip adapts the core chip's I/O to the VM's expected format and manages interactions with the VM.
 - The core chip is responsible for implementing the logic of the RISC-V instructions.
 
+Runtime execution and preflight use 32-bit program counters. Circuit traces use
+`pc_idx = pc / DEFAULT_PC_STEP`; the statements below use `from_pc_idx` and `to_pc_idx`.
+
+RV64 memory uses 32-bit byte addresses. Load/store adapters use one or two aligned 8-byte blocks and
+enforce the configured pointer bound.
+
 ## Circuit statements
 
 This section outlines the specific statements that each circuit is designed to prove.
@@ -24,14 +30,14 @@ For further details, including the underlying constraints and assumptions, pleas
 Given
 
 - `rs1`, `rs2`, and `rd` are register addresses
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
 - A memory write to register `rd` is performed with the result of the operation
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 2. ALU immediate adapters
 
@@ -42,14 +48,14 @@ Given
 
 - `rs1` and `rd` are register addresses
 - `imm` is the immediate operand supplied by the core
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory write to register `rd` is performed with the result of the operation
 - The immediate supplied by the core is bound to the instruction on the execution bus
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 3. ALU W adapters
 
@@ -61,7 +67,7 @@ Given
 - `rs1` and `rd` are register addresses
 - The register adapter also receives the `rs2` register address
 - The immediate adapter receives the immediate operand from the core
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
@@ -69,35 +75,35 @@ This circuit proves the following:
 - The register adapter reads `rs2` and preserves its upper 32 bits for the read interaction
 - The immediate adapter binds the immediate supplied by the core to the instruction on the execution bus
 - The low 32-bit result is sign-extended to a full 64-bit u16-cell register write by constraining the result sign bit from the most significant low-word limb
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 4. [Branch adapter](./adapters/branch.rs)
 
 Given
 
 - `rs1`, `rs2`, and `rd` are register addresses
-- `from_pc` is the current program address
-- `to_pc` is the destination program address
+- `from_pc_idx` is the current circuit PC index
+- `to_pc_idx` is the destination circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `to_pc`.
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `to_pc_idx`.
 
 #### 5. [JALR adapter](./adapters/jalr.rs)
 
 Given
 
 - `rd`, `rs1` are register addresses
-- `from_pc` is the current program address
-- `to_pc` is the destination program address
+- `from_pc_idx` is the current circuit PC index
+- `to_pc_idx` is the destination circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory write to register `rd` is performed if `rd` is not `x0`
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `to_pc`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `to_pc_idx`
 
 #### 6. [Load adapter](./adapters/load.rs)
 
@@ -105,14 +111,15 @@ Given
 
 - `rd`, `rs1` are register addresses
 - `imm` is an immediate value
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
-- A memory read from the RV64 memory address space is performed at address `val(rs1) + imm`
+- The full access at `val(rs1) + imm` fits within the configured pointer bound without wrapping
+- One or two aligned memory blocks are read from the RV64 memory address space
 - A memory write to register `rd` is performed if `rd` is not `x0`
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 7. [Store adapter](./adapters/store.rs)
 
@@ -120,14 +127,15 @@ Given
 
 - `rs1`, `rs2` are register addresses
 - `imm` is an immediate value
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
-- A memory write to the RV64 memory address space (`2`) is performed at address `val(rs1) + imm`
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- The full access at `val(rs1) + imm` fits within the configured pointer bound without wrapping
+- One or two aligned memory blocks are written in the RV64 memory address space (`2`)
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 8. Reveal
 
@@ -136,41 +144,41 @@ Given
 - `rs1` is the public-values base-address register
 - `rs2` is the source register
 - `imm` is an immediate value
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
 - Memory reads from registers `rs1` and `rs2` are performed
 - Eight bytes from `rs2` are written at `val(rs1) + imm` in the public-values address space (`3`)
 - The destination is constrained to an eight-byte-aligned, in-bounds address
-- The dedicated reveal instruction is correctly fetched at `from_pc`, and the program counter is set to `from_pc + 4`
+- The dedicated reveal instruction is correctly fetched at `from_pc_idx`, and the PC index is set to `from_pc_idx + 1`
 
 #### 9. [Multiplication adapter](./adapters/mul.rs)
 
 Given
 
 - `rd`, `rs1`, `rs2` are register addresses
-- `from_pc` is the current program address
+- `from_pc_idx` is the current circuit PC index
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
 - A memory write to register `rd` is performed with the result of the multiplication
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
 #### 10. [Rdwrite adapter](./adapters/rdwrite.rs)
 
 Given
 
 - `rd` is a register address
-- `from_pc` is the current program address
-- `to_pc` is the destination program address
+- `from_pc_idx` is the current circuit PC index
+- `to_pc_idx` is the destination circuit PC index
 
 This circuit proves the following:
 
 - A memory write to register `rd` is performed if `rd` is not `x0`
-- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `to_pc`
+- The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `to_pc_idx`
 
 ### Core
 
@@ -209,19 +217,22 @@ This circuit proves that:
 - `a[i] == b[i] | c[i]` for `or`, and the equivalent operation with the sign-extended immediate for `ori`
 - `a[i] == b[i] & c[i]` for `and`, and the equivalent operation with the sign-extended immediate for `andi`
 
+Branch immediates are byte offsets. A taken branch target must be aligned and in range; an untaken
+branch ignores its encoded target.
+
 #### 3. [Branch Eq](./branch_eq/core.rs)
 
 Given:
 
 - `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `opcode_beq_flag` and `opcode_bne_flag` indicate if the instruction is `beq` or `bne`
-- `imm` is the immediate value
-- `to_pc` is the destination program address
+- `imm` is the signed byte-offset immediate
+- `to_pc_idx` is the destination circuit PC index
 
 This circuit proves that:
 
-- If `opcode_beq_flag` is true and `a` is equal to `b`, then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
-- If `opcode_bne_flag` is true and `a` is not equal to `b`, then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+- If `opcode_beq_flag` is true and `a` is equal to `b`, then `to_pc_idx == pc_idx + imm / 4`, otherwise `to_pc_idx == pc_idx + 1`
+- If `opcode_bne_flag` is true and `a` is not equal to `b`, then `to_pc_idx == pc_idx + imm / 4`, otherwise `to_pc_idx == pc_idx + 1`
 
 #### 4. [Branch Lt](./branch_lt/core.rs)
 
@@ -229,15 +240,15 @@ Given:
 
 - `a` and `b` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - Flags indicating if the instruction is one of `blt`, `bltu`, `bge`, `bgeu`
-- `imm` is the immediate value
-- `to_pc` is the destination program address
+- `imm` is the signed byte-offset immediate
+- `to_pc_idx` is the destination circuit PC index
 
 This circuit proves that:
 
-- If the instruction is `blt` and `compose(a) < compose(b)` (signed comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
-- If the instruction is `bltu` and `compose(a) < compose(b)` (unsigned comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
-- If the instruction is `bge` and `compose(a) >= compose(b)` (signed comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
-- If the instruction is `bgeu` and `compose(a) >= compose(b)` (unsigned comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
+- If the instruction is `blt` and `compose(a) < compose(b)` (signed comparison), then `to_pc_idx == pc_idx + imm / 4`, otherwise `to_pc_idx == pc_idx + 1`
+- If the instruction is `bltu` and `compose(a) < compose(b)` (unsigned comparison), then `to_pc_idx == pc_idx + imm / 4`, otherwise `to_pc_idx == pc_idx + 1`
+- If the instruction is `bge` and `compose(a) >= compose(b)` (signed comparison), then `to_pc_idx == pc_idx + imm / 4`, otherwise `to_pc_idx == pc_idx + 1`
+- If the instruction is `bgeu` and `compose(a) >= compose(b)` (unsigned comparison), then `to_pc_idx == pc_idx + imm / 4`, otherwise `to_pc_idx == pc_idx + 1`
 
 #### 5. [Divrem](./divrem/core.rs)
 
@@ -264,21 +275,19 @@ Given:
 
 - `rd` is the decomposition of the result
 - `imm` is the immediate value
-- `to_pc` is the destination program address
+- `to_pc_idx` is the destination circuit PC index
 - `opcode` indicates the operation to be performed
 
 This circuit proves that:
 
-- Each limb of `rd` is in the range `[0, 2^BYTE_BITS)`
-- If `opcode` is `jal`, then (with `pc` and `to_pc` as pc *indices*, i.e. byte pcs divided by 4,
-  and `imm` a 4-byte-aligned byte offset)
-  - `to_pc == pc + imm / 4`
-  - `compose(rd) == 4 * (pc + 1)`, the byte return address; the low u16 limb of `rd` is a
-    multiple of 4 whose quotient is in the range `[0, 2^PC_IDX_LOW_BITS)`, which pins the
-    decomposition and keeps the return address inside the 32-bit PC address space
-  - The upper register cells of `rd` are zero (return addresses are zero-extended)
+- Each low-32-bit limb of `rd` is in the range `[0, 2^U16_BITS)`
+- If `opcode` is `jal`, with `imm` a 4-byte-aligned byte offset:
+  - `to_pc_idx == pc_idx + imm / 4`
+  - `compose(rd) == 4 * (pc_idx + 1)`, including the possible bit-32 carry. At
+    `pc_idx == 2^PC_IDX_BITS - 1`, the link value is `2^32`.
+  - The uppermost u16 limb of `rd` is zero.
 - If `opcode` is `lui`, then
-  - `to_pc == pc + 1`
+  - `to_pc_idx == pc_idx + 1`
   - `compose(rd) == imm * 2^12`, sign-extended into the upper register cells
 
 #### 7. [JALR](./jalr/core.rs)
@@ -288,21 +297,21 @@ Given:
 - `rs1` is the decomposition of the operand, with its limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `rd` is the decomposition of the result
 - `imm` is the immediate value
-- `to_pc_least_sig_bit` is the least significant bit of `compose(rs1) + imm`
-- `to_pc_limbs` is the decomposition of the destination pc *index* (the byte target divided
-  by 4), where `to_pc_limbs[0]` is its low `PC_IDX_LOW_BITS` bits and `to_pc_limbs[1]` its
-  high u16 limb
+- `raw_target_bit0` is the least significant bit of `compose(rs1) + imm`
+- `to_pc_idx_limbs` is the decomposition of the destination PC index, where
+  `to_pc_idx_limbs[0]` is its low `PC_IDX_LOW_BITS` bits and `to_pc_idx_limbs[1]` its high
+  u16 limb
 
 This circuit proves that:
 
-- `to_pc_least_sig_bit + 4 * compose(to_pc_limbs) == compose(rs1) + imm` as a low-32-bit
-  addition with boolean carries; a byte target with bit 1 set (misaligned) is unsatisfiable
-- The destination pc index is `compose(to_pc_limbs)`, so the least significant bit of the
+- `raw_target_bit0 + 4 * compose(to_pc_idx_limbs) == compose(rs1) + imm` as a non-wrapping u32
+  addition; a byte target with bit 1 set (misaligned) is unsatisfiable
+- The destination PC index is `compose(to_pc_idx_limbs)`, so the least significant bit of the
   byte target is cleared as required by `jalr`
-- `compose(rd) == 4 * (pc + 1)`, the byte return address (with `pc` the pc index); the low
-  u16 limb of `rd` is a multiple of 4 whose quotient is in the range `[0, 2^PC_IDX_LOW_BITS)`
-- The high u16 limb of `rd` and `to_pc_limbs[1]` are in the range `[0, 2^16)`
-- `to_pc_limbs[0]` is in the range `[0, 2^PC_IDX_LOW_BITS)`
+- `compose(rd) == 4 * (pc_idx + 1)`, including the possible bit-32 carry
+- The high u16 limb of the low 32 bits of `rd` and `to_pc_idx_limbs[1]` are in the range
+  `[0, 2^16)`; the bit-32 carry of `rd` is boolean and its uppermost u16 limb is zero
+- `to_pc_idx_limbs[0]` is in the range `[0, 2^PC_IDX_LOW_BITS)`
 
 #### 8. [AUIPC](./auipc/core.rs)
 
@@ -310,14 +319,14 @@ Given:
 
 - `rd` is the decomposition of the result
 - `imm_limbs` are the decomposition of the immediate value
-- `pc_limbs` are the decomposition of the program counter
+- `pc_limbs` are the u16 decomposition of the program counter reconstructed from `pc_idx`
 
 This circuit proves that:
 
-- `compose(rd) == compose(pc_limbs) + compose(imm_limbs) * 2^8` mod `2^32`, with negative
-  results sign-extended into the upper register cells and results at or above `2^32`
-  unsatisfiable
-- `compose(pc_limbs) == 4 * pc`, the byte pc for the pc index `pc`: the low u16 limb is
+- The low 32 bits of `rd` equal `compose(pc_limbs) + compose(imm_limbs) * 2^8` modulo
+  `2^32`. A negative result is sign-extended into the upper register cells; a positive carry
+  is written as bit 32.
+- `compose(pc_limbs) == 4 * pc_idx`: the low u16 limb is
   `4 * pc_idx_low` with `pc_idx_low` in the range `[0, 2^PC_IDX_LOW_BITS)` and the high u16
   limb in the range `[0, 2^16)`
 
