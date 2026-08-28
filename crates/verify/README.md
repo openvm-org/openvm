@@ -51,7 +51,7 @@ The other public values are checked for completeness.
 - `internal_flag` is checked to be 2, i.e. the final layer must be internal-recursive
 - `recursion_depth` is checked to be in `[1, 256]`
 
-`final_pc_idx` is not separately compared against a baseline expected value.
+Note there is no expected value for `final_pc_idx`, and thus it is left unchecked.
 
 **Deferral Validation:**
 

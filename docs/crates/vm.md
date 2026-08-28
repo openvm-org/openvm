@@ -73,7 +73,7 @@ Preflight uses the same opcode executors as pure and metered execution. Its
 execution context maintains read/write guest memory while appending two generic,
 chip-independent logs:
 
-- a program log containing `(timestamp, pc)` with the program counter for every retired instruction and a
+- a program log containing `(timestamp, pc)` for every retired instruction and a
   final sentinel;
 - a memory log containing each timed block access and its value, plus the
   first-write values required to reconstruct memory chronology.

@@ -25,7 +25,7 @@ let n: u64 = read();
 
 For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
 
-:::info
+:::warning
 With the default VM configuration, guest programs can address bytes in `[0, 2^32)`. Loads, stores, memory intrinsics, and heap allocations fail if they extend past this range.
 :::
 
