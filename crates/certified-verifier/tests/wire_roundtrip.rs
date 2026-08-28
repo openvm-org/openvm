@@ -13,8 +13,8 @@ use std::{
 };
 
 use openvm_certified_verifier::{
-    swirl_verify_bin, write_proof, write_public_values, write_vk, MAGIC_PROOF, MAGIC_PUBLIC_VALUES,
-    MAGIC_VK, WIRE_VERSION,
+    swirl_dump_proof_bin, write_proof, write_public_values, write_vk, MAGIC_PROOF,
+    MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION,
 };
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
@@ -69,9 +69,7 @@ struct DumpOutcome {
 
 /// Pipe `stdin_bytes` to `swirl_dump_proof` and capture exit + output.
 fn run_swirl_dump_proof(stdin_bytes: &[u8]) -> DumpOutcome {
-    let mut dump_proof_bin = swirl_verify_bin();
-    dump_proof_bin.set_file_name("swirl_dump_proof");
-    let mut child = Command::new(dump_proof_bin)
+    let mut child = Command::new(swirl_dump_proof_bin())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

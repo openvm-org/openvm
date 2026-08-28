@@ -3,8 +3,8 @@
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision (the same fixture
 //! pipeline used by `wire_roundtrip.rs`), serializes `(vk, proof, pv)`
-//! through `openvm-certified-verifier`, pipes the three blobs to `swirl_verify`,
-//! and asserts on the resulting exit code.
+//! through `openvm-certified-verifier`, passes the three blobs to the linked
+//! Lean verifier through FFI, and asserts on the resulting exit code.
 //!
 //! Two cases:
 //!
@@ -14,8 +14,8 @@
 //!    prefix.
 
 use openvm_certified_verifier::{
-    run_swirl_verify, verifier_error_from_exit_code, write_proof, write_public_values, write_vk,
-    VerifierError,
+    run_certified_verifier, verifier_error_from_exit_code, write_proof, write_public_values,
+    write_vk, VerifierError,
 };
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
@@ -107,7 +107,8 @@ fn locate_gkr_boundary_claim_byte(proof_bytes: &[u8]) -> usize {
 fn green_fib_proof_accepted() {
     let fixture = generate_fib_proof();
     let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_swirl_verify(&vk_bytes, &proof_bytes, &pv_bytes).expect("spawn swirl_verify");
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
     assert_eq!(
         outcome.exit_code, 0,
         "green FibonacciAir proof rejected by swirl_verify; stderr={:?}",
@@ -126,7 +127,8 @@ fn tampered_batch_constraint_proof_rejected() {
     let (vk_bytes, mut proof_bytes, pv_bytes) = encode_fixture(&fixture);
     let idx = locate_gkr_boundary_claim_byte(&proof_bytes);
     proof_bytes[idx] ^= 0x01;
-    let outcome = run_swirl_verify(&vk_bytes, &proof_bytes, &pv_bytes).expect("spawn swirl_verify");
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
     assert_ne!(
         outcome.exit_code, 0,
         "tampered proof accepted by swirl_verify; stderr={:?}",
@@ -141,4 +143,35 @@ fn tampered_batch_constraint_proof_rejected() {
         verifier_error_from_exit_code(outcome.exit_code),
         Some(VerifierError::BatchConstraintError)
     ));
+    assert!(
+        !outcome.stderr.is_empty(),
+        "Lean rejection should include the rendered MonoError"
+    );
+}
+
+#[test]
+fn repeated_and_cross_thread_calls_are_accepted() {
+    let fixture = generate_fib_proof();
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+
+    for _ in 0..2 {
+        let outcome = run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes)
+            .expect("repeat verifier call");
+        assert_eq!(outcome.exit_code, 0);
+    }
+
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                scope.spawn(|| {
+                    run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes)
+                        .expect("cross-thread verifier call")
+                        .exit_code
+                })
+            })
+            .collect();
+        for handle in handles {
+            assert_eq!(handle.join().expect("verifier thread panicked"), 0);
+        }
+    });
 }
