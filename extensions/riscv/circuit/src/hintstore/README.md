@@ -12,15 +12,18 @@ which is also the row that will send messages to the program and execution buses
 multiplicities, is marked with `is_buffer_start = 1` (and it is the only row within the rows for that
 instruction with `is_buffer_start = 1`).
 
-On the starting row, a memory address `mem_ptr` is read from the RV64 register. Since pointers are required to fit in `pointer_max_bits` (≤ 32) bits, only the low `4` limbs are materialized as `mem_ptr_limbs`; the upper `4` bytes of the 8-byte register are hardcoded to zero in the memory bus interaction. The AIR range-checks the scaled `mem_ptr_limbs[3] * (1 << (32 - pointer_max_bits))` to an 8-bit lookup. The scaling constrains `mem_ptr < 2^pointer_max_bits` and requires `pointer_max_bits ∈ (24, 32]`. The preflight executor additionally asserts that the upper 32 bits of the rs1 read are zero.
+On the starting row, `mem_ptr` is read from an RV64 register. It must be an 8-byte-aligned address
+in the configured memory range. The AIR range-checks its two u16 limbs and converts the byte address
+to a memory-bus block index.
 
-On each row in the same HINT_BUFFER_RV64 instruction, the chip does a write of 8 bytes to `[mem_ptr:8]_2` and increments `mem_ptr += 8`.
-Under the invariant that timestamp is always increasing and the memory bus does not contain any invalid writes at previous timestamps, an attempted memory write access to `mem_ptr > 2^{pointer_max_bits} - 8` will not be able to balance the memory bus: it would require a send at an earlier timestamp to an out of bounds memory address, which the invariant prevents.
-Only the starting `mem_ptr` is range checked: since each row will increment `mem_ptr` by `8`, an out
-of bounds memory access will occur, causing an imbalance in the memory bus, before `mem_ptr` overflows the field.
+On each row in the same HINT_BUFFER_RV64 instruction, the chip writes 8 bytes to `[mem_ptr:8]_2` and
+increments the block index. Execution rejects a buffer past the 32-bit RV64 range. Postflight
+enforces the configured memory range, and the AIR enforces the configured pointer bound.
 
-On the starting row, `rem_dwords` is also read from memory. `rem_dwords` is bounded by
-`2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the low 2 limbs are materialized as `rem_words_limbs`; the upper 6 bytes of the 8-byte register are hardcoded to zero in the memory bus interaction. The AIR range-checks the scaled `rem_words_limbs[1] * (1 << (16 - MAX_HINT_BUFFER_DWORDS_BITS))` to an 8-bit lookup. This constrains `rem_dwords < 2^MAX_HINT_BUFFER_DWORDS_BITS` and requires `MAX_HINT_BUFFER_DWORDS_BITS ∈ [8, 16)`.
+The first HINT_BUFFER_RV64 row also reads `rem_dwords`. It must fit in
+`MAX_HINT_BUFFER_DWORDS_BITS` (= 10) bits, and the upper register cells must be zero.
 On each row with `is_buffer = 1`, the `rem_dwords` is decremented by `1`.
 
-Note: we constrain that when the current instruction ends then `rem_dwords` is 1. However, we don't constrain that when `rem_dwords` is 1 then we have to end the current instruction. The only way to exploit this if we to do some multiple of `p` number of additional illegal `is_buffer = 1` rows where `p` is the prime modulus of `F`. However, when doing `p` additional rows we will always reach an illegal `mem_ptr` at some point which prevents this exploit.
+The AIR requires `rem_dwords = 1` when the instruction ends, but not the converse. Exploiting this
+would require a multiple of `p` extra rows, where `p` is the modulus of `F`; the configured address
+bound prevents that many 8-byte increments.

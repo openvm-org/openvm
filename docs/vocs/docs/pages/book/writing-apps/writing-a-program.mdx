@@ -26,7 +26,7 @@ let n: u64 = read();
 For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
 
 :::warning
-The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+With the default VM configuration, guest programs can address bytes in `[0, 2^32)`. Loads, stores, memory intrinsics, and heap allocations fail if they extend past this range.
 :::
 
 ## Configuring OpenVM
