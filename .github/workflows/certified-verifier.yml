@@ -29,6 +29,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # TODO: Replace this commit with a swirl-rbr-fv release tag once one is available.
+  SWIRL_RBR_FV_REV: 0671add31e76b6f52889d32b17b65da258e5ea56
 
 jobs:
   openvm-tests:
@@ -170,10 +172,11 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
-      - name: Check out current swirl-rbr-fv
+      - name: Check out pinned swirl-rbr-fv
         id: checkout-swirl
         run: |
-          git clone --filter=blob:none git@github.com:axiom-crypto/swirl-rbr-fv.git swirl-rbr-fv
+          git clone --filter=blob:none --no-checkout git@github.com:axiom-crypto/swirl-rbr-fv.git swirl-rbr-fv
+          git -C swirl-rbr-fv checkout --detach "$SWIRL_RBR_FV_REV"
           echo "revision=$(git -C swirl-rbr-fv rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Cache swirl-rbr-fv Lean build

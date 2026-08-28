@@ -6,10 +6,12 @@
 //! through `openvm-certified-verifier`, passes the three blobs to the linked
 //! Lean verifier through FFI, and asserts on the resulting exit code.
 //!
-//! Two cases:
+//! Regression cases include:
 //!
 //! 1. `green_fib_proof_accepted` — honest proof must verify (exit 0).
-//! 2. `tampered_batch_constraint_proof_rejected` — a single-byte mutation inside the encoded GKR /
+//! 2. Optional positive-arity AIRs accept exactly the trace/public-value combinations permitted by
+//!    the backend proof shape.
+//! 3. `tampered_batch_constraint_proof_rejected` — a single-byte mutation inside the encoded GKR /
 //!    Batch boundary claim must survive wire decoding and be rejected by the algebraic verifier
 //!    prefix.
 
@@ -21,6 +23,10 @@ use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     proof::Proof,
     test_utils::{FibFixture, TestFixture},
+    verifier::{
+        proof_shape::{ProofShapeError, ProofShapeVDataError},
+        VerifierError as RustVerifierError,
+    },
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
@@ -52,14 +58,17 @@ fn generate_fib_proof() -> Fixture {
     Fixture { vk, proof }
 }
 
-/// Encode the fixture into three wire blobs via `openvm-certified-verifier`.
-fn encode_fixture(f: &Fixture) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+/// Encode a key and proof into three wire blobs via `openvm-certified-verifier`.
+fn encode_fixture(
+    vk: &MultiStarkVerifyingKey<SC>,
+    proof: &Proof<SC>,
+) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let mut vk_bytes = Vec::new();
-    write_vk(&mut vk_bytes, &f.vk).expect("write_vk");
+    write_vk(&mut vk_bytes, vk).expect("write_vk");
     let mut proof_bytes = Vec::new();
-    write_proof(&mut proof_bytes, &f.proof).expect("write_proof");
+    write_proof(&mut proof_bytes, proof).expect("write_proof");
     let mut pv_bytes = Vec::new();
-    write_public_values(&mut pv_bytes, &f.vk, &f.proof.public_values).expect("write_public_values");
+    write_public_values(&mut pv_bytes, vk, &proof.public_values).expect("write_public_values");
     (vk_bytes, proof_bytes, pv_bytes)
 }
 
@@ -106,12 +115,101 @@ fn locate_gkr_boundary_claim_byte(proof_bytes: &[u8]) -> usize {
 #[test]
 fn green_fib_proof_accepted() {
     let fixture = generate_fib_proof();
-    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture.vk, &fixture.proof);
     let outcome =
         run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
     assert_eq!(
         outcome.exit_code, 0,
         "green FibonacciAir proof rejected by swirl_verify; stderr={:?}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn optional_positive_arity_public_values_follow_trace_presence() {
+    let params = SystemParams::new_for_testing(LOG_TRACE_DEGREE);
+    let engine = BabyBearPoseidon2RefEngine::<DuplexSponge>::new(params);
+    let n = 1usize << LOG_TRACE_DEGREE;
+    let present_fixture = FibFixture::new_with_num_airs(2, 3, n, 2);
+    let (pk, vk) = present_fixture.keygen(&engine);
+
+    let present_proof = present_fixture.prove(&engine, &pk);
+    assert_eq!(present_proof.public_values[0].len(), 3);
+    assert_eq!(present_proof.public_values[1].len(), 3);
+    engine
+        .verify(&vk, &present_proof)
+        .expect("Rust accepts present AIRs with nominal public values");
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&vk, &present_proof);
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
+    assert_eq!(
+        outcome.exit_code, 0,
+        "certified verifier rejected present nominal public values; stderr={:?}",
+        outcome.stderr
+    );
+
+    let absent_fixture = FibFixture::new_with_num_airs(2, 3, n, 2).with_empty_air_indices([1]);
+    let absent_proof = absent_fixture.prove(&engine, &pk);
+    assert!(absent_proof.trace_vdata[1].is_none());
+    assert!(absent_proof.public_values[1].is_empty());
+    let absent_arity = vk.inner.per_air[1].params.num_public_values;
+    assert_eq!(absent_arity, 3);
+    engine
+        .verify(&vk, &absent_proof)
+        .expect("Rust accepts an absent optional AIR with an empty public-value row");
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&vk, &absent_proof);
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
+    assert_eq!(
+        outcome.exit_code, 0,
+        "certified verifier rejected absent AIR with empty public values; stderr={:?}",
+        outcome.stderr
+    );
+
+    let mut absent_with_values = absent_proof.clone();
+    let zero = absent_with_values.public_values[0][0] - absent_with_values.public_values[0][0];
+    absent_with_values.public_values[1] = vec![zero; absent_arity];
+    let rust_error = engine
+        .verify(&vk, &absent_with_values)
+        .expect_err("Rust must reject public values without trace vdata");
+    assert!(matches!(
+        rust_error,
+        RustVerifierError::ProofShapeError(ProofShapeError::InvalidVData(
+            ProofShapeVDataError::PublicValuesNoVData { air_idx: 1 }
+        ))
+    ));
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&vk, &absent_with_values);
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
+    assert_eq!(
+        verifier_error_from_exit_code(outcome.exit_code),
+        Some(VerifierError::ProofShapeError),
+        "certified verifier should reject values for an absent AIR; stderr={:?}",
+        outcome.stderr
+    );
+
+    let mut present_without_values = present_proof.clone();
+    present_without_values.public_values[1].clear();
+    let rust_error = engine
+        .verify(&vk, &present_without_values)
+        .expect_err("Rust must reject missing public values for a present AIR");
+    assert!(matches!(
+        rust_error,
+        RustVerifierError::ProofShapeError(ProofShapeError::InvalidVData(
+            ProofShapeVDataError::InvalidPublicValues {
+                air_idx: 1,
+                expected: 3,
+                actual: 0
+            }
+        ))
+    ));
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&vk, &present_without_values);
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
+    assert_eq!(
+        verifier_error_from_exit_code(outcome.exit_code),
+        Some(VerifierError::ProofShapeError),
+        "certified verifier should reject an empty row for a present AIR; stderr={:?}",
         outcome.stderr
     );
 }
@@ -124,7 +222,7 @@ fn green_fib_proof_accepted() {
 #[test]
 fn tampered_batch_constraint_proof_rejected() {
     let fixture = generate_fib_proof();
-    let (vk_bytes, mut proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let (vk_bytes, mut proof_bytes, pv_bytes) = encode_fixture(&fixture.vk, &fixture.proof);
     let idx = locate_gkr_boundary_claim_byte(&proof_bytes);
     proof_bytes[idx] ^= 0x01;
     let outcome =
@@ -152,7 +250,7 @@ fn tampered_batch_constraint_proof_rejected() {
 #[test]
 fn repeated_and_cross_thread_calls_are_accepted() {
     let fixture = generate_fib_proof();
-    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture.vk, &fixture.proof);
 
     for _ in 0..2 {
         let outcome = run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes)
