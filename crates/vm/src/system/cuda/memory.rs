@@ -336,7 +336,10 @@ impl MemoryInventoryGPU {
             )
         };
         let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
-        pinned::give_back(h_in, dirty_len);
+        h_in.set_dirty_len(dirty_len);
+        h_in.record_last_use(&self.device_ctx.stream)
+            .expect("failed to record touched-memory upload completion");
+        drop(h_in);
         // SAFETY: d_in_records owns this same-context view through the call.
         unsafe {
             self.generate_proving_ctxs_from_device_inner(

@@ -182,7 +182,11 @@ impl ProgramChipGPU {
         let d_freqs = words
             .to_device_on(&self.device_ctx)
             .expect("failed to copy exec frequencies to device");
-        pinned::give_back(h_freqs, off + bytes);
+        h_freqs.set_dirty_len(off + bytes);
+        h_freqs
+            .record_last_use(&self.device_ctx.stream)
+            .expect("failed to record exec-frequency upload completion");
+        drop(h_freqs);
         unsafe {
             crate::cuda_abi::program::fill_frequencies(
                 &d_freqs,
