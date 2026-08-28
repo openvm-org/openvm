@@ -11,10 +11,11 @@ As in v1, OpenVM v2 starts with a list of app segment proofs, which are generate
 
 ## Public Values
 
-The final internal-recursive proof will expose the following public values:
+The final internal-recursive proof will expose the following public values. Circuit program counters
+use the index `pc_idx = pc / DEFAULT_PC_STEP`.
 
 - `program_commit`: Program code commitment
-- `initial_pc_idx`: Initial circuit program counter index (`byte_pc / DEFAULT_PC_STEP`) at the start of app execution
+- `initial_pc_idx`: Initial circuit program counter index at the start of app execution
 - `final_pc_idx`: Final circuit program counter index after app execution
 - `exit_code`: Exit code after app execution
 - `is_terminate`: Flag to indicate whether the program terminated or not

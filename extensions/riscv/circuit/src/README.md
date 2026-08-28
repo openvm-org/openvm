@@ -9,8 +9,8 @@ The RV64IM chips is composed of two main components: an adapter chip and a core 
 - The adapter chip adapts the core chip's I/O to the VM's expected format and manages interactions with the VM.
 - The core chip is responsible for implementing the logic of the RISC-V instructions.
 
-Runtime execution and preflight use 32-bit byte PCs. Circuit traces use
-`pc_idx = byte_pc / DEFAULT_PC_STEP`; the statements below use `from_pc_idx` and `to_pc_idx`.
+Runtime execution and preflight use 32-bit program counters. Circuit traces use
+`pc_idx = pc / DEFAULT_PC_STEP`; the statements below use `from_pc_idx` and `to_pc_idx`.
 
 RV64 memory uses 32-bit byte addresses. Load/store adapters use one or two aligned 8-byte blocks and
 enforce the configured pointer bound.
@@ -319,7 +319,7 @@ Given:
 
 - `rd` is the decomposition of the result
 - `imm_limbs` are the decomposition of the immediate value
-- `pc_limbs` are the u16 decomposition of the byte PC reconstructed from `pc_idx`
+- `pc_limbs` are the u16 decomposition of the program counter reconstructed from `pc_idx`
 
 This circuit proves that:
 

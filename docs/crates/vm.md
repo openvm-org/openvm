@@ -73,7 +73,7 @@ Preflight uses the same opcode executors as pure and metered execution. Its
 execution context maintains read/write guest memory while appending two generic,
 chip-independent logs:
 
-- a program log containing `(timestamp, pc)` with a byte PC for every retired instruction and a
+- a program log containing `(timestamp, pc)` with the program counter for every retired instruction and a
   final sentinel;
 - a memory log containing each timed block access and its value, plus the
   first-write values required to reconstruct memory chronology.
@@ -125,7 +125,7 @@ execution bus. The memory bus is used to access memory, the program bus is used 
 and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
 which is provided by `AirInventory`/`SystemAirInventory`.
 
-The program and execution buses use `pc_idx = byte_pc / DEFAULT_PC_STEP`. A sequential AIR
+The program and execution buses use the program counter index `pc_idx = pc / DEFAULT_PC_STEP`. A sequential AIR
 transition advances `pc_idx` by one.
 
 Memory-bus addresses contain an address space and a block index. Each block contains

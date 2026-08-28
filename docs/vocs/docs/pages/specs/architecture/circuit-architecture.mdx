@@ -35,7 +35,8 @@ AIRs, and global coherence comes from the buses plus the local AIR constraints.
 
 ## Execution flow
 
-A circuit _execution state_ consists of `pc_idx = byte_pc / DEFAULT_PC_STEP` and `timestamp`.
+A circuit _execution state_ consists of the program counter index
+`pc_idx = pc / DEFAULT_PC_STEP` and `timestamp`.
 
 Although we use sequential language below, a witness (a set of traces) is a static object. The AIR
 constraints and bus balancing conditions are designed so that from any valid witness one can extract

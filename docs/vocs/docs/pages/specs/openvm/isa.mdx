@@ -30,7 +30,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `F`                          | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field. |
 | `PC_IDX_BITS`                | The number of bits in the circuit PC index.                        | Fixed to 30.                                                         |
 | `DEFAULT_PC_STEP`            | The byte distance between sequential instructions.                 | Fixed to 4.                                                          |
-| `MAX_ALLOWED_PC`             | The greatest supported byte program counter.                       | Fixed to `2^32 - DEFAULT_PC_STEP = 0xffff_fffc`.                     |
+| `MAX_ALLOWED_PC`             | The greatest supported program counter.                            | Fixed to `2^32 - DEFAULT_PC_STEP = 0xffff_fffc`.                     |
 | `LIMB_BITS`                  | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                          |
 | `ADDR_SPACE_OFFSET`          | The index of the first writable address space.                     | Fixed to 1.                                                          |
 | `addr_space_height`          | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`      |
@@ -67,7 +67,7 @@ The state of the virtual machine consists of the following components:
 The **initial state** of the virtual machine consists of:
 
 - Program ROM - immutable throughout VM execution
-- `pc_0` - starting byte program counter
+- `pc_0` - starting program counter
 - Initial data memory
 - No user public outputs
 - Input stream
@@ -206,7 +206,7 @@ a transition function on the mutable parts of the VM state:
 
 which must satisfy the following conditions:
 
-- Let `from_pc` be the byte program counter at the start of instruction execution. It must be the
+- Let `from_pc` be the program counter at the start of instruction execution. It must be the
   byte address of a valid instruction in the program ROM.
 - The execution must match the instruction from the program ROM.
 - The execution has full read/write access to the data memory, except address space `0` must be read-only.
@@ -215,11 +215,11 @@ which must satisfy the following conditions:
 - Full read/write access to the hint stream.
 - Deferral states are pre-computed at initialization with input-to-raw-input mappings. During execution, deferral
   functions may update a `DeferralState` by storing raw outputs and their commitments, which are as specified [here](/specs/architecture/deferral).
-- The byte program counter is set to a new `to_pc` at the end of instruction execution.
+- The program counter is set to a new `to_pc` at the end of instruction execution.
   Instructions are only considered valid if `to_pc` is the byte address of a valid instruction in the program ROM.
 
-ℹ️ Notes for extension developers: Runtime execution uses byte PCs, while AIR traces and buses use
-`pc_idx`. New instructions must reject overflow and misalignment before converting a byte PC to an index.
+ℹ️ Notes for extension developers: Runtime execution uses program counters, while AIR traces and buses use
+`pc_idx`. New instructions must reject overflow and misalignment before converting a program counter to an index.
 
 ### Guest Instruction Execution
 
