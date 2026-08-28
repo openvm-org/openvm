@@ -286,34 +286,34 @@ fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
 fn validated_segment_proof_times<'a>(
     proof_times: &'a [(f64, Labels)],
     preflight_times: &'a [(f64, Labels)],
-) -> Vec<(&'a str, f64)> {
-    let mut preflight_by_segment = HashMap::with_capacity(preflight_times.len());
+) -> Vec<(&'a Labels, f64)> {
+    let mut preflight_by_labels = HashMap::with_capacity(preflight_times.len());
     for (value, labels) in preflight_times {
-        let segment = labels
+        labels
             .get("segment")
             .expect("preflight execution metric is missing its segment label");
         assert!(
-            preflight_by_segment.insert(segment, *value).is_none(),
-            "duplicate preflight execution metric for segment {segment}"
+            preflight_by_labels.insert(labels, *value).is_none(),
+            "duplicate preflight execution metric for labels {labels:?}"
         );
     }
 
     let mut paired = Vec::with_capacity(proof_times.len());
     for (proof_time, labels) in proof_times {
-        let segment = labels
+        labels
             .get("segment")
             .expect("total proof metric is missing its segment label");
-        let preflight_time = preflight_by_segment.remove(segment).unwrap_or_else(|| {
-            panic!("total proof segment {segment} has no preflight execution metric")
+        let preflight_time = preflight_by_labels.remove(labels).unwrap_or_else(|| {
+            panic!("total proof labels {labels:?} have no preflight execution metric")
         });
         assert!(
             preflight_time <= *proof_time,
-            "preflight execution exceeds total proof time for segment {segment}"
+            "preflight execution exceeds total proof time for labels {labels:?}"
         );
-        paired.push((segment, proof_time - preflight_time));
+        paired.push((labels, proof_time - preflight_time));
     }
     assert!(
-        preflight_by_segment.is_empty(),
+        preflight_by_labels.is_empty(),
         "preflight execution metric has no matching total proof segment"
     );
     paired
@@ -340,12 +340,15 @@ fn parallel_proof_times_ms(metrics: &MetricsByName) -> (Vec<f64>, f64) {
     }
 
     let mut paired = validated_segment_proof_times(proof_times, preflight_times);
-    paired.sort_unstable_by(
-        |(a, _), (b, _)| match (a.parse::<u64>(), b.parse::<u64>()) {
+    paired.sort_unstable_by(|(a, _), (b, _)| {
+        let a_segment = a.get("segment").expect("segment label was validated above");
+        let b_segment = b.get("segment").expect("segment label was validated above");
+        match (a_segment.parse::<u64>(), b_segment.parse::<u64>()) {
             (Ok(a), Ok(b)) => a.cmp(&b),
-            _ => a.cmp(b),
-        },
-    );
+            _ => a_segment.cmp(b_segment),
+        }
+        .then_with(|| a.get("program").cmp(&b.get("program")))
+    });
 
     let serial_preflight_ms = preflight_times.iter().map(|(value, _)| value).sum();
     (
@@ -1006,6 +1009,42 @@ mod tests {
                 .val,
             60.0
         );
+    }
+
+    #[test]
+    fn preflight_segments_are_scoped_by_program() {
+        let labels = |program: &str, segment: usize| {
+            Labels(vec![
+                ("program".to_string(), program.to_string()),
+                ("segment".to_string(), segment.to_string()),
+            ])
+        };
+        let metrics = HashMap::from([
+            (
+                PROOF_TIME_LABEL.to_string(),
+                vec![
+                    (100.0, labels("root_keygen", 0)),
+                    (80.0, labels("halo2_keygen", 0)),
+                    (120.0, labels("", 0)),
+                    (90.0, labels("", 1)),
+                ],
+            ),
+            (
+                EXECUTE_PREFLIGHT_TIME_LABEL.to_string(),
+                vec![
+                    (10.0, labels("root_keygen", 0)),
+                    (20.0, labels("halo2_keygen", 0)),
+                    (30.0, labels("", 0)),
+                    (40.0, labels("", 1)),
+                ],
+            ),
+        ]);
+
+        let aggregate = grouped(metrics).aggregate(2);
+
+        assert_close(aggregate.total_proof_time.val, 0.39);
+        assert_close(aggregate.total_par_proof_time.val, 0.19);
+        assert_close(aggregate.bounded_par_by_group["app"].val, 0.28);
     }
 
     #[test]
