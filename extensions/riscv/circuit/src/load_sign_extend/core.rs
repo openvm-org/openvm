@@ -111,7 +111,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadSignExtendCoreCols<AB::Var, NUM_OVERLAP_CELLS> = (*local_core).borrow();
         let width = LOAD_WIDTH / U16_CELL_SIZE;
@@ -208,7 +208,7 @@ where
                 + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << BYTE_BITS)
         });
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: cols.read_data.map(|block| block.map(Into::into)).into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {

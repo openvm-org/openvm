@@ -212,7 +212,7 @@ impl<AB: InteractionBuilder> Air<AB> for HintStoreAir {
             + (local_cols.is_buffer * AB::F::from_usize(HINT_BUFFER as usize + self.offset));
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_pc_idx(
                 expected_opcode,
                 [
                     local_cols.is_buffer * (local_cols.num_words_ptr),

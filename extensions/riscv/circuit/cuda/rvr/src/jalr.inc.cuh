@@ -98,26 +98,28 @@ __global__ void jalr_replay_tracegen(
     uint32_t imm_extended = imm + imm_sign * 0xffff0000u;
     int64_t unaligned_signed =
         static_cast<int64_t>(rs1_val) + static_cast<int64_t>(static_cast<int32_t>(imm_extended));
-    if (unaligned_signed < 0 ||
-        static_cast<uint64_t>(unaligned_signed) >= (uint64_t(1) << PC_BITS)) {
+    // The raw sum must fit in the implemented u32 PC domain. RISC-V then clears bit 0 before
+    // checking instruction alignment (mirrors `try_run_jalr`).
+    if (unaligned_signed < 0 || unaligned_signed > int64_t(UINT32_MAX)) {
         preflight_set_error(error, 209);
         return;
     }
-    constexpr uint32_t MAX_PC = (1u << PC_BITS) - 1;
-    if (from.pc > MAX_PC - DEFAULT_PC_STEP) {
+    uint32_t raw_target_pc = static_cast<uint32_t>(unaligned_signed);
+    uint32_t to_pc = raw_target_pc & ~1u;
+    if (to_pc % DEFAULT_PC_STEP != 0) {
         preflight_set_error(error, 209);
         return;
     }
-    uint32_t unaligned_to_pc = static_cast<uint32_t>(unaligned_signed);
-    if (to.pc != (unaligned_to_pc & ~1u)) {
+    if (to.pc != to_pc) {
         preflight_set_error(error, 207);
         return;
     }
 
+    uint64_t rd = uint64_t(from.pc) + DEFAULT_PC_STEP;
     uint16_t expected_rd[BLOCK_FE_WIDTH] = {
-        static_cast<uint16_t>(from.pc + DEFAULT_PC_STEP),
-        static_cast<uint16_t>((from.pc + DEFAULT_PC_STEP) >> U16_BITS),
-        0,
+        static_cast<uint16_t>(rd),
+        static_cast<uint16_t>(rd >> U16_BITS),
+        static_cast<uint16_t>(rd >> (2 * U16_BITS)),
         0,
     };
     ReplayPreviousValue write_previous = {};

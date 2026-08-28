@@ -15,10 +15,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
-    riscv::{MEMORY_AS, REGISTER_AS},
-};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
     eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
     PTR_U16_LIMBS,
@@ -166,7 +163,7 @@ impl<
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 ctx.instruction.opcode,
                 [
                     cols.rd_ptr.into(),
@@ -183,12 +180,12 @@ impl<
                 ],
                 cols.from_state,
                 AB::F::from_usize(timestamp_delta),
-                (DEFAULT_PC_STEP, ctx.to_pc),
+                (1, ctx.to_pc_idx),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &IsEqualModU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }

@@ -8,7 +8,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{program::pc_to_idx, LocalOpcode};
 use openvm_riscv_circuit::adapters::{add_block_index_range_checks, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
@@ -130,7 +130,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
 
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(replay.timestamp);
-        cols.instruction.from_state.pc = F::from_u32(replay.from_pc);
+        cols.instruction.from_state.pc = F::from_u32(pc_to_idx(replay.from_pc));
         *cols.instruction.dst_reg_ptr = F::from_u32(replay.dst_reg_ptr);
         *cols.instruction.state_reg_ptr = F::from_u32(replay.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(replay.input_reg_ptr);

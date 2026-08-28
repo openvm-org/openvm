@@ -124,7 +124,7 @@ impl XorinVmAir {
         }
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_pc_idx(
                 AB::Expr::from_usize(XorinOpcode::XORIN as usize + self.offset),
                 [
                     buffer_reg_ptr.into(),
@@ -133,7 +133,7 @@ impl XorinVmAir {
                     AB::Expr::from_u32(REGISTER_AS),
                     AB::Expr::from_u32(MEMORY_AS),
                 ],
-                ExecutionState::new(instruction.pc, instruction.start_timestamp),
+                ExecutionState::new(instruction.pc_idx, instruction.start_timestamp),
                 timestamp_change,
             )
             .eval(builder, is_enabled);

@@ -26,9 +26,20 @@ inline constexpr size_t RV_IS_TYPE_IMM_BITS = 12;
 } // namespace riscv
 
 namespace program {
-inline constexpr size_t PC_BITS = 30;
+// Number of bits of a pc index (`pc / DEFAULT_PC_STEP`), the circuit representation of the
+// program counter. Byte pcs span PC_IDX_BITS + PC_STEP_BITS = 32 bits.
+inline constexpr size_t PC_IDX_BITS = 30;
 inline constexpr size_t DEFAULT_PC_STEP = 4;
+// log2 of DEFAULT_PC_STEP.
+inline constexpr size_t PC_STEP_BITS = 2;
+// Maximum allowed byte pc: the last DEFAULT_PC_STEP-aligned 32-bit address.
+inline constexpr uint32_t MAX_ALLOWED_PC = UINT32_MAX - (DEFAULT_PC_STEP - 1);
+// Low bits of a pc index packed into the low u16 limb of the corresponding byte pc.
+inline constexpr size_t PC_IDX_LOW_BITS = openvm::U16_BITS - PC_STEP_BITS;
 inline constexpr size_t DEFAULT_BLOCK_SIZE = 8;
+
+// Converts a DEFAULT_PC_STEP-aligned byte pc into the pc index used by circuits.
+__device__ __host__ inline constexpr uint32_t pc_to_idx(uint32_t pc) { return pc >> PC_STEP_BITS; }
 } // namespace program
 
 namespace p3_keccak_air {

@@ -77,7 +77,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadSignExtendByteCoreCols<AB::Var> = (*local_core).borrow();
         self.encoder.eval(builder, &cols.selector);
@@ -155,7 +155,7 @@ where
         );
 
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: cols.read_data.map(Into::into).into(),
             writes: write_data.into(),
             instruction: LoadByteInstruction {

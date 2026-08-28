@@ -92,7 +92,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &DivRemCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
@@ -330,7 +330,7 @@ where
         let a = array::from_fn(|i| select(is_div.clone(), q[i], r[i]));
 
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
             writes: [a.map(Into::into)].into(),
             instruction: MinimalInstruction {

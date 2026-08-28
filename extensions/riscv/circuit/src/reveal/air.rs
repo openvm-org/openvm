@@ -13,7 +13,6 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
     riscv::{REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
@@ -185,7 +184,7 @@ impl<AB: InteractionBuilder> Air<AB> for RevealAir {
                 ],
                 cols.from_state,
                 ExecutionState {
-                    pc: cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP),
+                    pc: cols.from_state.pc + AB::F::ONE,
                     timestamp: timestamp + AB::F::from_usize(REVEAL_TIMESTAMP_DELTA),
                 },
             )

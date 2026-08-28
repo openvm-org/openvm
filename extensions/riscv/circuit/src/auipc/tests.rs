@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
     },
     var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -105,13 +105,14 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.random_range(1..32) << 3;
 
+    let initial_pc = initial_pc.unwrap_or_else(|| rng.random::<u32>() & !3);
     tester.execute_with_pc(
         executor,
         preflight,
         &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS))),
+        initial_pc,
     );
-    let initial_pc = tester.last_from_pc().as_canonical_u32();
+    let initial_pc = tester.last_from_pc();
     let rd_data = run_auipc(initial_pc, imm as u32);
     let rd_bytes = u16_block_to_bytes(rd_data);
     assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
@@ -150,6 +151,31 @@ fn rand_auipc_test() {
     tester.simple_test().expect("Verification failed");
 }
 
+#[test]
+fn auipc_max_pc_test() {
+    // 0xfffffff8 + 0x1000 = 0x1_00000ff8.
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        AUIPC,
+        Some(0x10),
+        Some(0xffff_fff8),
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
@@ -159,7 +185,7 @@ fn rand_auipc_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
-    pub is_sign_extend: Option<u32>,
+    pub imm_sign: Option<u32>,
     pub rd_data: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_low_8: Option<u32>,
     pub imm_high_16: Option<u32>,
@@ -204,8 +230,8 @@ fn run_negative_auipc_test(
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut AuipcCoreCols<F> = core_row.borrow_mut();
 
-        if let Some(val) = prank_vals.is_sign_extend {
-            core_cols.is_sign_extend = F::from_u32(val);
+        if let Some(val) = prank_vals.imm_sign {
+            core_cols.imm_sign = F::from_u32(val);
         }
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_u32);
@@ -239,7 +265,7 @@ fn invalid_limb_negative_tests() {
     let (imm_low_8, imm_high_16) = split_imm_u8_limbs([107, 46, 81]);
     run_negative_auipc_test(
         AUIPC,
-        Some(9722891),
+        Some(9722892),
         None,
         AuipcPrankValues {
             imm_low_8: Some(imm_low_8),
@@ -283,7 +309,7 @@ fn invalid_limb_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         None,
-        Some(876487877),
+        Some(876487876),
         AuipcPrankValues {
             rd_data: Some(pack_rd_u8_limbs([197, 202, 49, 70])),
             imm_low_8: Some(imm_low_8),
@@ -336,27 +362,23 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 }
 
 #[test]
-fn sign_extend_flag_negative_tests() {
-    // Prank is_sign_extend = 1 when the result has bit 31 unset (MSB of rd_data[1] is 0).
-    // pc=4, imm=0 ⟹ rd = 4 ⟹ rd low 32 bits = [4, 0].
+fn immediate_sign_flag_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         Some(0),
         Some(4),
         AuipcPrankValues {
-            is_sign_extend: Some(1),
+            imm_sign: Some(1),
             ..Default::default()
         },
         true,
     );
-    // Prank is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[1] is 1).
-    // pc=0, imm=2^23 ⟹ rd = 2^31 ⟹ rd low 32 bits = [0, 0x8000].
     run_negative_auipc_test(
         AUIPC,
         Some(1 << 23),
         Some(0),
         AuipcPrankValues {
-            is_sign_extend: Some(0),
+            imm_sign: Some(0),
             ..Default::default()
         },
         true,
@@ -364,13 +386,13 @@ fn sign_extend_flag_negative_tests() {
 }
 
 #[test]
-fn positive_offset_crossing_sign_extend_negative_tests() {
+fn positive_offset_imm_sign_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         Some(0x7f_fff0),
         Some(0x1000),
         AuipcPrankValues {
-            is_sign_extend: Some(1),
+            imm_sign: Some(1),
             ..Default::default()
         },
         true,
@@ -416,7 +438,7 @@ fn overflow_negative_tests() {
     run_negative_auipc_test(
         AUIPC,
         Some(0),
-        Some(255),
+        Some(256),
         AuipcPrankValues {
             rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1]),
             imm_low_8: Some(0),
@@ -512,6 +534,15 @@ fn test_cuda_rand_auipc_tracegen() {
             None,
         );
     }
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        AUIPC,
+        Some(0x10),
+        Some(0xffff_fff8),
+    );
 
     tester
         .build()

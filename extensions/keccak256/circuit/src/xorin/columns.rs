@@ -17,7 +17,8 @@ pub struct XorinVmCols<T> {
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, StructReflection, derive_new::new)]
 #[allow(clippy::too_many_arguments)]
 pub struct XorinInstructionCols<T> {
-    pub pc: T,
+    /// Circuit PC index (`byte_pc / DEFAULT_PC_STEP`).
+    pub pc_idx: T,
     pub is_enabled: T,
     pub buffer_reg_ptr: T,
     pub input_reg_ptr: T,

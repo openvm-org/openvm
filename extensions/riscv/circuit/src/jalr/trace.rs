@@ -24,7 +24,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
 
     fill_trace_rows(&mut trace, 0, steps, |row, step| {
         let (adapter_row, core_row) = row.split_at_mut(adapter_width);
-        let (rs1, to_pc, rd_data) = JalrAdapterFiller::replay(
+        let (rs1, raw_target_pc, rd_data) = JalrAdapterFiller::replay(
             postflight,
             step,
             &chip.mem_helper.as_borrowed(),
@@ -37,7 +37,9 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
                 }
                 let rs1_value = u32::from(rs1[0]) | (u32::from(rs1[1]) << U16_BITS);
                 try_run_jalr(from_pc, rs1_value, immediate, imm_sign).ok_or_else(|| {
-                    PostflightError::new("JALR target exceeds implemented PC address space")
+                    PostflightError::new(
+                        "JALR target is outside implemented PC address space or misaligned",
+                    )
                 })
             },
         )?;
@@ -48,7 +50,7 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             rs1_value,
             instruction.c.as_u32() as u16,
             instruction.g.is_one(),
-            to_pc,
+            raw_target_pc,
             rd_data,
         );
         Ok(())

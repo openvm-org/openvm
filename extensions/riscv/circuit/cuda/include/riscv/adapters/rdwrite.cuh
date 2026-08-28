@@ -34,7 +34,7 @@ struct RdWriteAdapter {
         uint32_t prev_timestamp,
         uint16_t const (&prev_data)[BLOCK_FE_WIDTH]
     ) {
-        COL_WRITE_VALUE(row, RdWriteAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, RdWriteAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         COL_WRITE_VALUE(row, RdWriteAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, RdWriteAdapterCols, rd_ptr, rd_ptr);
 
@@ -96,7 +96,7 @@ struct CondRdWriteAdapter {
         } else {
             inner.fill_zero(0, sizeof(RdWriteAdapterCols<uint8_t>));
             COL_WRITE_VALUE(inner, RdWriteAdapterCols, from_state.timestamp, from_timestamp);
-            COL_WRITE_VALUE(inner, RdWriteAdapterCols, from_state.pc, from_pc);
+            COL_WRITE_VALUE(inner, RdWriteAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         }
     }
 
