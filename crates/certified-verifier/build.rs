@@ -93,29 +93,7 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static=openvm_swirl_verifier");
-
-    // These are the static libraries `leanc` uses for an executable link.
-    // Most are discarded by the final link, but listing the complete pinned
-    // toolchain set keeps this in step with Lean's generated-code ABI.
-    println!(
-        "cargo:rustc-link-search=native={}",
-        lean_prefix.join("lib/lean").display()
-    );
-    for lib in ["leancpp", "Init", "Std", "Lean", "leanrt", "Lake"] {
-        println!("cargo:rustc-link-lib=static={lib}");
-    }
-    println!(
-        "cargo:rustc-link-search=native={}",
-        lean_prefix.join("lib").display()
-    );
-    for lib in ["gmp", "uv"] {
-        println!("cargo:rustc-link-lib=static={lib}");
-    }
-    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        println!("cargo:rustc-link-lib=dylib=c++");
-    } else if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
-        println!("cargo:rustc-link-lib=dylib=stdc++");
-    }
+    emit_leanc_link_flags(&lean_prefix);
 
     let dump_main = csrc.join("Tools/SwirlDumpProof.c");
     let dump_obj = out_dir.join("dump_Tools_SwirlDumpProof.o");
@@ -177,6 +155,65 @@ fn lean_prefix() -> PathBuf {
         String::from_utf8_lossy(&output.stderr).trim()
     );
     PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
+}
+
+/// Forward the pinned toolchain's static Lean link recipe to Cargo.
+///
+/// `leanc --print-ldflags` accounts for platform-specific runtime choices
+/// such as libstdc++ versus libc++. Cargo needs the library kind separately,
+/// so prefer a static archive when the Lean toolchain supplies one and fall
+/// back to the platform's dynamic library otherwise.
+fn emit_leanc_link_flags(lean_prefix: &Path) {
+    let output = leanc(&["--print-ldflags"])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to query leanc linker flags: {e}"));
+    assert!(
+        output.status.success(),
+        "failed to query leanc linker flags: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    let output = String::from_utf8(output.stdout).expect("leanc linker flags must be UTF-8");
+    let search_paths = [lean_prefix.join("lib/lean"), lean_prefix.join("lib")];
+    for path in &search_paths {
+        println!("cargo:rustc-link-search=native={}", path.display());
+    }
+
+    let libraries: Vec<_> = output
+        .split_whitespace()
+        .filter_map(|flag| flag.strip_prefix("-l").filter(|lib| !lib.is_empty()))
+        .collect();
+    assert!(
+        libraries.contains(&"leanrt"),
+        "leanc linker flags did not include the Lean runtime: {output}"
+    );
+
+    for flag in output.split_whitespace() {
+        if flag == "-pthread" {
+            println!("cargo:rustc-link-lib=dylib=pthread");
+        } else if let Some(lib) = flag.strip_prefix("-l").filter(|lib| !lib.is_empty()) {
+            assert!(
+                !lib.starts_with(':'),
+                "unsupported verbatim library in leanc linker flags: {flag}"
+            );
+            let kind = if search_paths
+                .iter()
+                .any(|path| path.join(format!("lib{lib}.a")).is_file())
+            {
+                "static"
+            } else {
+                assert!(
+                    !search_paths.iter().any(|path| {
+                        path.join(format!("lib{lib}.so")).is_file()
+                            || path.join(format!("lib{lib}.dylib")).is_file()
+                            || path.join(format!("lib{lib}.dll.a")).is_file()
+                    }),
+                    "refusing to dynamically link {lib} from the Lean toolchain"
+                );
+                "dylib"
+            };
+            println!("cargo:rustc-link-lib={kind}={lib}");
+        }
+    }
 }
 
 fn collect_c_files(dir: &Path, out: &mut Vec<PathBuf>) {

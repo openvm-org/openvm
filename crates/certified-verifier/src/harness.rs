@@ -8,7 +8,7 @@
 //!
 //! This crate's `build.rs` compiles the vendored Lean-generated C (`csrc/`)
 //! with `leanc`, archives it, and links it and the pinned Lean runtime into
-//! the Rust target. [`crate::ffi`] calls a single OpenVM-owned C adapter.
+//! the Rust target. The private FFI module calls a single OpenVM-owned C adapter.
 
 use std::{io, path::PathBuf};
 
