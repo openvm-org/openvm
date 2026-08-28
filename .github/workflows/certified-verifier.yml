@@ -88,6 +88,74 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
+  installed-cli-test:
+    name: Installed CLI after build target removal
+    runs-on:
+      - runs-on=${{ github.run_id }}-certified-verifier-install/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - uses: actions/checkout@v5
+      - id: lean-toolchain
+        uses: ./.github/actions/lean-toolchain
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/sccache
+
+      - name: Install guest rust-src
+        run: rustup component add rust-src --toolchain nightly-2026-01-18
+
+      - name: Install cargo-openvm
+        run: |
+          install_root="${RUNNER_TEMP:?}/cargo-openvm-install"
+          install_target="${RUNNER_TEMP:?}/cargo-openvm-install-target"
+          cargo install --locked --path crates/cli --features certified-verifier \
+            --profile fast --root "$install_root" --target-dir "$install_target"
+          echo "$install_root/bin" >> "$GITHUB_PATH"
+          echo "CERTIFIED_CLI_TARGET_DIR=$install_target" >> "$GITHUB_ENV"
+          echo "CERTIFIED_CONFIG_PATH=${RUNNER_TEMP:?}/openvm-riscv32.toml" >> "$GITHUB_ENV"
+          echo "CERTIFIED_PROOF_PATH=${RUNNER_TEMP:?}/fibonacci.stark.proof" >> "$GITHUB_ENV"
+
+      - name: Prove Fibonacci
+        working-directory: crates/cli
+        run: |
+          printf '[app_vm_config.rv32i]\n[app_vm_config.rv32m]\n[app_vm_config.io]\n' \
+            > "$CERTIFIED_CONFIG_PATH"
+          cargo openvm keygen \
+            --manifest-path tests/programs/multi/Cargo.toml \
+            --config "$CERTIFIED_CONFIG_PATH"
+          cargo openvm setup
+          cargo openvm prove stark \
+            --manifest-path tests/programs/multi/Cargo.toml \
+            --example fibonacci \
+            --config "$CERTIFIED_CONFIG_PATH" \
+            --proof "$CERTIFIED_PROOF_PATH"
+
+      - name: Delete Cargo install target
+        run: |
+          rm -rf -- "${CERTIFIED_CLI_TARGET_DIR:?}"
+          test ! -e "$CERTIFIED_CLI_TARGET_DIR"
+
+      - name: Verify Fibonacci with the installed certified verifier
+        working-directory: crates/cli
+        run: |
+          output=$(cargo openvm verify stark \
+            --manifest-path tests/programs/multi/Cargo.toml \
+            --example fibonacci \
+            --proof "$CERTIFIED_PROOF_PATH" \
+            --certified 2>&1 | tee /dev/stderr)
+          grep -q "Certified verifier accepted the proof" <<<"$output"
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
   swirl-rbr-fv-tests:
     name: Generated C matches upstream
     runs-on: ubuntu-latest
