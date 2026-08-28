@@ -55,7 +55,7 @@ The wire format is a hand-written contract between the encoder and
 tests in `crates/certified-verifier/` and the Lean decoders
 (`swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`). Validated at:
 
-- `swirl-rbr-fv`
+- `swirl-rbr-fv` commit `d93c02833f70ca0d8da70feab9201693a1553178`
 - `openvm-org/stark-backend` tag `v2.0.0` (`16d60de`); this workspace's
   pin `fcaff50` was diff-checked equivalent on the `Proof`/vk type
   surface.

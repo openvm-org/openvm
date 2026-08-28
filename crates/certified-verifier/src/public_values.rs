@@ -4,8 +4,7 @@
 //! as `proof.public_values: Vec<Vec<SC::F>>`. The Lean wire treats
 //! public values as a separate blob keyed by an already-parsed vk, so
 //! the encoder takes the `Vec<Vec<SC::F>>` directly and emits the
-//! `airCount` and per-AIR vector lengths exactly as the decoder
-//! expects.
+//! `airCount` and each actual per-AIR vector length.
 
 use std::io::{Error, ErrorKind, Result, Write};
 
@@ -16,12 +15,13 @@ use super::{
     primitives::{write_length_prefix, write_usize_as_u32},
 };
 
-/// Encode per-AIR public values after validating their shape against the key.
+/// Encode per-AIR public values after validating their wire shape against the key.
 ///
-/// The encoder cross-checks the `public_values` shape against the
-/// supplied `vk`: it errors with `InvalidData` if `public_values.len()`
-/// does not match `vk.airCount`, or if any per-AIR length does not
-/// match `vk.publicValueCount air`.
+/// The encoder errors with `InvalidData` if `public_values.len()` does not
+/// match `vk.airCount`, or if any per-AIR length is neither zero nor
+/// `vk.publicValueCount air`. Proof-shape verification correlates each row
+/// with trace presence; zero-arity present and absent AIRs both encode an
+/// empty row.
 pub fn write_public_values<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vk: &MultiStarkVerifyingKey<SC>,
@@ -42,17 +42,17 @@ pub fn write_public_values<SC: EncodableConfig, W: Write>(
     write_length_prefix(writer, air_count)?;
     for (air_idx, pv) in public_values.iter().enumerate() {
         let expected = vk.inner.per_air[air_idx].params.num_public_values;
-        if pv.len() != expected {
+        if !pv.is_empty() && pv.len() != expected {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 format!(
-                    "wire-format: public_values[{air_idx}].len() = {} but \
+                    "wire-format: public_values[{air_idx}].len() = {}; expected 0 or \
                      vk.publicValueCount = {expected}",
                     pv.len()
                 ),
             ));
         }
-        write_usize_as_u32(writer, expected)?;
+        write_usize_as_u32(writer, pv.len())?;
         for value in pv {
             SC::encode_base_field(value, writer)?;
         }

@@ -267,6 +267,35 @@ fn tampered_public_values() {
     );
 }
 
+#[test]
+fn noncanonical_public_value_row_lengths_are_rejected() {
+    let fixture = fresh_fixture();
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let declared_arity = fixture.vk.inner.per_air[0].params.num_public_values;
+    assert!(
+        declared_arity > 1,
+        "fixture must expose an intermediate row length"
+    );
+    let row_length_offset = HEADER_LEN + 4; // Skip the public-values AIR count.
+
+    for invalid_length in [1usize, declared_arity + 1] {
+        let mut malformed = pv_bytes.clone();
+        malformed[row_length_offset..row_length_offset + 4]
+            .copy_from_slice(&(invalid_length as u32).to_le_bytes());
+        let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &malformed));
+        assert_eq!(
+            outcome.exit_code, 13,
+            "row length {invalid_length} should fail decoding; stderr={:?}",
+            outcome.stderr
+        );
+        assert!(
+            outcome.stderr.contains("pv-air-len"),
+            "row length {invalid_length} should report pv-air-len; stderr={:?}",
+            outcome.stderr
+        );
+    }
+}
+
 // =====================================================================
 // Empty body -> unexpectedEnd (exit 12) for proof and vk; pv lands
 // on `pv-air-count` mismatch (or unexpectedEnd if the body is too
