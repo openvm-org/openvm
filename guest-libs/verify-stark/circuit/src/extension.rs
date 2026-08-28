@@ -50,7 +50,7 @@ fn output_raw_from_proof(proof: &VmStarkProof) -> OutputRaw {
         &vm_poseidon2_hasher(),
         &vm_pvs.program_commit,
         &vm_pvs.initial_root,
-        vm_pvs.initial_pc,
+        vm_pvs.initial_pc_idx,
     );
     let app_vm_commit =
         poseidon2_hash_slice(&vk_commit_components(verifier_pvs).into_flattened()).0;

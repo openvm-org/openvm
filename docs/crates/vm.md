@@ -343,8 +343,8 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         interface: AdapterAirContext<AB::Expr, Self::Interface>,
     );
 
-    /// Return the `from_pc` expression.
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
+    /// Return the `from_pc_idx` expression.
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var;
 }
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
@@ -352,12 +352,12 @@ where
     AB: AirBuilder,
     I: VmAdapterInterface<AB::Expr>,
 {
-    /// Returns `(to_pc, interface)`.
+    /// Returns `(to_pc_idx, interface)`.
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
 
     /// The offset the opcodes by this chip start from.
@@ -379,8 +379,8 @@ where
 }
 
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
-    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<T>,
+    /// Leave as `None` to allow the adapter to decide the `to_pc_idx` automatically.
+    pub to_pc_idx: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
