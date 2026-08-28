@@ -30,7 +30,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # TODO: Replace this commit with a swirl-rbr-fv release tag once one is available.
-  SWIRL_RBR_FV_REV: d93c02833f70ca0d8da70feab9201693a1553178
+  SWIRL_RBR_FV_REV: 0671add31e76b6f52889d32b17b65da258e5ea56
 
 jobs:
   openvm-tests:
