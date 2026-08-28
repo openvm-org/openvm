@@ -712,6 +712,7 @@ mod tests {
         let widths = vec![1; num_airs];
         let interactions = vec![0; num_airs];
         let need_rot = vec![false; num_airs];
+        let constraint_eval_buffers = vec![0; num_airs];
 
         let ctx = MeteredCtx::new(
             MeteredCtxInputs {
@@ -724,6 +725,7 @@ mod tests {
                 widths: &widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
+                constraint_eval_buffers: &constraint_eval_buffers,
                 segmentation_limits: SegmentationLimits {
                     max_trace_height_bits: 11,
                     max_memory: DEFAULT_MAX_MEMORY,
