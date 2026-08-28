@@ -31,7 +31,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Disabled on v2.1 because the current certified verifier does not support RV64 proofs.
+  # Keep the workflow intact so it can be enabled when the RV64 verifier is available.
   openvm-tests:
+    if: ${{ vars.ENABLE_V2_1_CERTIFIED_VERIFIER == 'true' }}
     name: OpenVM SDK and CLI
     runs-on:
       - runs-on=${{ github.run_id }}-certified-verifier-openvm/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
@@ -89,6 +92,7 @@ jobs:
         run: sccache --show-stats || true
 
   installed-cli-test:
+    if: ${{ vars.ENABLE_V2_1_CERTIFIED_VERIFIER == 'true' }}
     name: Installed CLI after build target removal
     runs-on:
       - runs-on=${{ github.run_id }}-certified-verifier-install/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
@@ -157,6 +161,7 @@ jobs:
         run: sccache --show-stats || true
 
   swirl-rbr-fv-tests:
+    if: ${{ vars.ENABLE_V2_1_CERTIFIED_VERIFIER == 'true' }}
     name: Generated C matches upstream
     runs-on: ubuntu-latest
 
