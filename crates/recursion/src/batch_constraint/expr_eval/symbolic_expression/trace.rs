@@ -418,7 +418,7 @@ pub struct CachedTraceRecord {
     pub dag_commit_info: Option<DagCommitInfo<F>>,
 }
 
-pub(crate) fn build_cached_trace_record(
+pub fn build_cached_trace_record(
     child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     has_cached: bool,
 ) -> CachedTraceRecord {
@@ -649,7 +649,7 @@ pub(crate) fn build_cached_trace_record(
     skip_all,
     fields(air = "SymbolicExpressionAir")
 )]
-pub(crate) fn generate_symbolic_expr_cached_trace(
+pub fn generate_symbolic_expr_cached_trace(
     cached_trace_record: &CachedTraceRecord,
 ) -> RowMajorMatrix<F> {
     // 3 var types: main, preprocessed, public value
