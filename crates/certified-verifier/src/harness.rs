@@ -1,116 +1,50 @@
-//! Subprocess shim for the Lean-compiled verifier.
+//! In-process FFI harness for the Lean-compiled verifier.
 //!
 //! Exposes:
 //!
-//! - [`run_certified_verifier`] writes an already-framed byte stream to the verifier.
-//! - [`run_swirl_verify`] frames and writes a `(vk, proof, public values)` triple.
+//! - [`run_certified_verifier`] invokes the verifier on a `(vk, proof, public values)` triple.
 //! - [`verifier_error_from_exit_code`] — mirror of the Lean-side
 //!   `Swirl.Protocol.Noninteractive.exitCode` table.
 //!
-//! The upstream crate's `build.rs` runs `lake build swirl_verify`
-//! against the Lean sources; here the crate's `build.rs` instead
-//! compiles the vendored Lean-generated C (`csrc/`) with `leanc` and
-//! bakes the resulting exe path in.
+//! This crate's `build.rs` compiles the vendored Lean-generated C (`csrc/`)
+//! with `leanc`, archives it, and links it and the pinned Lean runtime into
+//! the Rust target. [`crate::ffi`] calls a single OpenVM-owned C adapter.
 
-use std::{
-    io::{self, Write},
-    path::PathBuf,
-    process::{Command, Stdio},
-};
+use std::{io, path::PathBuf};
 
-/// Resolve the `swirl_verify` Lean executable compiled from the vendored C
-/// sources by this crate's `build.rs`.
-pub fn swirl_verify_bin() -> PathBuf {
-    PathBuf::from(env!("OUT_DIR")).join("swirl_verify")
+/// Resolve the `swirl_dump_proof` wire-format test utility compiled from the
+/// vendored C sources by this crate's `build.rs`.
+pub fn swirl_dump_proof_bin() -> PathBuf {
+    PathBuf::from(env!("OUT_DIR")).join("swirl_dump_proof")
 }
 
-/// Spawn the Lean verifier exe, write `bytes` to its stdin, and return
-/// the exit code.
-///
-/// Returns [`io::ErrorKind::Other`] when the child exited via a signal
-/// (no numeric exit code available).
-pub fn run_certified_verifier(bytes: &[u8]) -> io::Result<i32> {
-    let bin = swirl_verify_bin();
-    let bin = bin.as_path();
-    let mut child = Command::new(bin)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()?;
-    {
-        let mut stdin = child.stdin.take().expect("child stdin piped");
-        stdin.write_all(bytes)?;
-    }
-    let status = child.wait()?;
-    status
-        .code()
-        .ok_or_else(|| io::Error::other(format!("swirl_verify terminated by signal: {status:?}")))
-}
-
-/// Outcome of an individual `swirl_verify` invocation.
+/// Outcome of an individual certified-verifier invocation.
 #[derive(Debug)]
 pub struct SwirlVerifyOutcome {
     pub exit_code: i32,
     pub stderr: String,
 }
 
-/// Frame the three blobs per `Tools/SwirlVerifyMain.lean`:
-///
-/// ```text
-/// u32 LE vk_len | vk_bytes | u32 LE proof_len | proof_bytes | u32 LE pv_len | pv_bytes
-/// ```
-fn frame_three_blobs(vk_bytes: &[u8], proof_bytes: &[u8], pv_bytes: &[u8]) -> io::Result<Vec<u8>> {
-    let total_bytes = 12 + vk_bytes.len() + proof_bytes.len() + pv_bytes.len();
-    if total_bytes >= u32::MAX as usize {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "framed input exceeds u32 range",
-        ));
-    }
-    let mut buf = Vec::with_capacity(total_bytes);
-    buf.extend_from_slice(&(vk_bytes.len() as u32).to_le_bytes());
-    buf.extend_from_slice(vk_bytes);
-    buf.extend_from_slice(&(proof_bytes.len() as u32).to_le_bytes());
-    buf.extend_from_slice(proof_bytes);
-    buf.extend_from_slice(&(pv_bytes.len() as u32).to_le_bytes());
-    buf.extend_from_slice(pv_bytes);
-    Ok(buf)
-}
-
-/// Spawn `swirl_verify`, pipe `(vk_bytes, proof_bytes, pv_bytes)` to its
-/// stdin (with the u32-LE length framing documented above), and return
-/// the exit code + captured stderr.
-pub fn run_swirl_verify(
+/// Run the linked Lean verifier on `(vk_bytes, proof_bytes, pv_bytes)` and
+/// return its exit code and rendered error.
+pub fn run_certified_verifier(
     vk_bytes: &[u8],
     proof_bytes: &[u8],
     pv_bytes: &[u8],
 ) -> io::Result<SwirlVerifyOutcome> {
-    let bin = swirl_verify_bin();
-    let framed = frame_three_blobs(vk_bytes, proof_bytes, pv_bytes)?;
-    let mut child = Command::new(bin)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    {
-        let mut stdin = child.stdin.take().expect("child stdin piped");
-        stdin.write_all(&framed)?;
-    }
-    let output = child.wait_with_output()?;
-    let exit_code = output.status.code().ok_or_else(|| {
-        io::Error::other(format!(
-            "swirl_verify terminated by signal: {:?}",
-            output.status
-        ))
-    })?;
+    let (exit_code, message) = crate::ffi::verify(vk_bytes, proof_bytes, pv_bytes)?;
     Ok(SwirlVerifyOutcome {
         exit_code,
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        stderr: if message.is_empty() {
+            String::new()
+        } else {
+            format!("swirl_verify: {message}\n")
+        },
     })
 }
 
 /// Mirror of the Lean-side `Swirl.Protocol.Noninteractive.exitCode`
-/// table, plus the `swirl_verify` driver's framing error (exit code 20).
+/// table.
 ///
 /// Keep this in sync with the doc-comment table at the top of
 /// `Tools/SwirlVerifyMain.lean`.
@@ -136,8 +70,6 @@ pub enum VerifierError {
     InvalidPrismPoint,
     /// `VerifierError.whirError`.
     WhirError,
-    /// Stdin framing error (Lean driver could not read three blobs).
-    StdinFraming,
     /// An exit code that does not appear in the documented table.
     Unknown(i32),
 }
@@ -161,7 +93,6 @@ pub fn verifier_error_from_exit_code(code: i32) -> Option<VerifierError> {
         8 => Some(VerifierError::StackedReductionError),
         9 => Some(VerifierError::InvalidPrismPoint),
         10 => Some(VerifierError::WhirError),
-        20 => Some(VerifierError::StdinFraming),
         other => Some(VerifierError::Unknown(other)),
     }
 }

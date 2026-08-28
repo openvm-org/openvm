@@ -12,17 +12,18 @@
 //!   the self-describing byte format consumed by the Lean decoders in
 //!   `swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`. The byte layout mirrors the *Lean* struct
 //!   tree, not the Rust one.
-//! - The subprocess harness ([`run_swirl_verify`], [`verifier_error_from_exit_code`]): pipes the
-//!   three length-framed blobs to the Lean-compiled `swirl_verify` executable and maps its exit
-//!   code (a mirror of `swirl-rbr-fv:Tools/SwirlVerifyMain.lean`; keep the two tables in lockstep).
+//! - The FFI harness ([`run_certified_verifier`], [`verifier_error_from_exit_code`]): passes the
+//!   three blobs to the linked Lean-compiled verifier and maps its exit code (a mirror of
+//!   `swirl-rbr-fv:Tools/SwirlVerifyMain.lean`; keep the two tables in lockstep).
 //!
-//! The verifier executable itself is Lean compiled to C: the generated C
-//! sources (24-module link closure, Lean toolchain
-//! `leanprover/lean4:v4.26.0`) are vendored under `csrc/` and compiled
-//! by this crate's `build.rs` with `leanc` (see `README.md` in this
-//! crate's directory). The resulting exe is resolved by
-//! [`swirl_verify_bin`].
+//! The verifier itself is Lean compiled to C: the generated C
+//! sources (24-module link closure, Lean toolchain `leanprover/lean4:v4.26.0`)
+//! are vendored under `csrc/`, compiled by this crate's `build.rs` with
+//! `leanc`, and linked into the Rust target. A small OpenVM-owned C adapter
+//! contains the Lean object ABI boundary and exposes one raw-buffer function
+//! to Rust.
 
+mod ffi;
 pub mod harness;
 pub mod magic;
 pub mod primitives;
@@ -32,7 +33,7 @@ pub mod symbolic;
 pub mod vk;
 
 pub use harness::{
-    run_certified_verifier, run_swirl_verify, swirl_verify_bin, verifier_error_from_exit_code,
+    run_certified_verifier, swirl_dump_proof_bin, verifier_error_from_exit_code,
     SwirlVerifyOutcome, VerifierError,
 };
 pub use magic::{MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION};
@@ -47,8 +48,8 @@ pub use vk::write_vk;
 /// Failure of a [`verify_stark_proof`] run.
 #[derive(Debug, thiserror::Error)]
 pub enum CertifiedVerifierError {
-    /// Encoding the inputs or spawning the verifier process failed; no
-    /// verdict on the proof was reached.
+    /// Encoding the inputs or invoking the verifier runtime failed; no verdict
+    /// on the proof was reached.
     #[error("failed to run the certified verifier: {0}")]
     Io(#[from] std::io::Error),
     /// The verifier ran and rejected the proof.
@@ -62,10 +63,9 @@ pub enum CertifiedVerifierError {
     },
 }
 
-/// Verify `(vk, proof)` with the Lean-compiled `swirl_verify`
-/// executable: encode the vk, the proof body, and the proof's per-AIR
-/// public values to the Lean wire format, pipe them to the subprocess,
-/// and map its exit code.
+/// Verify `(vk, proof)` with the linked Lean-compiled verifier: encode the vk,
+/// the proof body, and the proof's per-AIR public values to the Lean wire
+/// format, invoke it through FFI, and map its exit code.
 ///
 /// `Ok(())` means the formally verified verifier accepted the proof.
 pub fn verify_stark_proof<SC: EncodableConfig>(
@@ -82,7 +82,7 @@ where
     let mut pv_bytes = Vec::new();
     write_public_values(&mut pv_bytes, vk, &proof.public_values)?;
 
-    let outcome = run_swirl_verify(&vk_bytes, &proof_bytes, &pv_bytes)?;
+    let outcome = run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes)?;
     match verifier_error_from_exit_code(outcome.exit_code) {
         None => Ok(()),
         Some(error) => Err(CertifiedVerifierError::Rejected {

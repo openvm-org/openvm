@@ -842,7 +842,7 @@ where
     }
 
     /// Verifies an aggregate STARK proof with the certified Swirl verifier extracted from its Lean
-    /// formalization (run as a subprocess; see the [`certified_verifier`] module docs).
+    /// formalization (linked through FFI; see the [`certified_verifier`] module docs).
     ///
     /// The Lean formalization only covers the canonical riscv32 pipeline, so this fails if
     /// `verified_baseline` — the [`VerificationBaseline`] the proof is verified against by

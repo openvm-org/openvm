@@ -1,7 +1,7 @@
 // Build script for the vendored Lean Swirl verifier (see README.md).
-// Compiles the Lean-generated C sources under csrc/ into the
-// `swirl_verify` and `swirl_dump_proof` executables using `leanc` from
-// the pinned Lean toolchain. The dump tool is placed next to the verifier.
+// Compiles the Lean-generated C sources under csrc/ into a static library
+// linked into this crate, using `leanc` from the pinned Lean toolchain.
+// `swirl_dump_proof` is an executable, as it is a wire-format test utility.
 
 use std::{
     env,
@@ -18,20 +18,27 @@ fn main() {
     println!("cargo:rerun-if-env-changed=ELAN_HOME");
     println!("cargo:rerun-if-env-changed=PATH");
     println!("cargo:rerun-if-changed=csrc");
+    println!("cargo:rerun-if-changed=src/ffi");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let csrc = manifest_dir.join("csrc");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     ensure_pinned_leanc();
+    let lean_prefix = lean_prefix();
 
     let mut sources = Vec::new();
     collect_c_files(&csrc, &mut sources);
     assert!(!sources.is_empty(), "no C sources under {}", csrc.display());
 
-    // Compile each Lean-generated C file. Flags mirror what lake used to
-    // build the verifier in-repo (minus -DLEAN_EXPORTING / -fvisibility,
-    // which only matter for shared-library builds).
-    let objects: Vec<PathBuf> = std::thread::scope(|scope| {
+    // Compile the verifier's Lean-generated C link closure, excluding both
+    // executable entry points. Flags mirror what lake used to build the
+    // verifier in-repo (minus -DLEAN_EXPORTING / -fvisibility, which only
+    // matter for shared-library builds).
+    sources.retain(|path| {
+        path.file_name()
+            .is_none_or(|name| name != "SwirlVerifyMain.c")
+    });
+    let mut objects: Vec<PathBuf> = std::thread::scope(|scope| {
         let jobs = std::thread::available_parallelism().map_or(4, |n| n.get());
         let mut handles = Vec::new();
         for chunk in sources.chunks(sources.len().div_ceil(jobs)) {
@@ -65,14 +72,50 @@ fn main() {
             .collect()
     });
 
-    let bin = out_dir.join("swirl_verify");
-    let mut link_args: Vec<&str> = vec!["-o", bin.to_str().unwrap()];
-    let obj_strs: Vec<String> = objects
-        .iter()
-        .map(|o| o.to_string_lossy().into_owned())
-        .collect();
-    link_args.extend(obj_strs.iter().map(String::as_str));
-    run(leanc(&link_args));
+    let ffi_src = manifest_dir.join("src/ffi/swirl_verify.c");
+    let ffi_obj = out_dir.join("openvm_swirl_verify_ffi.o");
+    run(leanc(&[
+        "-c",
+        "-O3",
+        "-DNDEBUG",
+        "-fwrapv",
+        "-o",
+        ffi_obj.to_str().unwrap(),
+        ffi_src.to_str().unwrap(),
+    ]));
+    objects.push(ffi_obj);
+
+    let verifier_lib = out_dir.join("libopenvm_swirl_verifier.a");
+    let mut archive = Command::new(lean_prefix.join("bin/llvm-ar"));
+    archive.args(["crs", verifier_lib.to_str().unwrap()]);
+    archive.args(&objects);
+    run(archive);
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=openvm_swirl_verifier");
+
+    // These are the static libraries `leanc` uses for an executable link.
+    // Most are discarded by the final link, but listing the complete pinned
+    // toolchain set keeps this in step with Lean's generated-code ABI.
+    println!(
+        "cargo:rustc-link-search=native={}",
+        lean_prefix.join("lib/lean").display()
+    );
+    for lib in ["leancpp", "Init", "Std", "Lean", "leanrt", "Lake"] {
+        println!("cargo:rustc-link-lib=static={lib}");
+    }
+    println!(
+        "cargo:rustc-link-search=native={}",
+        lean_prefix.join("lib").display()
+    );
+    for lib in ["gmp", "uv"] {
+        println!("cargo:rustc-link-lib=static={lib}");
+    }
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        println!("cargo:rustc-link-lib=dylib=c++");
+    } else if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+    }
 
     let dump_main = csrc.join("Tools/SwirlDumpProof.c");
     let dump_obj = out_dir.join("dump_Tools_SwirlDumpProof.o");
@@ -121,6 +164,19 @@ fn ensure_pinned_leanc() {
         "failed to run `leanc` from Lean toolchain {LEAN_TOOLCHAIN}: {}",
         String::from_utf8_lossy(&output.stderr).trim()
     );
+}
+
+fn lean_prefix() -> PathBuf {
+    let output = Command::new("elan")
+        .args(["run", LEAN_TOOLCHAIN, "lean", "--print-prefix"])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to query Lean toolchain prefix: {e}"));
+    assert!(
+        output.status.success(),
+        "failed to query Lean toolchain prefix: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
 }
 
 fn collect_c_files(dir: &Path, out: &mut Vec<PathBuf>) {
