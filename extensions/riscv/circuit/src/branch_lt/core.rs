@@ -79,7 +79,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
@@ -160,12 +160,17 @@ where
             })
             + AB::Expr::from_usize(self.offset);
 
-        let to_pc = from_pc
-            + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_u32(DEFAULT_PC_STEP);
+        // `imm` is a byte offset (a multiple of DEFAULT_PC_STEP, possibly negative as a field
+        // element); pc values on the buses are pc indices, so the byte delta is scaled down by
+        // DEFAULT_PC_STEP.
+        let pc_step_inv = AB::F::from_u32(DEFAULT_PC_STEP).inverse();
+        let to_pc_idx = from_pc_idx
+            + (cols.cmp_result * cols.imm
+                + not(cols.cmp_result) * AB::Expr::from_u32(DEFAULT_PC_STEP))
+                * pc_step_inv;
 
         AdapterAirContext {
-            to_pc: Some(to_pc),
+            to_pc_idx: Some(to_pc_idx),
             reads: [cols.a.map(Into::into), cols.b.map(Into::into)].into(),
             writes: Default::default(),
             instruction: ImmInstruction {

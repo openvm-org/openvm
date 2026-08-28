@@ -17,7 +17,6 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
     riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode,
 };
@@ -429,7 +428,7 @@ where
         // Evaluate the execution interaction. Because a single opcode spans many
         // rows, we only execute this on the last one.
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 AB::Expr::from_usize(DeferralOpcode::OUTPUT.global_opcode_usize()),
                 [
                     local.rd_ptr.into(),
@@ -441,7 +440,7 @@ where
                 local.from_state,
                 (local.section_idx * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS))
                     + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + 2),
-                (DEFAULT_PC_STEP, None),
+                (1, None),
             )
             .eval(builder, local.is_last);
     }

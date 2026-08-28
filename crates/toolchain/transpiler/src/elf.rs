@@ -202,7 +202,7 @@ impl Elf {
         let mut base_address = u32::MAX;
         // Track the end of the last executable segment to detect non-contiguous executable
         // segments.
-        let mut last_exec_end: Option<u32> = None;
+        let mut last_exec_end: Option<u64> = None;
 
         // Collect and sort PT_LOAD segments by virtual address to ensure executable
         // segment contiguity checks are correct regardless of ELF header ordering.
@@ -231,7 +231,7 @@ impl Elf {
             // Track executable segments and reject non-contiguous ones.
             if (segment.p_flags & PF_X) != 0 {
                 if let Some(prev_end) = last_exec_end {
-                    if vaddr != prev_end {
+                    if u64::from(vaddr) != prev_end {
                         bail!(
                             "Non-contiguous executable segments are not supported: \
                              previous segment ended at 0x{prev_end:08x}, \
@@ -243,8 +243,8 @@ impl Elf {
                     base_address = vaddr;
                 }
                 last_exec_end = Some(
-                    vaddr
-                        .checked_add(mem_size)
+                    u64::from(vaddr)
+                        .checked_add(u64::from(mem_size))
                         .ok_or_else(|| eyre::eyre!("executable segment end address overflow"))?,
                 );
             }
@@ -254,14 +254,17 @@ impl Elf {
 
             // Read the segment and decode each word as an instruction.
             for i in (0..mem_size).step_by(ELF_WORD_SIZE) {
-                let addr = vaddr
-                    .checked_add(i)
+                let addr_u64 = u64::from(vaddr)
+                    .checked_add(u64::from(i))
                     .ok_or_else(|| eyre::eyre!("vaddr overflow"))?;
-                if u64::from(addr) >= max_mem {
+                if addr_u64 >= max_mem {
                     bail!(
-                        "address [0x{addr:08x}] exceeds maximum address for guest programs [0x{max_mem:08x}]"
+                        "address [0x{addr_u64:08x}] exceeds maximum address for guest programs [0x{max_mem:08x}]"
                     );
-                } else if addr > MAX_ALLOWED_PC && (segment.p_flags & PF_X) != 0 {
+                }
+                let addr = u32::try_from(addr_u64)
+                    .map_err(|_| eyre::eyre!("address exceeds the u32 guest address space"))?;
+                if addr > MAX_ALLOWED_PC && (segment.p_flags & PF_X) != 0 {
                     bail!("instruction address [0x{addr:08x}] exceeds maximum PC [0x{MAX_ALLOWED_PC:08x}]");
                 }
 
@@ -286,14 +289,15 @@ impl Elf {
             }
         }
 
-        let instruction_bytes = u32::try_from(instructions.len())?
-            .checked_mul(ELF_WORD_SIZE as u32)
+        let instruction_bytes = u64::try_from(instructions.len())?
+            .checked_mul(ELF_WORD_SIZE as u64)
             .context("instruction byte length overflow")?;
-        let program_end = base_address
+        let program_end = u64::from(base_address)
             .checked_add(instruction_bytes)
             .context("program end address overflow")?;
         cfg_block_starts.retain(|pc| {
-            pc.is_multiple_of(ELF_WORD_SIZE as u32) && (base_address..program_end).contains(pc)
+            pc.is_multiple_of(ELF_WORD_SIZE as u32)
+                && (u64::from(base_address)..program_end).contains(&u64::from(*pc))
         });
 
         Ok(Elf::new(
@@ -311,6 +315,50 @@ impl Elf {
 mod tests {
     use super::*;
 
+    fn put_u16(bytes: &mut [u8], offset: usize, value: u16) {
+        bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn put_u64(bytes: &mut [u8], offset: usize, value: u64) {
+        bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn single_instruction_elf(vaddr: u32, instruction: u32) -> Vec<u8> {
+        const ELF_HEADER_SIZE: usize = 64;
+        const PROGRAM_HEADER_SIZE: u16 = 56;
+        const SEGMENT_OFFSET: usize = 0x1000;
+
+        let mut bytes = vec![0; SEGMENT_OFFSET + ELF_WORD_SIZE];
+        bytes[..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = 2; // ELFCLASS64
+        bytes[5] = 1; // ELFDATA2LSB
+        bytes[6] = 1; // EV_CURRENT
+        put_u16(&mut bytes, 16, ET_EXEC);
+        put_u16(&mut bytes, 18, EM_RISCV);
+        put_u32(&mut bytes, 20, 1);
+        put_u64(&mut bytes, 24, u64::from(vaddr));
+        put_u64(&mut bytes, 32, ELF_HEADER_SIZE as u64);
+        put_u16(&mut bytes, 52, ELF_HEADER_SIZE as u16);
+        put_u16(&mut bytes, 54, PROGRAM_HEADER_SIZE);
+        put_u16(&mut bytes, 56, 1);
+
+        let ph = ELF_HEADER_SIZE;
+        put_u32(&mut bytes, ph, PT_LOAD);
+        put_u32(&mut bytes, ph + 4, elf::abi::PF_R | PF_X);
+        put_u64(&mut bytes, ph + 8, SEGMENT_OFFSET as u64);
+        put_u64(&mut bytes, ph + 16, u64::from(vaddr));
+        put_u64(&mut bytes, ph + 24, u64::from(vaddr));
+        put_u64(&mut bytes, ph + 32, ELF_WORD_SIZE as u64);
+        put_u64(&mut bytes, ph + 40, ELF_WORD_SIZE as u64);
+        put_u64(&mut bytes, ph + 48, ELF_WORD_SIZE as u64);
+        put_u32(&mut bytes, SEGMENT_OFFSET, instruction);
+        bytes
+    }
+
     #[test]
     fn falls_back_to_function_symbols_without_llvm_map() {
         let bytes = include_bytes!("../../../sdk/programs/examples/fibonacci.elf");
@@ -319,5 +367,17 @@ mod tests {
         assert!(llvm_bb_addr_map::block_starts(&elf).is_empty());
         assert_eq!(cfg_block_starts(&elf), function_symbol_block_starts(&elf));
         assert!(!cfg_block_starts(&elf).is_empty());
+    }
+
+    #[test]
+    fn decodes_instruction_at_maximum_pc() {
+        let instruction = 0x0000_0013;
+        let bytes = single_instruction_elf(MAX_ALLOWED_PC, instruction);
+
+        let elf = Elf::decode(&bytes, 1u64 << 32).unwrap();
+
+        assert_eq!(elf.pc_base, MAX_ALLOWED_PC);
+        assert_eq!(elf.pc_start, MAX_ALLOWED_PC);
+        assert_eq!(elf.instructions, vec![instruction]);
     }
 }

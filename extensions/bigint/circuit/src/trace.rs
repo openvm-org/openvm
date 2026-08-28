@@ -17,7 +17,7 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::DEFAULT_PC_STEP,
+    program::{pc_to_idx, DEFAULT_PC_STEP},
     riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode, VmOpcode,
 };
@@ -25,7 +25,10 @@ use openvm_riscv_adapters::{
     VecHeapAdapterCols, VecHeapBranchU16AdapterCols, VecHeapU16AdapterCols,
 };
 use openvm_riscv_circuit::{
-    adapters::{add_block_index_range_checks, ptr_to_u16_limbs, U16_BITS},
+    adapters::{
+        add_block_index_range_checks, checked_branch_target, ptr_to_u16_limbs, taken_branch_pc,
+        U16_BITS,
+    },
     AddSubCoreCols, BitwiseLogicCoreCols, BranchEqualCoreCols, BranchLessThanCoreCols,
     LessThanCoreCols, MultiplicationCoreCols, ShiftLogicalCoreCols, ShiftRightArithmeticCoreCols,
 };
@@ -234,7 +237,7 @@ fn replay_alu_u16<F: PrimeField32, M>(
     adapter_row.rd_ptr = F::from_u32(rd_ptr);
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
     Ok(AluReplay {
         inputs,
@@ -325,7 +328,7 @@ fn replay_alu_bytes<F: PrimeField32, M>(
     adapter_row.rd_ptr = F::from_u32(rd_ptr);
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
 
     Ok(AluReplay {
         inputs,
@@ -371,7 +374,8 @@ fn replay_branch<F: PrimeField32, M>(
     let decision = branch(inputs);
     let taken = decision.taken;
     let next_pc = if taken {
-        from_pc.wrapping_add_signed(instruction.c.as_i32())
+        checked_branch_target(from_pc, instruction.c.as_i32())?;
+        taken_branch_pc(from_pc, instruction.c.as_i32())
     } else {
         from_pc.wrapping_add(DEFAULT_PC_STEP)
     };
@@ -394,7 +398,7 @@ fn replay_branch<F: PrimeField32, M>(
     adapter_row.rs_val = rs_vals.map(|pointer| ptr_to_u16_limbs(pointer).map(F::from_u16));
     adapter_row.rs_ptr = rs_ptrs.map(F::from_u32);
     adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
-    adapter_row.from_state.pc = F::from_u32(from_pc);
+    adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
     Ok(BranchReplay {
         inputs,
         taken,

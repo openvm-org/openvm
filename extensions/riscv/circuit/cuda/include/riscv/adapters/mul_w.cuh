@@ -89,6 +89,6 @@ struct MultWAdapter {
         COL_WRITE_VALUE(row, MultWAdapterCols, rs1_ptr, record.rs1_ptr);
         COL_WRITE_VALUE(row, MultWAdapterCols, rd_ptr, record.rd_ptr);
         COL_WRITE_VALUE(row, MultWAdapterCols, from_state.timestamp, record.from_timestamp);
-        COL_WRITE_VALUE(row, MultWAdapterCols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, MultWAdapterCols, from_state.pc, ::program::pc_to_idx(record.from_pc));
     }
 };

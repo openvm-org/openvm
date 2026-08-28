@@ -7,7 +7,7 @@ pub struct PhantomDiscriminant(pub u16);
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
 pub enum SysPhantom {
-    /// Does nothing at constraint and runtime level besides advance pc by
+    /// Does nothing besides advance the circuit pc by one index and the runtime byte pc by
     /// [DEFAULT_PC_STEP](super::program::DEFAULT_PC_STEP).
     Nop = 0,
     /// Causes the runtime to panic, on host machine and prints a backtrace.

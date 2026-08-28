@@ -43,11 +43,6 @@ __global__ void auipc_replay_tracegen(
     }
     auto const &from = *transition.from;
     auto const &to = *transition.to;
-    constexpr uint32_t MAX_PC = (1u << PC_BITS) - 1;
-    if (from.pc > MAX_PC - DEFAULT_PC_STEP) {
-        preflight_set_error(error, 192);
-        return;
-    }
     auto const &instruction = *transition.instruction;
     uint32_t rd_ptr = instruction.words[1];
     uint32_t imm = instruction.words[3];
@@ -78,7 +73,7 @@ __global__ void auipc_replay_tracegen(
     replay_u16_block(write.value, logged_data);
     uint64_t expected_result = run_auipc(from.pc, imm);
     uint64_t expected_high = expected_result >> 32;
-    if (expected_high != 0 && expected_high != UINT32_MAX) {
+    if (expected_high != 0 && expected_high != 1 && expected_high != UINT32_MAX) {
         preflight_set_error(error, 199);
         return;
     }

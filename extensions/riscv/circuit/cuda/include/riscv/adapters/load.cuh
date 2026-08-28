@@ -53,7 +53,7 @@ struct LoadAdapter {
         uint16_t imm,
         bool imm_sign
     ) {
-        COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, rs1_ptr, rs1_ptr);
 
@@ -157,7 +157,7 @@ struct LoadByteAdapter {
         uint16_t imm,
         bool imm_sign
     ) {
-        COL_WRITE_VALUE(row, LoadByteAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, LoadByteAdapterCols, from_state.pc, ::program::pc_to_idx(from_pc));
         COL_WRITE_VALUE(
             row, LoadByteAdapterCols, from_state.timestamp, from_timestamp
         );

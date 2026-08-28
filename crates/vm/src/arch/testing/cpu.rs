@@ -9,7 +9,11 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
-use openvm_instructions::{instruction::Instruction, program::Program, riscv::REGISTER_NUM_LIMBS};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP, MAX_ALLOWED_PC},
+    riscv::REGISTER_NUM_LIMBS,
+};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -77,7 +81,7 @@ where
     ) where
         E: Executor<F> + Clone,
     {
-        let initial_pc = self.next_elem_size_u32();
+        let initial_pc = self.next_pc();
         self.execute_with_pc(executor, preflight, instruction, initial_pc);
     }
 
@@ -172,16 +176,16 @@ where
         to_byte_ptr_bits(self.memory.controller.memory_config().pointer_max_bits)
     }
 
-    fn last_to_pc(&self) -> F {
+    fn last_to_pc(&self) -> u32 {
         self.execution.last_to_pc()
     }
 
-    fn last_from_pc(&self) -> F {
+    fn last_from_pc(&self) -> u32 {
         self.execution.last_from_pc()
     }
 
-    fn execution_final_state(&self) -> ExecutionState<F> {
-        self.execution.records.last().unwrap().final_state
+    fn execution_final_state(&self) -> ExecutionState<u32> {
+        self.execution.last_states.unwrap().1
     }
 
     fn streams_mut(&mut self) -> &mut Streams {
@@ -257,8 +261,10 @@ impl<F: VmField> VmChipTestBuilder<F> {
         }
     }
 
-    fn next_elem_size_u32(&mut self) -> u32 {
-        (self.internal_rng.next_u32() % (1 << (F::bits() - 2))) & !3
+    /// Samples a DEFAULT_PC_STEP-aligned byte pc over the full 32-bit range, excluding the
+    /// last instruction slot (where the fallthrough pc would overflow).
+    fn next_pc(&mut self) -> u32 {
+        (self.internal_rng.next_u32() & !3).min(MAX_ALLOWED_PC - DEFAULT_PC_STEP)
     }
 
     fn write_heap<const NUM_LIMBS: usize>(

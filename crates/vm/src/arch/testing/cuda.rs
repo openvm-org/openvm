@@ -31,11 +31,11 @@ use openvm_cuda_common::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    program::{Program, PC_BITS},
+    program::{Program, DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     riscv::REGISTER_NUM_LIMBS,
 };
 #[cfg(feature = "rvr")]
-use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode};
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -230,7 +230,9 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) where
         E: Executor<F> + Clone,
     {
-        let initial_pc = self.rng.random_range(0..(1 << PC_BITS));
+        // A DEFAULT_PC_STEP-aligned byte pc over the full 32-bit range, excluding the last
+        // instruction slot (where the fallthrough pc would overflow).
+        let initial_pc = (self.rng.random::<u32>() & !3).min(MAX_ALLOWED_PC - DEFAULT_PC_STEP);
         self.execute_with_pc(executor, preflight, instruction, initial_pc);
     }
 
@@ -314,16 +316,17 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         to_byte_ptr_bits(self.memory.config.pointer_max_bits)
     }
 
-    fn last_to_pc(&self) -> F {
+    fn last_to_pc(&self) -> u32 {
         self.execution.0.last_to_pc()
     }
 
-    fn last_from_pc(&self) -> F {
+    fn last_from_pc(&self) -> u32 {
         self.execution.0.last_from_pc()
     }
 
-    fn execution_final_state(&self) -> ExecutionState<F> {
-        self.execution.0.records.last().unwrap().final_state
+    fn execution_final_state(&self) -> ExecutionState<u32> {
+        // Byte-pc state; the records themselves hold pc indices.
+        self.execution.0.last_states.unwrap().1
     }
 
     fn streams_mut(&mut self) -> &mut Streams {

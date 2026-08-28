@@ -68,15 +68,12 @@ __global__ void jal_lui_replay_tracegen(
     uint32_t rd_low;
     uint32_t expected_pc;
     if (is_jal) {
-        constexpr uint32_t MAX_PC = (1u << PC_BITS) - 1;
-        if (from.pc > MAX_PC - ::program::DEFAULT_PC_STEP) {
+        if (!replay_branch_target_in_bounds(from.pc, encoded_imm)) {
             preflight_set_error(error, 189);
             return;
         }
         rd_low = from.pc + ::program::DEFAULT_PC_STEP;
-        Fp target(from.pc);
-        target += Fp(encoded_imm);
-        expected_pc = target.asUInt32();
+        expected_pc = replay_taken_branch_pc(from.pc, encoded_imm);
     } else {
         if (encoded_imm >= (1u << LUI_IMM_BITS)) {
             preflight_set_error(error, 189);
@@ -90,12 +87,13 @@ __global__ void jal_lui_replay_tracegen(
         return;
     }
 
+    uint64_t rd = is_jal ? uint64_t(from.pc) + ::program::DEFAULT_PC_STEP : rd_low;
     uint16_t sign = !is_jal && (rd_low >> 31) ? UINT16_MAX : 0;
     uint16_t expected_data[BLOCK_FE_WIDTH] = {
-        static_cast<uint16_t>(rd_low),
-        static_cast<uint16_t>(rd_low >> U16_BITS),
-        sign,
-        sign,
+        static_cast<uint16_t>(rd),
+        static_cast<uint16_t>(rd >> U16_BITS),
+        is_jal ? static_cast<uint16_t>(rd >> (2 * U16_BITS)) : sign,
+        is_jal ? static_cast<uint16_t>(0) : sign,
     };
     ReplayPreviousValue previous = {};
     if (needs_write) {
