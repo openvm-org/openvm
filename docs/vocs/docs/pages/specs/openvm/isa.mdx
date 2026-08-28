@@ -117,7 +117,7 @@ pc_idx = pc / DEFAULT_PC_STEP
 ### Data Memory
 
 Data memory is a random access memory (RAM) which supports read and write operations. Memory is comprised of addressable
-cells which represent a single field element indexed by **address space** and **cell pointer**.
+cells indexed by **address space** and **cell pointer**. The number of bits stored in a cell depends on the address space.
 The number of supported address spaces, the cell layout, and the size of each address space are configurable.
 
 - Valid address spaces not used for immediates lie in `[1, 1 + 2^addr_space_height)` for configuration constant `addr_space_height`.

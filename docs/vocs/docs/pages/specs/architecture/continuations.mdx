@@ -170,8 +170,8 @@ There are 2 aggregation subcircuit types: **inner** and **root**. Each type has 
 
 App public values are the public values exposed by the app layer. They are propagated through all aggregation layers.
 
-- `initial_pc_idx: F` — circuit PC index at the start of the program/segment
-- `final_pc_idx: F` — circuit PC index at the end of the program/segment
+- `initial_pc_idx: F` — circuit program counter index at the start of the program/segment
+- `final_pc_idx: F` — circuit program counter index at the end of the program/segment
 - `exit_code: F` — exit code of the program/segment
 - `is_terminate: F` — boolean flag indicating whether this segment terminated the program
 - `initial_root: Digest` — Merkle root of the initial memory state
