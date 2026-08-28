@@ -120,8 +120,7 @@ jobs:
           else
             echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
           fi
-          # SDK proving tests are memory-intensive; bound concurrency to avoid contention.
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --profile heavy --features "$FEATURES"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
 
       - name: Build openvm-sdk examples
         if: ${{ matrix.mode == 'default' }}

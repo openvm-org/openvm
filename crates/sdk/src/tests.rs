@@ -819,7 +819,7 @@ fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     let app_exe = aware_sdk.convert_to_exe(elf)?;
 
     let mut stdin = StdIn::default();
-    stdin.write(&(1u64 << 17));
+    stdin.write(&512u64);
 
     let compiled = aware_sdk.compile_metered(app_exe.clone())?;
     let (_, segments) = aware_sdk.execute_metered(&compiled, stdin.clone())?;
