@@ -1,4 +1,4 @@
-//! Crate-local wire-format round-trip tests against the Lean decoder.
+//! Wire-format round-trip tests against the Lean decoder.
 //!
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision, encodes

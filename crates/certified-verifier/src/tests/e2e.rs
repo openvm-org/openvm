@@ -1,4 +1,4 @@
-//! Crate-local end-to-end tests for the Lean monomorphic verifier.
+//! End-to-end tests for the Lean monomorphic verifier.
 //!
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision (the same fixture
