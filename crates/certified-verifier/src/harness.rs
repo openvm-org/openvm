@@ -1,6 +1,6 @@
 //! In-process FFI harness for the Lean-compiled verifier.
 //!
-//! Exposes:
+//! Provides crate-internal helpers:
 //!
 //! - [`run_certified_verifier`] invokes the verifier on a `(vk, proof, public values)` triple.
 //! - [`verifier_error_from_exit_code`] — mirror of the Lean-side

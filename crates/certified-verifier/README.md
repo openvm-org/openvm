@@ -62,5 +62,5 @@ tests in `crates/certified-verifier/` and the Lean decoders
 
 If either side moves (Lean structs, wire version, stark-backend proof
 shape, the Lean toolchain, or the exit-code table in
-`swirl-rbr-fv:Tools/SwirlVerifyMain.lean`), the encoder and the vendored
-C sources and vendored tests must be refreshed together.
+`swirl-rbr-fv:Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`),
+the encoder and the vendored C sources and vendored tests must be refreshed together.

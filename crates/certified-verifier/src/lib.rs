@@ -12,8 +12,9 @@
 //!   format consumed by the Lean decoders in `swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`.
 //!   The byte layout mirrors the *Lean* struct tree, not the Rust one.
 //! - An internal FFI harness passes the three blobs to the linked Lean-compiled verifier and maps
-//!   its exit code (a mirror of `swirl-rbr-fv:Tools/SwirlVerifyMain.lean`; keep the two tables in
-//!   lockstep).
+//!   its exit code (a mirror of
+//!   `swirl-rbr-fv:Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`; keep the two
+//!   tables in lockstep).
 //!
 //! The verifier itself is Lean compiled to C: the generated C
 //! sources (24-module link closure, Lean toolchain `leanprover/lean4:v4.26.0`)
@@ -46,7 +47,7 @@ mod tests;
 /// Rejection reported by the certified Lean verifier.
 ///
 /// This mirrors the Lean-side `Swirl.Protocol.Noninteractive.exitCode` table. Keep it in sync with
-/// `Tools/SwirlVerifyMain.lean`.
+/// `Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VerifierError {
     /// `MonoError.parse _` — Wire.Raw parser rejected the bytes.
