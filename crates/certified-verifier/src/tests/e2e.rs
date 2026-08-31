@@ -14,9 +14,13 @@
 //! 3. `tampered_batch_constraint_proof_rejected` — a single-byte mutation inside the encoded GKR /
 //!    Batch boundary claim must survive wire decoding and be rejected by the algebraic verifier
 //!    prefix.
+//! 4. Canonically encoded mutations in the proof shape, transcript preamble, batch constraints,
+//!    stacked reduction, and WHIR opening data must all be rejected at the expected verification
+//!    stage.
 
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
+    p3_field::PrimeCharacteristicRing,
     proof::Proof,
     test_utils::{FibFixture, TestFixture},
     verifier::{
@@ -26,7 +30,7 @@ use openvm_stark_backend::{
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge,
+    BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge, EF, F,
 };
 
 use crate::{
@@ -110,6 +114,28 @@ fn locate_gkr_boundary_claim_byte(proof_bytes: &[u8]) -> usize {
     offset = skip_trace_vdata(proof_bytes, offset);
     offset += 4; // gkrProof.logupPowWitness
     offset // gkrProof.q0Claim coefficient 0, low byte
+}
+
+fn assert_certified_verifier_rejects(
+    vk: &MultiStarkVerifyingKey<SC>,
+    proof: &Proof<SC>,
+    expected_error: VerifierError,
+    case: &str,
+) {
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(vk, proof);
+    let outcome =
+        run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes).expect("invoke verifier");
+    assert_eq!(
+        verifier_error_from_exit_code(outcome.exit_code),
+        Some(expected_error),
+        "certified verifier returned the wrong result for {case}; exit={}; stderr={:?}",
+        outcome.exit_code,
+        outcome.stderr
+    );
+    assert!(
+        !outcome.stderr.is_empty(),
+        "certified verifier rejection for {case} should render the Lean error"
+    );
 }
 
 // =====================================================================
@@ -248,6 +274,84 @@ fn tampered_batch_constraint_proof_rejected() {
     assert!(
         !outcome.stderr.is_empty(),
         "Lean rejection should include the rendered MonoError"
+    );
+}
+
+#[test]
+fn truncated_final_polynomial_rejected() {
+    let fixture = generate_fib_proof();
+    // This mutation remains canonically encodable but violates the proof shape before any
+    // algebraic verification takes place.
+    let mut invalid_shape = fixture.proof.clone();
+    invalid_shape.whir_proof.final_poly.pop();
+    assert_certified_verifier_rejects(
+        &fixture.vk,
+        &invalid_shape,
+        VerifierError::ProofShapeError,
+        "truncated final polynomial",
+    );
+}
+
+#[test]
+fn tampered_common_main_commit_rejected() {
+    let fixture = generate_fib_proof();
+    // Changing an observed commitment changes all subsequent Fiat-Shamir challenges. The proof's
+    // existing grinding witness must therefore no longer be valid.
+    let mut invalid_transcript = fixture.proof.clone();
+    invalid_transcript.common_main_commit[0] += F::ONE;
+    assert_certified_verifier_rejects(
+        &fixture.vk,
+        &invalid_transcript,
+        VerifierError::ChallengeDerivationError,
+        "tampered common-main commitment",
+    );
+}
+
+#[test]
+fn tampered_batch_constraint_polynomial_rejected() {
+    let fixture = generate_fib_proof();
+    // The constant coefficient contributes to the initial batch-constraint sum, so changing it
+    // invalidates that sumcheck while preserving every vector length.
+    let mut invalid_batch_constraint = fixture.proof.clone();
+    invalid_batch_constraint
+        .batch_constraint_proof
+        .univariate_round_coeffs[0] += EF::ONE;
+    assert_certified_verifier_rejects(
+        &fixture.vk,
+        &invalid_batch_constraint,
+        VerifierError::BatchConstraintError,
+        "tampered batch-constraint polynomial",
+    );
+}
+
+#[test]
+fn tampered_stacked_reduction_polynomial_rejected() {
+    let fixture = generate_fib_proof();
+    // Likewise, the constant coefficient contributes to the initial stacked-reduction sum.
+    let mut invalid_stacked_reduction = fixture.proof.clone();
+    invalid_stacked_reduction
+        .stacking_proof
+        .univariate_round_coeffs[0] += EF::ONE;
+    assert_certified_verifier_rejects(
+        &fixture.vk,
+        &invalid_stacked_reduction,
+        VerifierError::StackedReductionError,
+        "tampered stacked-reduction polynomial",
+    );
+}
+
+#[test]
+fn tampered_whir_opening_rejected() {
+    let fixture = generate_fib_proof();
+    // The opened row is authenticated by a Merkle path. Mutating it leaves the proof shape and
+    // transcript intact but must fail WHIR's commitment verification.
+    let mut invalid_whir_opening = fixture.proof.clone();
+    invalid_whir_opening.whir_proof.initial_round_opened_rows[0][0][0][0] += F::ONE;
+    assert_certified_verifier_rejects(
+        &fixture.vk,
+        &invalid_whir_opening,
+        VerifierError::WhirError,
+        "tampered WHIR opening",
     );
 }
 
