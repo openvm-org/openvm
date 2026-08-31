@@ -18,7 +18,7 @@ use openvm_stark_backend::{
 use super::primitives::{write_length_prefix, write_prime_field32, write_u32, write_usize_as_u32};
 
 /// Encode a symbolic-variable source using the Lean constructor tags.
-pub fn write_entry<W: Write>(writer: &mut W, entry: &Entry) -> Result<()> {
+fn write_entry<W: Write>(writer: &mut W, entry: &Entry) -> Result<()> {
     match entry {
         Entry::Preprocessed { offset } => {
             writer.write_all(&[0x00u8])?;
@@ -38,7 +38,7 @@ pub fn write_entry<W: Write>(writer: &mut W, entry: &Entry) -> Result<()> {
 }
 
 /// Encode a symbolic-variable source and column index.
-pub fn write_symbolic_variable<F, W: Write>(
+pub(crate) fn write_symbolic_variable<F, W: Write>(
     writer: &mut W,
     variable: &SymbolicVariable<F>,
 ) -> Result<()> {
@@ -47,7 +47,7 @@ pub fn write_symbolic_variable<F, W: Write>(
 }
 
 /// Encode one symbolic-expression node using the Lean constructor tags.
-pub fn write_symbolic_expression_node<F: PrimeField32, W: Write>(
+fn write_symbolic_expression_node<F: PrimeField32, W: Write>(
     writer: &mut W,
     node: &SymbolicExpressionNode<F>,
 ) -> Result<()> {
@@ -101,7 +101,7 @@ pub fn write_symbolic_expression_node<F: PrimeField32, W: Write>(
 }
 
 /// Encode the expression nodes followed by the constraint-root indices.
-pub fn write_symbolic_expression_dag<F: PrimeField32, W: Write>(
+fn write_symbolic_expression_dag<F: PrimeField32, W: Write>(
     writer: &mut W,
     dag: &SymbolicExpressionDag<F>,
 ) -> Result<()> {
@@ -120,7 +120,7 @@ pub fn write_symbolic_expression_dag<F: PrimeField32, W: Write>(
 ///
 /// `Interaction<usize>` uses node indices for `message` and `count`, which
 /// correspond to `List Nat` and `Nat` on the Lean side.
-pub fn write_symbolic_interaction<W: Write>(
+fn write_symbolic_interaction<W: Write>(
     writer: &mut W,
     interaction: &Interaction<usize>,
 ) -> Result<()> {
@@ -141,7 +141,7 @@ pub fn write_symbolic_interaction<W: Write>(
 /// (`params.width.total_width()` and `params.num_public_values`) which
 /// is also where the Lean `hLayout` / `hPublicValues` invariants source
 /// their truth.
-pub fn write_symbolic_constraints_dag<F: PrimeField32, W: Write>(
+pub(crate) fn write_symbolic_constraints_dag<F: PrimeField32, W: Write>(
     writer: &mut W,
     width: usize,
     public_value_count: usize,

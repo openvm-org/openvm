@@ -7,14 +7,14 @@
 //!
 //! Two halves:
 //!
-//! - The wire encoder ([`write_vk`], [`write_proof`], [`write_public_values`]): hand-rolled,
-//!   serde-free serialization of `MultiStarkVerifyingKey<SC>` / `Proof<SC>` / public values into
-//!   the self-describing byte format consumed by the Lean decoders in
-//!   `swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`. The byte layout mirrors the *Lean* struct
-//!   tree, not the Rust one.
-//! - The FFI harness ([`run_certified_verifier`], [`verifier_error_from_exit_code`]): passes the
-//!   three blobs to the linked Lean-compiled verifier and maps its exit code (a mirror of
-//!   `swirl-rbr-fv:Tools/SwirlVerifyMain.lean`; keep the two tables in lockstep).
+//! - An internal wire encoder provides hand-rolled, serde-free serialization of
+//!   `MultiStarkVerifyingKey<SC>` / `Proof<SC>` / public values into the self-describing byte
+//!   format consumed by the Lean decoders in `swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`.
+//!   The byte layout mirrors the *Lean* struct tree, not the Rust one.
+//! - An internal FFI harness passes the three blobs to the linked Lean-compiled verifier and maps
+//!   its exit code (a mirror of
+//!   `swirl-rbr-fv:Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`; keep the two
+//!   tables in lockstep).
 //!
 //! The verifier itself is Lean compiled to C: the generated C
 //! sources (24-module link closure, Lean toolchain `leanprover/lean4:v4.26.0`)
@@ -23,27 +23,56 @@
 //! contains the Lean object ABI boundary and exposes one raw-buffer function
 //! to Rust.
 
-mod ffi;
-pub mod harness;
-pub mod magic;
-pub mod primitives;
-pub mod proof;
-pub mod public_values;
-pub mod symbolic;
-pub mod vk;
-
-pub use harness::{
-    run_certified_verifier, swirl_dump_proof_bin, verifier_error_from_exit_code,
-    SwirlVerifyOutcome, VerifierError,
-};
-pub use magic::{MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION};
+use harness::{run_certified_verifier, verifier_error_from_exit_code};
 use openvm_stark_backend::{
     codec::EncodableConfig, keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32,
     proof::Proof,
 };
-pub use proof::write_proof;
-pub use public_values::write_public_values;
-pub use vk::write_vk;
+use proof::write_proof;
+use public_values::write_public_values;
+use vk::write_vk;
+
+mod ffi;
+mod harness;
+mod magic;
+mod primitives;
+mod proof;
+mod public_values;
+mod symbolic;
+mod vk;
+
+#[cfg(test)]
+mod tests;
+
+/// Rejection reported by the certified Lean verifier.
+///
+/// This mirrors the Lean-side `Swirl.Protocol.Noninteractive.exitCode` table. Keep it in sync with
+/// `Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerifierError {
+    /// `MonoError.parse _` — Wire.Raw parser rejected the bytes.
+    ParseError,
+    /// `VerifierError.traceHeightsTooLarge`.
+    TraceHeightsTooLarge,
+    /// `VerifierError.preprocessedTraceHeightMismatch`.
+    PreprocessedTraceHeightMismatch,
+    /// `VerifierError.emptyTraces`.
+    EmptyTraces,
+    /// `VerifierError.proofShapeError`.
+    ProofShapeError,
+    /// `VerifierError.challengeDerivationError`.
+    ChallengeDerivationError,
+    /// `VerifierError.batchConstraintError`.
+    BatchConstraintError,
+    /// `VerifierError.stackedReductionError`.
+    StackedReductionError,
+    /// `VerifierError.invalidPrismPoint`.
+    InvalidPrismPoint,
+    /// `VerifierError.whirError`.
+    WhirError,
+    /// An exit code that does not appear in the documented table.
+    Unknown(i32),
+}
 
 /// Failure of a [`verify_stark_proof`] run.
 #[derive(Debug, thiserror::Error)]

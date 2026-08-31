@@ -15,10 +15,6 @@
 //!    Batch boundary claim must survive wire decoding and be rejected by the algebraic verifier
 //!    prefix.
 
-use openvm_certified_verifier::{
-    run_certified_verifier, verifier_error_from_exit_code, write_proof, write_public_values,
-    write_vk, VerifierError,
-};
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     proof::Proof,
@@ -31,6 +27,14 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge,
+};
+
+use crate::{
+    harness::{run_certified_verifier, verifier_error_from_exit_code},
+    proof::write_proof,
+    public_values::write_public_values,
+    vk::write_vk,
+    VerifierError,
 };
 
 /// Base-2 logarithm of the Fibonacci trace length. Five is the smallest

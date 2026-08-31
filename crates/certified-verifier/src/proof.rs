@@ -23,7 +23,10 @@ use super::{
 };
 
 /// Encode a proof in the field order expected by the Lean decoder.
-pub fn write_proof<SC: EncodableConfig, W: Write>(writer: &mut W, proof: &Proof<SC>) -> Result<()> {
+pub(crate) fn write_proof<SC: EncodableConfig, W: Write>(
+    writer: &mut W,
+    proof: &Proof<SC>,
+) -> Result<()> {
     write_header(writer, MAGIC_PROOF)?;
     // commonMainCommit
     SC::encode_digest(&proof.common_main_commit, writer)?;

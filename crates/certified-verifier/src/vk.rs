@@ -31,7 +31,7 @@ use super::{
 };
 
 /// Encode a verifying key in the field order expected by the Lean decoder.
-pub fn write_vk<SC: EncodableConfig, W: Write>(
+pub(crate) fn write_vk<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vk: &MultiStarkVerifyingKey<SC>,
 ) -> Result<()>

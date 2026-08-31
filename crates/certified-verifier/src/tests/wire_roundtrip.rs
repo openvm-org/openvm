@@ -12,10 +12,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-use openvm_certified_verifier::{
-    swirl_dump_proof_bin, write_proof, write_public_values, write_vk, MAGIC_PROOF,
-    MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION,
-};
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     p3_field::PrimeField32,
@@ -25,6 +21,14 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge, F,
+};
+
+use crate::{
+    harness::swirl_dump_proof_bin,
+    magic::{MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION},
+    proof::write_proof,
+    public_values::write_public_values,
+    vk::write_vk,
 };
 
 const LOG_TRACE_DEGREE: usize = 5;

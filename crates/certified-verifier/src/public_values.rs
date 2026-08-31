@@ -22,7 +22,7 @@ use super::{
 /// `vk.publicValueCount air`. Proof-shape verification correlates each row
 /// with trace presence; zero-arity present and absent AIRs both encode an
 /// empty row.
-pub fn write_public_values<SC: EncodableConfig, W: Write>(
+pub(crate) fn write_public_values<SC: EncodableConfig, W: Write>(
     writer: &mut W,
     vk: &MultiStarkVerifyingKey<SC>,
     public_values: &[Vec<SC::F>],
