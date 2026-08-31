@@ -65,9 +65,9 @@ jobs:
 
       - name: Run fmt
         run: |
-          rustup install nightly
-          rustup component add --toolchain nightly rustfmt
-          cargo +nightly fmt --all -- --check
+          rustup install nightly-2026-01-18
+          rustup component add --toolchain nightly-2026-01-18 rustfmt
+          cargo +nightly-2026-01-18 fmt --all -- --check
       - name: Run clippy
         run: |
           # list of all unique features across workspace generated using:
@@ -84,7 +84,7 @@ jobs:
             # Check if Cargo.toml exists in the directory
             if [ -f "$crate_path/Cargo.toml" ]; then
               echo "Running cargo fmt, clippy for $crate_path"
-              cargo +nightly fmt --manifest-path "$crate_path/Cargo.toml" --all -- --check
+              cargo +nightly-2026-01-18 fmt --manifest-path "$crate_path/Cargo.toml" --all -- --check
               if [[ "$crate_path" == *"guest-libs/pairing/tests/programs"* ]]; then
                 echo "Running cargo clippy with openvm_pairing_guest::bn254 feature for $crate_path"
                 cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std bn254" -- -D warnings
