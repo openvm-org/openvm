@@ -21,9 +21,9 @@ char **lean_setup_args(int argc, char **argv);
 void lean_initialize_runtime_module(void);
 
 enum {
-    OPENVM_VM_INIT_ERROR = -1,
-    OPENVM_VM_INVALID_ARGUMENT = -2,
-    OPENVM_VM_INVALID_RESULT = -3,
+    OPENVM_VERIFY_INIT_ERROR = -1,
+    OPENVM_VERIFY_INVALID_ARGUMENT = -2,
+    OPENVM_VERIFY_INVALID_RESULT = -3,
 };
 
 static bool initialized = false;
@@ -47,7 +47,7 @@ static int32_t initialize_verifier(char *error_out, size_t error_capacity) {
     if (initialization_failed) {
         static const char message[] = "Lean VM verifier initialization previously failed";
         write_error(error_out, error_capacity, message, sizeof(message) - 1);
-        return OPENVM_VM_INIT_ERROR;
+        return OPENVM_VERIFY_INIT_ERROR;
     }
 
     lean_setup_args(1, program_args);
@@ -62,7 +62,7 @@ static int32_t initialize_verifier(char *error_out, size_t error_capacity) {
         lean_dec(result);
         static const char message[] = "Lean VM verifier initialization failed";
         write_error(error_out, error_capacity, message, sizeof(message) - 1);
-        return OPENVM_VM_INIT_ERROR;
+        return OPENVM_VERIFY_INIT_ERROR;
     }
 
     lean_dec(result);
@@ -79,17 +79,17 @@ static lean_object *byte_array(const uint8_t *bytes, size_t len) {
     return array;
 }
 
-int32_t openvm_vm_verify(const uint8_t *vk, size_t vk_len, const uint8_t *baseline,
-                         size_t baseline_len, const uint8_t *proof, size_t proof_len,
-                         const uint8_t *public_values, size_t public_values_len,
-                         const uint8_t *user_public_values, size_t user_public_values_len,
-                         char *error_out, size_t error_capacity) {
+int32_t openvm_verify(const uint8_t *vk, size_t vk_len, const uint8_t *baseline,
+                      size_t baseline_len, const uint8_t *proof, size_t proof_len,
+                      const uint8_t *public_values, size_t public_values_len,
+                      const uint8_t *user_public_values, size_t user_public_values_len,
+                      char *error_out, size_t error_capacity) {
     if ((vk == NULL && vk_len != 0) || (baseline == NULL && baseline_len != 0) ||
         (proof == NULL && proof_len != 0) ||
         (public_values == NULL && public_values_len != 0) ||
         (user_public_values == NULL && user_public_values_len != 0) ||
         (error_out == NULL && error_capacity != 0)) {
-        return OPENVM_VM_INVALID_ARGUMENT;
+        return OPENVM_VERIFY_INVALID_ARGUMENT;
     }
     if (error_capacity != 0) {
         error_out[0] = '\0';
@@ -113,7 +113,7 @@ int32_t openvm_vm_verify(const uint8_t *vk, size_t vk_len, const uint8_t *baseli
         lean_dec(result);
         static const char message[] = "Lean VM verifier returned an invalid Except tag";
         write_error(error_out, error_capacity, message, sizeof(message) - 1);
-        return OPENVM_VM_INVALID_RESULT;
+        return OPENVM_VERIFY_INVALID_RESULT;
     }
 
     lean_object *error = lean_ctor_get(result, 0);

@@ -5,7 +5,7 @@ use std::{ffi::c_char, io, sync::Mutex};
 const ERROR_CAPACITY: usize = 4096;
 
 extern "C" {
-    fn openvm_vm_verify(
+    fn openvm_verify(
         vk: *const u8,
         vk_len: usize,
         baseline: *const u8,
@@ -40,7 +40,7 @@ pub(crate) fn verify(
     // SAFETY: All pointers remain valid for the call, their lengths match the
     // slices, the output buffer is writable, and calls are serialized above.
     let exit_code = unsafe {
-        openvm_vm_verify(
+        openvm_verify(
             vk.as_ptr(),
             vk.len(),
             baseline.as_ptr(),

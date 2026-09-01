@@ -70,7 +70,7 @@ fn main() {
     });
 
     let ffi_src = manifest_dir.join("src/ffi/vm_verify.c");
-    let ffi_obj = out_dir.join("openvm_vm_verify_ffi.o");
+    let ffi_obj = out_dir.join("openvm_verify_ffi.o");
     run(leanc(&[
         "-c",
         "-O3",
