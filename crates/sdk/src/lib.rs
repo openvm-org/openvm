@@ -866,7 +866,11 @@ where
                  and default app and aggregation parameters"
             )));
         }
-        certified_verifier::verify_stark_proof(&sdk.agg_vk(), &proof.inner)
+        let vk = VmStarkVerifyingKey {
+            mvk: (*sdk.agg_vk()).clone(),
+            baseline: verified_baseline.clone(),
+        };
+        certified_verifier::verify_vm_stark_proof(&vk, proof)
             .map_err(|e| SdkError::Other(eyre::eyre!(e)))
     }
 

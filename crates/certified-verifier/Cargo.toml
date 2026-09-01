@@ -10,9 +10,14 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+openvm-circuit = { workspace = true }
 openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+openvm-verify-stark-host = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+openvm = { workspace = true }
+openvm-sdk = { workspace = true }
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
-openvm-stark-sdk = { workspace = true }
+openvm-transpiler = { workspace = true }

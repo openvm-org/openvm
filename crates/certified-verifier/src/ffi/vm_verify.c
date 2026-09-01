@@ -1,9 +1,9 @@
-// Stable raw-buffer adapter around the Lean-generated verifier.
+// Stable single-function raw-buffer adapter around the Lean-generated VM verifier.
 //
 // This is OpenVM-owned integration code, not vendored Lean output. Keeping
 // Lean object construction and ownership here lets Rust call one ordinary C
-// function without reproducing the internal layout from lean.h.
-// Calls, including lazy initialization, are serialized by the Rust wrapper.
+// function without reproducing the internal layout from lean.h. Calls,
+// including lazy initialization, are serialized by the Rust wrapper.
 
 #include <lean/lean.h>
 #include <stdbool.h>
@@ -12,19 +12,18 @@
 
 void *memcpy(void *dest, const void *src, size_t count);
 
-lean_object *initialize_Swirl_Protocol_Noninteractive_VerifierBabyBearPoseidon2(uint8_t builtin);
-lean_object *l_Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2(
-    lean_object *vk, lean_object *proof, lean_object *public_values);
-uint32_t l_Swirl_Protocol_Noninteractive_exitCode(lean_object *error);
-lean_object *l_Swirl_Protocol_Noninteractive_MonoError_toString(lean_object *error);
+lean_object *initialize_VmVerifier_Spec_Runtime(uint8_t builtin);
+lean_object *l_VmVerifier_verifyVmStarkProof(lean_object *vk, lean_object *baseline,
+                                             lean_object *proof, lean_object *public_values,
+                                             lean_object *user_public_values);
 
 char **lean_setup_args(int argc, char **argv);
 void lean_initialize_runtime_module(void);
 
 enum {
-    OPENVM_SWIRL_INIT_ERROR = -1,
-    OPENVM_SWIRL_INVALID_ARGUMENT = -2,
-    OPENVM_SWIRL_INVALID_RESULT = -3,
+    OPENVM_VM_INIT_ERROR = -1,
+    OPENVM_VM_INVALID_ARGUMENT = -2,
+    OPENVM_VM_INVALID_RESULT = -3,
 };
 
 static bool initialized = false;
@@ -46,25 +45,24 @@ static int32_t initialize_verifier(char *error_out, size_t error_capacity) {
         return 0;
     }
     if (initialization_failed) {
-        static const char message[] = "Lean verifier module initialization previously failed";
+        static const char message[] = "Lean VM verifier initialization previously failed";
         write_error(error_out, error_capacity, message, sizeof(message) - 1);
-        return OPENVM_SWIRL_INIT_ERROR;
+        return OPENVM_VM_INIT_ERROR;
     }
 
     lean_setup_args(1, program_args);
     lean_initialize_runtime_module();
     lean_set_panic_messages(false);
-    lean_object *result =
-        initialize_Swirl_Protocol_Noninteractive_VerifierBabyBearPoseidon2(1 /* builtin */);
+    lean_object *result = initialize_VmVerifier_Spec_Runtime(1 /* builtin */);
     lean_set_panic_messages(true);
     lean_io_mark_end_initialization();
 
     if (lean_io_result_is_error(result)) {
         initialization_failed = true;
         lean_dec(result);
-        static const char message[] = "Lean verifier module initialization failed";
+        static const char message[] = "Lean VM verifier initialization failed";
         write_error(error_out, error_capacity, message, sizeof(message) - 1);
-        return OPENVM_SWIRL_INIT_ERROR;
+        return OPENVM_VM_INIT_ERROR;
     }
 
     lean_dec(result);
@@ -81,13 +79,17 @@ static lean_object *byte_array(const uint8_t *bytes, size_t len) {
     return array;
 }
 
-int32_t openvm_swirl_verify(const uint8_t *vk, size_t vk_len, const uint8_t *proof,
-                            size_t proof_len, const uint8_t *public_values,
-                            size_t public_values_len, char *error_out, size_t error_capacity) {
-    if ((vk == NULL && vk_len != 0) || (proof == NULL && proof_len != 0) ||
+int32_t openvm_vm_verify(const uint8_t *vk, size_t vk_len, const uint8_t *baseline,
+                         size_t baseline_len, const uint8_t *proof, size_t proof_len,
+                         const uint8_t *public_values, size_t public_values_len,
+                         const uint8_t *user_public_values, size_t user_public_values_len,
+                         char *error_out, size_t error_capacity) {
+    if ((vk == NULL && vk_len != 0) || (baseline == NULL && baseline_len != 0) ||
+        (proof == NULL && proof_len != 0) ||
         (public_values == NULL && public_values_len != 0) ||
+        (user_public_values == NULL && user_public_values_len != 0) ||
         (error_out == NULL && error_capacity != 0)) {
-        return OPENVM_SWIRL_INVALID_ARGUMENT;
+        return OPENVM_VM_INVALID_ARGUMENT;
     }
     if (error_capacity != 0) {
         error_out[0] = '\0';
@@ -98,9 +100,10 @@ int32_t openvm_swirl_verify(const uint8_t *vk, size_t vk_len, const uint8_t *pro
         return init_code;
     }
 
-    lean_object *result = l_Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2(
-        byte_array(vk, vk_len), byte_array(proof, proof_len),
-        byte_array(public_values, public_values_len));
+    lean_object *result = l_VmVerifier_verifyVmStarkProof(
+        byte_array(vk, vk_len), byte_array(baseline, baseline_len),
+        byte_array(proof, proof_len), byte_array(public_values, public_values_len),
+        byte_array(user_public_values, user_public_values_len));
     unsigned tag = lean_obj_tag(result);
     if (tag == 1) {
         lean_dec(result);
@@ -108,21 +111,15 @@ int32_t openvm_swirl_verify(const uint8_t *vk, size_t vk_len, const uint8_t *pro
     }
     if (tag != 0) {
         lean_dec(result);
-        static const char message[] = "Lean verifier returned an invalid Except tag";
+        static const char message[] = "Lean VM verifier returned an invalid Except tag";
         write_error(error_out, error_capacity, message, sizeof(message) - 1);
-        return OPENVM_SWIRL_INVALID_RESULT;
+        return OPENVM_VM_INVALID_RESULT;
     }
 
     lean_object *error = lean_ctor_get(result, 0);
-    uint32_t exit_code = l_Swirl_Protocol_Noninteractive_exitCode(error);
-
-    // `MonoError.toString` consumes its argument, while `result` continues to
-    // own the original reference until it is released below.
-    lean_inc(error);
-    lean_object *message = l_Swirl_Protocol_Noninteractive_MonoError_toString(error);
-    write_error(error_out, error_capacity, lean_string_cstr(message),
-                lean_string_size(message) - 1);
-    lean_dec(message);
+    uint32_t exit_code = lean_unbox_uint32(error);
     lean_dec(result);
+    static const char message[] = "Lean VM verifier rejected the proof";
+    write_error(error_out, error_capacity, message, sizeof(message) - 1);
     return (int32_t)exit_code;
 }
