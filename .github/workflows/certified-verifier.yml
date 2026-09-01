@@ -21,7 +21,7 @@ on:
       - ".github/actions/lean-toolchain/**"
       - ".github/actions/sccache/**"
       - ".github/workflows/certified-verifier.yml"
-      - "ci/scripts/check_swirl_verifier_c.sh"
+      - "ci/scripts/check_certified_verifier_c.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-certified-verifier-${{ github.event.pull_request.number || github.sha }}
@@ -29,8 +29,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # TODO: Replace this commit with a swirl-rbr-fv release tag once one is available.
-  SWIRL_RBR_FV_REV: 0671add31e76b6f52889d32b17b65da258e5ea56
+  # TODO: Replace this commit with a ws-fv release tag once one is available.
+  WS_FV_REV: ffd746d2c10af0750e86940f9b63392754a32d67
 
 jobs:
   openvm-tests:
@@ -158,7 +158,7 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
-  swirl-rbr-fv-tests:
+  ws-fv-tests:
     name: Generated C matches upstream
     runs-on: ubuntu-latest
 
@@ -172,25 +172,29 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
 
-      - name: Check out pinned swirl-rbr-fv
-        id: checkout-swirl
+      - name: Check out pinned ws-fv
+        id: checkout-ws-fv
         run: |
-          git clone --filter=blob:none --no-checkout git@github.com:axiom-crypto/swirl-rbr-fv.git swirl-rbr-fv
-          git -C swirl-rbr-fv checkout --detach "$SWIRL_RBR_FV_REV"
-          echo "revision=$(git -C swirl-rbr-fv rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git clone --filter=blob:none --no-checkout git@github.com:axiom-crypto/ws-fv.git ws-fv
+          git -C ws-fv checkout --detach "$WS_FV_REV"
+          echo "revision=$(git -C ws-fv rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache swirl-rbr-fv Lean build
+      - name: Cache ws-fv Lean build
         uses: actions/cache@v4
         with:
-          path: swirl-rbr-fv/.lake
-          key: ${{ runner.os }}-swirl-rbr-fv-${{ steps.checkout-swirl.outputs.revision }}-${{ steps.lean-toolchain.outputs.toolchain }}
+          path: ws-fv/.lake
+          key: ${{ runner.os }}-ws-fv-${{ steps.checkout-ws-fv.outputs.revision }}-${{ steps.lean-toolchain.outputs.toolchain }}
 
       - name: Build upstream Lean verifier executables
-        working-directory: swirl-rbr-fv
+        working-directory: ws-fv
         run: |
           test "$(tr -d '\r\n' < lean-toolchain)" = "$LEAN_TOOLCHAIN"
-          elan run "$LEAN_TOOLCHAIN" lake build swirl_verify
+          elan run "$LEAN_TOOLCHAIN" lake build vm_verify
+
+      - name: Build upstream parser utility
+        working-directory: ws-fv/.lake/packages/swirl-rbr-fv
+        run: |
           elan run "$LEAN_TOOLCHAIN" lake build swirl_dump_proof
 
       - name: Check vendored C against Lean-generated C
-        run: bash ci/scripts/check_swirl_verifier_c.sh swirl-rbr-fv
+        run: bash ci/scripts/check_certified_verifier_c.sh ws-fv

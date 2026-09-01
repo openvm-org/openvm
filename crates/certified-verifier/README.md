@@ -1,6 +1,6 @@
 # openvm-certified-verifier: vendored Lean certified verifiers
 
-> The contents of this crate are vendored from the private `swirl-rbr-fv`
+> The contents of this crate are vendored from the private `ws-fv`
 > repo. That repo is the source of truth: do not edit in place without
 > upstreaming the change, and refresh the vendored copy (see below) when it
 > moves.
@@ -42,30 +42,32 @@ any other executable.
 
 ## Regenerating csrc/
 
-From a checkout of `swirl-rbr-fv` (requires elan/Lake):
+From a checkout of `ws-fv` (requires elan/Lake):
 
 ```sh
-lake build swirl_dump_proof
-# Parser utility: the *.c files listed (as .c.o.export) in
-#                 .lake/build/bin/swirl_dump_proof.trace
+lake build vm_verify
+(cd .lake/packages/swirl-rbr-fv && lake build swirl_dump_proof)
 ```
 
-From the matching `ws-fv` checkout, build `vm_verify` and copy the additional
-`*.c` sources listed as `*.c.o.export` in
-`.lake/build/bin/vm_verify.trace`. Shared SWIRL sources must be byte-identical.
+Copy the `*.c` sources listed as `*.c.o.export` in the two traces:
+
+- `.lake/build/bin/vm_verify.trace`
+- `.lake/packages/swirl-rbr-fv/.lake/build/bin/swirl_dump_proof.trace`
+
+The consistency check resolves the object paths recorded in those traces, including sources built
+from `ws-fv`'s pinned dependencies.
 
 ## Version coupling
 
 The wire format is a hand-written contract between the encoder and
 tests in `crates/certified-verifier/` and the Lean decoders
-(`swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`). Validated at:
+(`ws-fv`'s pinned `Swirl/Protocol/Noninteractive/Wire/`). Validated at:
 
-- `swirl-rbr-fv` commit `0671add31e76b6f52889d32b17b65da258e5ea56`
+- `ws-fv` commit `ffd746d2c10af0750e86940f9b63392754a32d67`
 - `openvm-org/stark-backend` tag `v2.0.0` (`16d60de`); this workspace's
   pin `fcaff50` was diff-checked equivalent on the `Proof`/vk type
   surface.
 
 If either side moves (Lean structs, wire version, stark-backend proof
-shape, the Lean toolchain, or the exit-code table in
-`swirl-rbr-fv:Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`),
+shape, the Lean toolchain, or the verifier error mapping in `ws-fv`),
 the encoder and the vendored C sources and vendored tests must be refreshed together.
