@@ -17,7 +17,7 @@ openvm-verify-stark-host = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-openvm = { workspace = true }
-openvm-sdk = { workspace = true }
+openvm = { path = "../toolchain/openvm", default-features = false }
+openvm-sdk = { path = "../sdk", default-features = false }
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
-openvm-transpiler = { workspace = true }
+openvm-transpiler = { path = "../toolchain/transpiler", default-features = false }
