@@ -4607,8 +4607,13 @@ dependencies = [
 name = "openvm-certified-verifier"
 version = "2.1.0"
 dependencies = [
+ "openvm",
+ "openvm-circuit",
+ "openvm-sdk",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "openvm-transpiler",
+ "openvm-verify-stark-host",
  "thiserror 1.0.69",
 ]
 

@@ -1,36 +1,19 @@
-//! Verification with the certified Lean Swirl verifier extracted from its formalization.
+//! Verification with the certified Lean VM verifier extracted from its formalization.
 //!
-//! Vendored from the private `swirl-rbr-fv` repo (the
-//! `proof-wire` crate and `lean-verifier-harness` lib of its
-//! `verifier-ffi/` workspace, merged into one crate) — see `README.md`
-//! in this crate's directory.
+//! The internal wire encoders serialize the recursive VK, verification baseline, proof, per-AIR
+//! public values, and user-public-values proof into the five self-describing blobs consumed by
+//! Lean. The internal FFI harness invokes the linked Lean verifier on those exact inputs.
 //!
-//! Two halves:
-//!
-//! - An internal wire encoder provides hand-rolled, serde-free serialization of
-//!   `MultiStarkVerifyingKey<SC>` / `Proof<SC>` / public values into the self-describing byte
-//!   format consumed by the Lean decoders in `swirl-rbr-fv:Swirl/Protocol/Noninteractive/Wire/`.
-//!   The byte layout mirrors the *Lean* struct tree, not the Rust one.
-//! - An internal FFI harness passes the three blobs to the linked Lean-compiled verifier and maps
-//!   its exit code (a mirror of
-//!   `swirl-rbr-fv:Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`; keep the two
-//!   tables in lockstep).
-//!
-//! The verifier itself is Lean compiled to C: the generated C
-//! sources (24-module link closure, Lean toolchain `leanprover/lean4:v4.26.0`)
-//! are vendored under `csrc/`, compiled by this crate's `build.rs` with
-//! `leanc`, and linked into the Rust target. A small OpenVM-owned C adapter
-//! contains the Lean object ABI boundary and exposes one raw-buffer function
-//! to Rust.
+//! The verifier itself is Lean compiled to C: the generated C sources use a lightweight link
+//! closure and Lean toolchain `leanprover/lean4:v4.26.0`. They are vendored under `csrc/`, compiled
+//! by this crate's `build.rs`, and linked directly into the Rust target.
 
 use harness::{run_certified_verifier, verifier_error_from_exit_code};
-use openvm_stark_backend::{
-    codec::EncodableConfig, keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32,
-    proof::Proof,
-};
+use openvm_verify_stark_host::{vk::VmStarkVerifyingKey, VmStarkProof};
 use proof::write_proof;
 use public_values::write_public_values;
 use vk::write_vk;
+use vm::{write_user_public_values_proof, write_verification_baseline};
 
 mod ffi;
 mod harness;
@@ -40,17 +23,15 @@ mod proof;
 mod public_values;
 mod symbolic;
 mod vk;
+mod vm;
 
 #[cfg(test)]
 mod tests;
 
-/// Rejection reported by the certified Lean verifier.
-///
-/// This mirrors the Lean-side `Swirl.Protocol.Noninteractive.exitCode` table. Keep it in sync with
-/// `Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`.
+/// Rejection reported by the certified Lean VM verifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VerifierError {
-    /// `MonoError.parse _` — Wire.Raw parser rejected the bytes.
+    /// A wire parser rejected one of the five inputs.
     ParseError,
     /// `VerifierError.traceHeightsTooLarge`.
     TraceHeightsTooLarge,
@@ -70,11 +51,15 @@ pub enum VerifierError {
     InvalidPrismPoint,
     /// `VerifierError.whirError`.
     WhirError,
+    /// `VerifierError.systemParamsMismatch`.
+    SystemParamsMismatch,
+    /// VM host public-value validation failed after STARK acceptance.
+    PublicValues,
     /// An exit code that does not appear in the documented table.
     Unknown(i32),
 }
 
-/// Failure of a [`verify_stark_proof`] run.
+/// Failure of a [`verify_vm_stark_proof`] run.
 #[derive(Debug, thiserror::Error)]
 pub enum CertifiedVerifierError {
     /// Encoding the inputs or invoking the verifier runtime failed; no verdict
@@ -92,26 +77,39 @@ pub enum CertifiedVerifierError {
     },
 }
 
-/// Verify `(vk, proof)` with the linked Lean-compiled verifier: encode the vk,
-/// the proof body, and the proof's per-AIR public values to the Lean wire
-/// format, invoke it through FFI, and map its exit code.
+/// Verify a complete non-deferral VM STARK proof with the linked Lean verifier.
 ///
-/// `Ok(())` means the formally verified verifier accepted the proof.
-pub fn verify_stark_proof<SC: EncodableConfig>(
-    vk: &MultiStarkVerifyingKey<SC>,
-    proof: &Proof<SC>,
-) -> Result<(), CertifiedVerifierError>
-where
-    SC::F: PrimeField32,
-{
-    let mut vk_bytes = Vec::new();
-    write_vk(&mut vk_bytes, vk)?;
-    let mut proof_bytes = Vec::new();
-    write_proof(&mut proof_bytes, proof)?;
-    let mut pv_bytes = Vec::new();
-    write_public_values(&mut pv_bytes, vk, &proof.public_values)?;
+/// This verifies both the inner recursive STARK and the host-side VM public-value
+/// conditions against `vk.baseline`.
+pub fn verify_vm_stark_proof(
+    vk: &VmStarkVerifyingKey,
+    proof: &VmStarkProof,
+) -> Result<(), CertifiedVerifierError> {
+    if proof.deferral_merkle_proofs.is_some() {
+        return Err(CertifiedVerifierError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "the certified VM verifier does not support deferral proofs",
+        )));
+    }
 
-    let outcome = run_certified_verifier(&vk_bytes, &proof_bytes, &pv_bytes)?;
+    let mut vk_bytes = Vec::new();
+    write_vk(&mut vk_bytes, &vk.mvk)?;
+    let mut baseline_bytes = Vec::new();
+    write_verification_baseline(&mut baseline_bytes, &vk.baseline)?;
+    let mut proof_bytes = Vec::new();
+    write_proof(&mut proof_bytes, &proof.inner)?;
+    let mut pv_bytes = Vec::new();
+    write_public_values(&mut pv_bytes, &vk.mvk, &proof.inner.public_values)?;
+    let mut user_pvs_bytes = Vec::new();
+    write_user_public_values_proof(&mut user_pvs_bytes, &proof.user_pvs_proof)?;
+
+    let outcome = run_certified_verifier(
+        &vk_bytes,
+        &baseline_bytes,
+        &proof_bytes,
+        &pv_bytes,
+        &user_pvs_bytes,
+    )?;
     match verifier_error_from_exit_code(outcome.exit_code) {
         None => Ok(()),
         Some(error) => Err(CertifiedVerifierError::Rejected {

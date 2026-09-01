@@ -1,4 +1,4 @@
-// Build script for the vendored Lean Swirl verifier (see README.md).
+// Build script for the vendored Lean certified verifiers (see README.md).
 // Compiles the Lean-generated C sources under csrc/ into a static library
 // linked into this crate, using `leanc` from the pinned Lean toolchain.
 // `swirl_dump_proof` is an executable, as it is a wire-format test utility.
@@ -30,14 +30,11 @@ fn main() {
     collect_c_files(&csrc, &mut sources);
     assert!(!sources.is_empty(), "no C sources under {}", csrc.display());
 
-    // Compile the verifier's Lean-generated C link closure, excluding both
-    // executable entry points. Flags mirror what lake used to build the
+    // Compile the verifier's Lean-generated C link closure, excluding the
+    // executable entry point. Flags mirror what lake used to build the
     // verifier in-repo (minus -DLEAN_EXPORTING / -fvisibility, which only
     // matter for shared-library builds).
-    sources.retain(|path| {
-        path.file_name()
-            .is_none_or(|name| name != "SwirlVerifyMain.c")
-    });
+    sources.retain(|path| path.strip_prefix(&csrc).unwrap() != Path::new("VmVerifier/Main.c"));
     let mut objects: Vec<PathBuf> = std::thread::scope(|scope| {
         let jobs = std::thread::available_parallelism().map_or(4, |n| n.get());
         let mut handles = Vec::new();
@@ -72,8 +69,8 @@ fn main() {
             .collect()
     });
 
-    let ffi_src = manifest_dir.join("src/ffi/swirl_verify.c");
-    let ffi_obj = out_dir.join("openvm_swirl_verify_ffi.o");
+    let ffi_src = manifest_dir.join("src/ffi/vm_verify.c");
+    let ffi_obj = out_dir.join("openvm_verify_ffi.o");
     run(leanc(&[
         "-c",
         "-O3",
@@ -85,14 +82,14 @@ fn main() {
     ]));
     objects.push(ffi_obj);
 
-    let verifier_lib = out_dir.join("libopenvm_swirl_verifier.a");
+    let verifier_lib = out_dir.join("libopenvm_certified_verifier.a");
     let mut archive = Command::new(lean_prefix.join("bin/llvm-ar"));
     archive.args(["crs", verifier_lib.to_str().unwrap()]);
     archive.args(&objects);
     run(archive);
 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
-    println!("cargo:rustc-link-lib=static=openvm_swirl_verifier");
+    println!("cargo:rustc-link-lib=static=openvm_certified_verifier");
     emit_leanc_link_flags(&lean_prefix);
 
     let dump_main = csrc.join("Tools/SwirlDumpProof.c");

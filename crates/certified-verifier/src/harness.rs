@@ -1,10 +1,4 @@
-//! In-process FFI harness for the Lean-compiled verifier.
-//!
-//! Provides crate-internal helpers:
-//!
-//! - [`run_certified_verifier`] invokes the verifier on a `(vk, proof, public values)` triple.
-//! - [`verifier_error_from_exit_code`] — mirror of the Lean-side
-//!   `Swirl.Protocol.Noninteractive.exitCode` table.
+//! In-process FFI harness for the Lean-compiled VM verifier.
 //!
 //! This crate's `build.rs` compiles the vendored Lean-generated C (`csrc/`)
 //! with `leanc`, archives it, and links it and the pinned Lean runtime into
@@ -25,38 +19,37 @@ pub(crate) fn swirl_dump_proof_bin() -> PathBuf {
 
 /// Outcome of an individual certified-verifier invocation.
 #[derive(Debug)]
-pub(crate) struct SwirlVerifyOutcome {
+pub(crate) struct VerifyOutcome {
     pub(crate) exit_code: i32,
     pub(crate) stderr: String,
 }
 
-/// Run the linked Lean verifier on `(vk_bytes, proof_bytes, pv_bytes)` and
-/// return its exit code and rendered error.
-///
-/// This raw-wire entry point is crate-private. External callers should use
-/// [`crate::verify_stark_proof`], which constructs the three blobs from typed inputs.
+/// Run the linked Lean VM verifier on its five wire blobs.
 pub(crate) fn run_certified_verifier(
     vk_bytes: &[u8],
+    baseline_bytes: &[u8],
     proof_bytes: &[u8],
     pv_bytes: &[u8],
-) -> io::Result<SwirlVerifyOutcome> {
-    let (exit_code, message) = crate::ffi::verify(vk_bytes, proof_bytes, pv_bytes)?;
-    Ok(SwirlVerifyOutcome {
+    user_pvs_bytes: &[u8],
+) -> io::Result<VerifyOutcome> {
+    let (exit_code, message) = crate::ffi::verify(
+        vk_bytes,
+        baseline_bytes,
+        proof_bytes,
+        pv_bytes,
+        user_pvs_bytes,
+    )?;
+    Ok(VerifyOutcome {
         exit_code,
         stderr: if message.is_empty() {
             String::new()
         } else {
-            format!("swirl_verify: {message}\n")
+            format!("vm_verify: {message}\n")
         },
     })
 }
 
-/// Translate an exit code from `swirl_verify` to its corresponding
-/// [`VerifierError`] variant. Returns `None` for exit 0 (accept).
-///
-/// The table mirrors `Swirl.Protocol.Noninteractive.exitCode` in
-/// `Swirl/Protocol/Noninteractive/VerifierBabyBearPoseidon2.lean`.
-/// Any deviation here breaks the FFI contract; keep the two in lockstep.
+/// Translate an exit code from the Lean VM verifier.
 pub(crate) fn verifier_error_from_exit_code(code: i32) -> Option<VerifierError> {
     match code {
         0 => None,
@@ -70,6 +63,8 @@ pub(crate) fn verifier_error_from_exit_code(code: i32) -> Option<VerifierError> 
         8 => Some(VerifierError::StackedReductionError),
         9 => Some(VerifierError::InvalidPrismPoint),
         10 => Some(VerifierError::WhirError),
+        11 => Some(VerifierError::SystemParamsMismatch),
+        12 => Some(VerifierError::PublicValues),
         other => Some(VerifierError::Unknown(other)),
     }
 }
