@@ -44,9 +44,6 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: ./.github/actions/sccache
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
       - name: Verify GPU setup
         run: |
           nvidia-smi

@@ -15,7 +15,6 @@ shared: &shared
 cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/extension-tests.cuda.yml"
-  - "scripts/gpu_driver_setup.sh"
 rv32im: &rv32im
   - *shared
   - "extensions/rv32im/**"

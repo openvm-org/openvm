@@ -74,8 +74,9 @@ the encoder and the vendored C sources and vendored tests must be refreshed toge
 
 ## Testing standard examples
 
-[`test_standard_examples.sh`](./test_standard_examples.sh) reuses one standard key set to prove and
-certified verify all compatible examples (`algebra` is excluded because it uses custom moduli):
+[`test_standard_examples.sh`](./test_standard_examples.sh) reuses one standard key set to prove all
+compatible examples and verify their proofs with the certified verifier (`algebra` is excluded
+because it uses custom moduli):
 
 ```sh
 ./crates/certified-verifier/test_standard_examples.sh

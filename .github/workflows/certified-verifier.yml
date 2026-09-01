@@ -24,7 +24,6 @@ on:
       - ".github/actions/sccache/**"
       - ".github/workflows/certified-verifier.yml"
       - "ci/scripts/check_certified_verifier_c.sh"
-      - "scripts/gpu_driver_setup.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-certified-verifier-${{ github.event.pull_request.number || github.sha }}
@@ -57,10 +56,6 @@ jobs:
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
-
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
 
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
@@ -139,10 +134,6 @@ jobs:
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
-
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
 
       - uses: ./.github/actions/rust-cache-cuda
 
