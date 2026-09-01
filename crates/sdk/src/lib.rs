@@ -844,26 +844,26 @@ where
     /// Verifies an aggregate STARK proof with the certified Swirl verifier extracted from its Lean
     /// formalization (linked through FFI; see the [`certified_verifier`] module docs).
     ///
-    /// The Lean formalization only covers the canonical riscv32 pipeline, so this fails if
+    /// Certified verification is scoped to the canonical standard pipeline, so this fails if
     /// `verified_baseline` — the [`VerificationBaseline`] the proof is verified against by
     /// [`verify_proof`](Self::verify_proof) — does not have the canonical [`VmBaseline`]
     /// (`app_exe_commit` is ignored). The expected baseline and the aggregation vk are both
-    /// derived from the canonical riscv32 [`CpuSdk`], making each call keygen-expensive. Use
+    /// derived from the canonical standard [`CpuSdk`], making each call keygen-expensive. Use
     /// alongside [`verify_proof`](Self::verify_proof), not instead of it.
     #[cfg(feature = "certified-verifier")]
     pub fn verify_proof_with_certified_verifier(
         verified_baseline: &VerificationBaseline,
         proof: &VmStarkProof,
     ) -> Result<(), SdkError> {
-        let sdk = CpuSdk::riscv32(
+        let sdk = CpuSdk::standard(
             config::default_system_params(),
             AggregationSystemParams::default(),
         );
         if VmBaseline::from(verified_baseline) != sdk.vm_baseline() {
             return Err(SdkError::Other(eyre::eyre!(
-                "the proof's baseline does not match the canonical riscv32 pipeline: the Lean \
-                 formalization only covers proofs generated with the default RISC-V app VM config \
-                 and default app and aggregation parameters"
+                "the proof's baseline does not match the canonical standard pipeline: certified \
+                 verification only covers proofs generated with the standard app VM config and \
+                 default app and aggregation parameters"
             )));
         }
         let vk = VmStarkVerifyingKey {

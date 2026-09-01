@@ -20,7 +20,6 @@ on:
       - ".github/filters/extension-tests.yml"
       - ".github/workflows/extension-tests.group.yml"
       - ".github/workflows/extension-tests.cuda.yml"
-      - "scripts/gpu_driver_setup.sh"
   pull_request:
     branches: ["**"]
     paths: *extension_cuda_test_paths

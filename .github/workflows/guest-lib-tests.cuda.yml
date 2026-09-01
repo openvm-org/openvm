@@ -31,7 +31,6 @@ on:
       - ".github/workflows/guest-lib-tests.group.yml"
       - ".github/workflows/guest-lib-tests.cuda.yml"
       - "crates/sdk/guest/fib/**"
-      - "scripts/gpu_driver_setup.sh"
   pull_request:
     branches: ["**"]
     paths: *guest_lib_cuda_test_paths

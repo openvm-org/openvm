@@ -137,10 +137,6 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
       - uses: ./.ci-workflow/.github/actions/sccache
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./.ci-workflow/scripts/gpu_driver_setup.sh
-
       - uses: ./.ci-workflow/.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true

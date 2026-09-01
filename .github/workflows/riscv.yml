@@ -26,7 +26,6 @@ on:
       - ".cargo/config.toml"
       - ".github/actions/sccache/**"
       - ".github/workflows/riscv.yml"
-      - "scripts/gpu_driver_setup.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-riscv-${{ github.event.pull_request.number || github.sha }}
@@ -79,10 +78,6 @@ jobs:
       - name: Init RISC-V test-vector submodule
         run: git submodule update --init --depth 1 crates/toolchain/tests/rv32im-test-vectors/riscv-tests
       - uses: ./.github/actions/sccache
-
-      - name: Setup GPU driver
-        if: contains(matrix.platform.features, 'cuda')
-        run: bash ./scripts/gpu_driver_setup.sh
 
       - name: Set feature flags
         run: |
