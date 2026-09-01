@@ -481,7 +481,7 @@ lean_mark_persistent(l_VmVerifier_Executable_main___boxed__const__2);
 return lean_io_result_mk_ok(lean_box(0));
 }
 char ** lean_setup_args(int argc, char ** argv);
-void lean_initialize();
+void lean_initialize_runtime_module();
 
   #if defined(WIN32) || defined(_WIN32)
   #include <windows.h>
@@ -494,7 +494,7 @@ void lean_initialize();
   #endif
   lean_object* in; lean_object* res;
 argv = lean_setup_args(argc, argv);
-lean_initialize();
+lean_initialize_runtime_module();
 lean_set_panic_messages(false);
 res = initialize_VmVerifier_Main(1 /* builtin */);
 lean_set_panic_messages(true);

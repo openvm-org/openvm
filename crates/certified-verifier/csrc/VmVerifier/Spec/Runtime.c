@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: VmVerifier.Spec.Runtime
-// Imports: public import Init public import Batteries.Data.List.Basic public import Fundamentals.Poseidon2.Raw public import Swirl.Protocol.Noninteractive.Runtime.RawInstances public import Swirl.Protocol.Noninteractive.Verifier.Runtime.Main public import Swirl.Protocol.Noninteractive.VerifierBabyBearPoseidon2 public import VmVerifier.Spec.Wire
+// Imports: public import Init public import Fundamentals.Poseidon2.Raw public import Swirl.Protocol.Noninteractive.Runtime.RawInstances public import Swirl.Protocol.Noninteractive.Verifier.Runtime.Main public import Swirl.Protocol.Noninteractive.VerifierBabyBearPoseidon2 public import VmVerifier.Spec.Wire
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 LEAN_EXPORT lean_object* l_VmVerifier_rawVkCommitEq___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_ctorIdx___boxed(lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_publicValues_elim(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT uint32_t l_VmVerifier_decodeVmStarkProof___lam__0(lean_object*);
@@ -22,6 +23,7 @@ lean_object* l_List_lengthTR___redArg(lean_object*);
 static lean_object* l_VmVerifier_verifyVmStarkProof___closed__1;
 lean_object* l_Fundamentals_BabyBear_FBB_Raw_ofNat(lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_publicValues_elim___redArg___boxed(lean_object*, lean_object*);
+lean_object* lean_mk_empty_array_with_capacity(lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_verifyVmStarkProof___closed__0___boxed__const__1;
 static lean_object* l_VmVerifier_verifyDecodedVmStarkProof___closed__0;
 LEAN_EXPORT lean_object* l_VmVerifier_decidableInternalRecursiveProofPvsRawValid___boxed(lean_object*, lean_object*, lean_object*);
@@ -34,6 +36,7 @@ lean_object* l_VmVerifier_MemoryDimensions_overallHeight(lean_object*);
 lean_object* l_Fundamentals_Poseidon2_Raw_hashSlice(lean_object*);
 lean_object* l_List_get_x3fInternal___redArg(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawZeroDigest___lam__0(lean_object*);
+lean_object* lean_array_push(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawLeafDigest(lean_object*);
 static lean_object* l_VmVerifier_verifyDecodedVmStarkProof___closed__1;
 static lean_object* l_VmVerifier_verifyVmStarkProofInner___closed__0;
@@ -54,6 +57,7 @@ LEAN_EXPORT lean_object* l_VmVerifier_rawZero;
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_stark_elim___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawPublicValuesMerkleRoot_x3f(lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_decodeVmStarkProof___lam__0___boxed(lean_object*);
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks___redArg(lean_object*, lean_object*);
 lean_object* l_VmVerifier_Spec_Wire_readUserPvsProof(lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_decidableUserPublicValuesRawValid___lam__0___boxed(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawVkCommitUnset___boxed(lean_object*);
@@ -64,8 +68,13 @@ lean_object* lean_nat_div(lean_object*, lean_object*);
 LEAN_EXPORT uint8_t l_VmVerifier_verifyVmStarkProofPvs(lean_object*, lean_object*);
 lean_object* l_Fundamentals_BabyBearExt4_Raw_ofBase(lean_object*);
 LEAN_EXPORT lean_object* l_List_mapTR_loop___at___00VmVerifier_rawPublicValuesMerkleRoot_x3f_spec__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks___boxed(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_instInhabitedVmStarkProofError;
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+lean_object* lean_array_to_list(lean_object*);
+static lean_object* l_VmVerifier_rawToChunks___redArg___closed__1;
 LEAN_EXPORT lean_object* l_VmVerifier_verifyVmStarkProofInner___lam__0(lean_object*);
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
 lean_object* l_VmVerifier_publicValuesHeight_x3f(lean_object*);
 LEAN_EXPORT lean_object* l___private_VmVerifier_Spec_Runtime_0__VmVerifier_UserPublicValuesRawValid_match__1_splitter(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_ctorIdx(lean_object*);
@@ -76,6 +85,7 @@ LEAN_EXPORT lean_object* l_VmVerifier_verifyInternalRecursiveProofPvs___boxed(le
 uint8_t l_Array_instDecidableEq___redArg(lean_object*, lean_object*, lean_object*);
 static lean_object* l_VmVerifier_vmStarkProtocolConfig___closed__0;
 LEAN_EXPORT uint8_t l_VmVerifier_decidableUserPublicValuesRawValid(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawPublicValuesMerkleRoot_x3f___lam__0___boxed(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawComputeExeCommit(lean_object*, lean_object*, lean_object*);
 lean_object* l_Fundamentals_Poseidon2_Raw_compressDigest(lean_object*, lean_object*);
@@ -86,7 +96,6 @@ LEAN_EXPORT uint8_t l_VmVerifier_verifyInternalRecursiveProofPvs(lean_object*, l
 static lean_object* l_VmVerifier_decidableInternalRecursiveProofPvsRawValid___closed__0;
 uint8_t l_Nat_testBit(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_decidableUserPublicValuesRawValid___lam__2___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
-lean_object* l_List_toChunks___redArg(lean_object*, lean_object*);
 lean_object* lean_nat_pow(lean_object*, lean_object*);
 uint8_t lean_nat_dec_eq(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawZeroDigest;
@@ -105,11 +114,14 @@ lean_object* lean_nat_mul(lean_object*, lean_object*);
 uint32_t l_Swirl_Protocol_Noninteractive_exitCode(lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_instInhabitedVmStarkProofError_default;
 static lean_object* l_VmVerifier_verifyVmStarkProof___closed__0;
+static lean_object* l_VmVerifier_rawToChunks___redArg___closed__0;
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go___redArg(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_ctorElim___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
 lean_object* l_instDecidableEqFin___boxed(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_decidableUserPublicValuesRawValid___lam__1___boxed(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_verifyVmStarkProofPvs___boxed(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_VmStarkProofError_ctorElim___redArg___boxed(lean_object*, lean_object*);
+lean_object* lean_array_get_size(lean_object*);
 uint8_t l_Option_instDecidableEq_decEq___redArg(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_VmVerifier_rawOne;
 uint8_t lean_nat_dec_le(lean_object*, lean_object*);
@@ -123,6 +135,7 @@ LEAN_EXPORT lean_object* l___private_VmVerifier_Spec_Runtime_0__VmVerifier_UserP
 LEAN_EXPORT lean_object* l_VmVerifier_decidableUserPublicValuesRawValid___boxed(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT uint8_t l_VmVerifier_decidableUserPublicValuesRawValid___lam__0(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l___private_VmVerifier_Spec_Runtime_0__VmVerifier_UserPublicValuesRawValid_match__1_splitter___redArg___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks___redArg___boxed(lean_object*, lean_object*);
 static lean_object* _init_l_VmVerifier_rawZero() {
 _start:
 {
@@ -213,6 +226,161 @@ _start:
 lean_object* x_4; 
 x_4 = l_VmVerifier_rawMerkleNode(x_1, x_2, x_3);
 lean_dec(x_1);
+return x_4;
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go___redArg(lean_object* x_1, lean_object* x_2, lean_object* x_3, lean_object* x_4) {
+_start:
+{
+if (lean_obj_tag(x_2) == 0)
+{
+lean_object* x_5; lean_object* x_6; lean_object* x_7; 
+x_5 = lean_array_to_list(x_3);
+x_6 = lean_array_push(x_4, x_5);
+x_7 = lean_array_to_list(x_6);
+return x_7;
+}
+else
+{
+lean_object* x_8; lean_object* x_9; lean_object* x_10; uint8_t x_11; 
+x_8 = lean_ctor_get(x_2, 0);
+lean_inc(x_8);
+x_9 = lean_ctor_get(x_2, 1);
+lean_inc(x_9);
+lean_dec_ref(x_2);
+x_10 = lean_array_get_size(x_3);
+x_11 = lean_nat_dec_eq(x_10, x_1);
+lean_dec(x_10);
+if (x_11 == 0)
+{
+lean_object* x_12; 
+x_12 = lean_array_push(x_3, x_8);
+x_2 = x_9;
+x_3 = x_12;
+goto _start;
+}
+else
+{
+lean_object* x_14; lean_object* x_15; lean_object* x_16; lean_object* x_17; 
+x_14 = lean_mk_empty_array_with_capacity(x_1);
+x_15 = lean_array_push(x_14, x_8);
+x_16 = lean_array_to_list(x_3);
+x_17 = lean_array_push(x_4, x_16);
+x_2 = x_9;
+x_3 = x_15;
+x_4 = x_17;
+goto _start;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go(lean_object* x_1, lean_object* x_2, lean_object* x_3, lean_object* x_4, lean_object* x_5) {
+_start:
+{
+lean_object* x_6; 
+x_6 = l_VmVerifier_rawToChunks_go___redArg(x_2, x_3, x_4, x_5);
+return x_6;
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go___redArg___boxed(lean_object* x_1, lean_object* x_2, lean_object* x_3, lean_object* x_4) {
+_start:
+{
+lean_object* x_5; 
+x_5 = l_VmVerifier_rawToChunks_go___redArg(x_1, x_2, x_3, x_4);
+lean_dec(x_1);
+return x_5;
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks_go___boxed(lean_object* x_1, lean_object* x_2, lean_object* x_3, lean_object* x_4, lean_object* x_5) {
+_start:
+{
+lean_object* x_6; 
+x_6 = l_VmVerifier_rawToChunks_go(x_1, x_2, x_3, x_4, x_5);
+lean_dec(x_2);
+return x_6;
+}
+}
+static lean_object* _init_l_VmVerifier_rawToChunks___redArg___closed__0() {
+_start:
+{
+lean_object* x_1; lean_object* x_2; 
+x_1 = lean_unsigned_to_nat(1u);
+x_2 = lean_mk_empty_array_with_capacity(x_1);
+return x_2;
+}
+}
+static lean_object* _init_l_VmVerifier_rawToChunks___redArg___closed__1() {
+_start:
+{
+lean_object* x_1; lean_object* x_2; 
+x_1 = lean_unsigned_to_nat(0u);
+x_2 = lean_mk_empty_array_with_capacity(x_1);
+return x_2;
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks___redArg(lean_object* x_1, lean_object* x_2) {
+_start:
+{
+if (lean_obj_tag(x_2) == 0)
+{
+lean_object* x_3; 
+x_3 = lean_box(0);
+return x_3;
+}
+else
+{
+lean_object* x_4; lean_object* x_5; lean_object* x_6; uint8_t x_7; 
+x_4 = lean_ctor_get(x_2, 0);
+x_5 = lean_ctor_get(x_2, 1);
+x_6 = lean_unsigned_to_nat(0u);
+x_7 = lean_nat_dec_eq(x_1, x_6);
+if (x_7 == 0)
+{
+lean_object* x_8; lean_object* x_9; lean_object* x_10; lean_object* x_11; 
+lean_inc(x_5);
+lean_inc(x_4);
+lean_dec_ref(x_2);
+x_8 = l_VmVerifier_rawToChunks___redArg___closed__0;
+x_9 = lean_array_push(x_8, x_4);
+x_10 = l_VmVerifier_rawToChunks___redArg___closed__1;
+x_11 = l_VmVerifier_rawToChunks_go___redArg(x_1, x_5, x_9, x_10);
+return x_11;
+}
+else
+{
+lean_object* x_12; lean_object* x_13; 
+x_12 = lean_box(0);
+x_13 = lean_alloc_ctor(1, 2, 0);
+lean_ctor_set(x_13, 0, x_2);
+lean_ctor_set(x_13, 1, x_12);
+return x_13;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks(lean_object* x_1, lean_object* x_2, lean_object* x_3) {
+_start:
+{
+lean_object* x_4; 
+x_4 = l_VmVerifier_rawToChunks___redArg(x_2, x_3);
+return x_4;
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks___redArg___boxed(lean_object* x_1, lean_object* x_2) {
+_start:
+{
+lean_object* x_3; 
+x_3 = l_VmVerifier_rawToChunks___redArg(x_1, x_2);
+lean_dec(x_1);
+return x_3;
+}
+}
+LEAN_EXPORT lean_object* l_VmVerifier_rawToChunks___boxed(lean_object* x_1, lean_object* x_2, lean_object* x_3) {
+_start:
+{
+lean_object* x_4; 
+x_4 = l_VmVerifier_rawToChunks(x_1, x_2, x_3);
+lean_dec(x_2);
 return x_4;
 }
 }
@@ -310,7 +478,7 @@ if (x_4 == 0)
 lean_object* x_5; lean_object* x_6; lean_object* x_7; lean_object* x_8; lean_object* x_9; lean_object* x_10; lean_object* x_11; lean_object* x_12; 
 x_5 = lean_ctor_get(x_2, 0);
 x_6 = lean_unsigned_to_nat(8u);
-x_7 = l_List_toChunks___redArg(x_6, x_1);
+x_7 = l_VmVerifier_rawToChunks___redArg(x_6, x_1);
 x_8 = lean_box(0);
 x_9 = l_List_mapTR_loop___at___00VmVerifier_rawPublicValuesMerkleRoot_x3f_spec__0(x_7, x_8);
 x_10 = lean_alloc_closure((void*)(l_VmVerifier_rawPublicValuesMerkleRoot_x3f___lam__0___boxed), 2, 1);
@@ -328,7 +496,7 @@ x_13 = lean_ctor_get(x_2, 0);
 lean_inc(x_13);
 lean_dec(x_2);
 x_14 = lean_unsigned_to_nat(8u);
-x_15 = l_List_toChunks___redArg(x_14, x_1);
+x_15 = l_VmVerifier_rawToChunks___redArg(x_14, x_1);
 x_16 = lean_box(0);
 x_17 = l_List_mapTR_loop___at___00VmVerifier_rawPublicValuesMerkleRoot_x3f_spec__0(x_15, x_16);
 x_18 = lean_alloc_closure((void*)(l_VmVerifier_rawPublicValuesMerkleRoot_x3f___lam__0___boxed), 2, 1);
@@ -2059,7 +2227,6 @@ return x_32;
 }
 }
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_Batteries_Data_List_Basic(uint8_t builtin);
 lean_object* initialize_Fundamentals_Poseidon2_Raw(uint8_t builtin);
 lean_object* initialize_Swirl_Protocol_Noninteractive_Runtime_RawInstances(uint8_t builtin);
 lean_object* initialize_Swirl_Protocol_Noninteractive_Verifier_Runtime_Main(uint8_t builtin);
@@ -2071,9 +2238,6 @@ lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
 res = initialize_Init(builtin);
-if (lean_io_result_is_error(res)) return res;
-lean_dec_ref(res);
-res = initialize_Batteries_Data_List_Basic(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 res = initialize_Fundamentals_Poseidon2_Raw(builtin);
@@ -2097,6 +2261,10 @@ l_VmVerifier_rawOne = _init_l_VmVerifier_rawOne();
 lean_mark_persistent(l_VmVerifier_rawOne);
 l_VmVerifier_rawZeroDigest = _init_l_VmVerifier_rawZeroDigest();
 lean_mark_persistent(l_VmVerifier_rawZeroDigest);
+l_VmVerifier_rawToChunks___redArg___closed__0 = _init_l_VmVerifier_rawToChunks___redArg___closed__0();
+lean_mark_persistent(l_VmVerifier_rawToChunks___redArg___closed__0);
+l_VmVerifier_rawToChunks___redArg___closed__1 = _init_l_VmVerifier_rawToChunks___redArg___closed__1();
+lean_mark_persistent(l_VmVerifier_rawToChunks___redArg___closed__1);
 l_VmVerifier_rawVkCommitEq___closed__0 = _init_l_VmVerifier_rawVkCommitEq___closed__0();
 lean_mark_persistent(l_VmVerifier_rawVkCommitEq___closed__0);
 l_VmVerifier_decidableInternalRecursiveProofPvsRawValid___closed__0 = _init_l_VmVerifier_decidableInternalRecursiveProofPvsRawValid___closed__0();
