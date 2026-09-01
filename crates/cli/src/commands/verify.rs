@@ -242,7 +242,9 @@ impl VerifyCmd {
                 if *certified {
                     #[cfg(feature = "certified-verifier")]
                     {
-                        println!("Verifying STARK proof with the canonical standard certified verifier");
+                        println!(
+                            "Verifying STARK proof with the canonical standard certified verifier"
+                        );
                         Sdk::verify_proof_with_certified_verifier(
                             &expected_baseline,
                             &vm_stark_proof,
