@@ -19,9 +19,11 @@ on:
       - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".github/actions/lean-toolchain/**"
+      - ".github/actions/rust-cache-cuda/**"
       - ".github/actions/sccache/**"
       - ".github/workflows/certified-verifier.yml"
       - "ci/scripts/check_certified_verifier_c.sh"
+      - "scripts/gpu_driver_setup.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-certified-verifier-${{ github.event.pull_request.number || github.sha }}
@@ -36,7 +38,7 @@ jobs:
   openvm-tests:
     name: OpenVM SDK and CLI
     runs-on:
-      - runs-on=${{ github.run_id }}-certified-verifier-openvm/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-certified-verifier-openvm/image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge+g5.4xlarge/volume=80gb/spot=price-capacity-optimized/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -51,15 +53,39 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
+
+      - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
+
+      - name: Verify GPU setup
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> "$GITHUB_ENV"
+
+      - name: Setup CUDA environment
+        run: |
+          CUDART_PATH=$(find /usr/local -name "libcudart.so" | head -1)
+          if [ -n "$CUDART_PATH" ]; then
+            CUDA_LIB_DIR=$(dirname "$CUDART_PATH")
+            echo "CUDA libraries found at: $CUDA_LIB_DIR"
+            echo "CUDA_LIB_DIR=$CUDA_LIB_DIR" >> "$GITHUB_ENV"
+          else
+            echo "CUDA libraries not found!"
+            exit 1
+          fi
 
       - name: Build cargo-openvm
         run: |
-          cargo build --locked --profile fast -p cargo-openvm --features certified-verifier
+          cargo build --locked --profile fast -p cargo-openvm --features cuda,certified-verifier
           echo "${{ github.workspace }}/target/fast" >> "$GITHUB_PATH"
 
       - name: Install guest rust-src
@@ -68,7 +94,7 @@ jobs:
       - name: Run certified verifier tests
         run: |
           cargo nextest run --cargo-profile=fast --test-threads=1 \
-            -p openvm-certified-verifier
+            -p openvm-certified-verifier --features openvm-sdk/cuda
 
       - name: Run SDK certified verifier tests
         working-directory: crates/sdk
@@ -76,14 +102,15 @@ jobs:
           OPENVM_SKIP_DEBUG: "1"
         run: |
           cargo nextest run --cargo-profile=fast --test-threads=1 \
-            --features root-prover,certified-verifier -- test_certified_verifier
+            --features cuda,root-prover,certified-verifier -- test_certified_verifier
 
       - name: Run CLI certified STARK e2e test
         working-directory: crates/cli
         env:
           SKIP_INSTALL: "1"
         run: |
-          cargo nextest run --cargo-profile=fast --test-threads=1 --features certified-verifier \
+          cargo nextest run --cargo-profile=fast --test-threads=1 \
+            --features cuda,certified-verifier \
             -E 'test(test_cli_stark_e2e_certified)'
 
       - name: sccache stats
