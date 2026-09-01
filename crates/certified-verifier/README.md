@@ -71,3 +71,12 @@ tests in `crates/certified-verifier/` and the Lean decoders
 If either side moves (Lean structs, wire version, stark-backend proof
 shape, the Lean toolchain, or the verifier error mapping in `ws-fv`),
 the encoder and the vendored C sources and vendored tests must be refreshed together.
+
+## Testing standard examples
+
+[`test_standard_examples.sh`](./test_standard_examples.sh) reuses one standard key set to prove and
+certified verify all compatible examples (`algebra` is excluded because it uses custom moduli):
+
+```sh
+./crates/certified-verifier/test_standard_examples.sh
+```
