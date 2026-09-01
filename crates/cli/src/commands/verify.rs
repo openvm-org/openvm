@@ -85,7 +85,7 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            help = "Additionally verify the STARK proof with the certified Swirl verifier extracted from its Lean formalization (requires a build with the 'certified-verifier' feature). Only proofs generated with the default riscv32 VM and default parameters are in scope",
+            help = "Additionally verify the STARK proof with the certified Swirl verifier extracted from its Lean formalization (requires a build with the 'certified-verifier' feature). Only proofs generated with the standard VM configuration and default parameters are in scope",
             help_heading = "OpenVM Options"
         )]
         certified: bool,
@@ -242,9 +242,7 @@ impl VerifyCmd {
                 if *certified {
                     #[cfg(feature = "certified-verifier")]
                     {
-                        println!(
-                            "Verifying STARK proof with the canonical RISC-V certified verifier"
-                        );
+                        println!("Verifying STARK proof with the canonical standard certified verifier");
                         Sdk::verify_proof_with_certified_verifier(
                             &expected_baseline,
                             &vm_stark_proof,

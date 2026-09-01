@@ -49,7 +49,8 @@ flow as described [here](/book/writing-apps/generating-proofs#generating-app-com
 
 Pass `--certified` to additionally check the proof with the certified Swirl verifier extracted from
 its Lean formalization. This requires `cargo-openvm` to be built with the `certified-verifier`
-feature and applies only to proofs from the default RISC-V VM configuration and default parameters.
+feature and applies only to proofs from the standard VM configuration and default app and
+aggregation parameters.
 
 :::info
 The `cargo openvm verify stark` command implicitly reads the aggregation verifying key at

@@ -15,6 +15,7 @@ on:
       - "crates/continuations/**"
       - "crates/recursion/**"
       - "crates/sdk/**"
+      - "crates/sdk-config/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -148,14 +149,14 @@ jobs:
             --profile fast --root "$install_root" --target-dir "$install_target"
           echo "$install_root/bin" >> "$GITHUB_PATH"
           echo "CERTIFIED_CLI_TARGET_DIR=$install_target" >> "$GITHUB_ENV"
-          echo "CERTIFIED_CONFIG_PATH=${RUNNER_TEMP:?}/openvm-riscv32.toml" >> "$GITHUB_ENV"
+          echo "CERTIFIED_CONFIG_PATH=${RUNNER_TEMP:?}/openvm-standard.toml" >> "$GITHUB_ENV"
+          echo "CERTIFIED_INIT_FILE_PATH=${RUNNER_TEMP:?}/openvm_init.rs" >> "$GITHUB_ENV"
           echo "CERTIFIED_PROOF_PATH=${RUNNER_TEMP:?}/fibonacci.stark.proof" >> "$GITHUB_ENV"
 
       - name: Prove Fibonacci
         working-directory: crates/cli
         run: |
-          printf '[app_vm_config.rv32i]\n[app_vm_config.rv32m]\n[app_vm_config.io]\n' \
-            > "$CERTIFIED_CONFIG_PATH"
+          cp ../sdk-config/src/openvm_standard.toml "$CERTIFIED_CONFIG_PATH"
           cargo openvm keygen \
             --manifest-path tests/programs/multi/Cargo.toml \
             --config "$CERTIFIED_CONFIG_PATH"
@@ -164,6 +165,7 @@ jobs:
             --manifest-path tests/programs/multi/Cargo.toml \
             --example fibonacci \
             --config "$CERTIFIED_CONFIG_PATH" \
+            --init-file-name "$CERTIFIED_INIT_FILE_PATH" \
             --proof "$CERTIFIED_PROOF_PATH"
 
       - name: Delete Cargo install target
