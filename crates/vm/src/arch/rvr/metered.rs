@@ -10,7 +10,7 @@ use std::{
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::MEMORY_AS,
-    DEFERRAL_AS, PUBLIC_VALUES_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::RvrRuntimeExtension;
@@ -31,9 +31,13 @@ use crate::{
             },
             MeteredCtx,
         },
-        ExecutionError, ExecutionOutcome, Streams, SystemConfig, VmState, ADDR_SPACE_OFFSET,
+        AddressSpaceHostConfig, AddressSpaceHostLayout, ExecutionError, ExecutionOutcome, Streams,
+        SystemConfig, VmState, ADDR_SPACE_OFFSET,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{
+        online::{GuestMemory, TouchedPages},
+        AddressMap,
+    },
 };
 
 struct RvrMeteredInstanceInner<'a> {
@@ -57,6 +61,69 @@ static_assertions::assert_impl_all!(RvrMeteredSegmentInstance<'static>: Send, Sy
 
 /// Result of metered execution that may stop at a segment boundary.
 pub type RvrMeteredExecutionOutcome = ExecutionOutcome<SegmentationState>;
+
+/// Converts RVR metering pages into host pages suitable for sparse snapshots.
+struct SnapshotPageTracker {
+    address_spaces: Vec<AddressSpaceSnapshotPages>,
+}
+
+struct AddressSpaceSnapshotPages {
+    touched: TouchedPages,
+    total_bytes: usize,
+    metering_page_bytes: usize,
+}
+
+impl AddressSpaceSnapshotPages {
+    fn new(config: &AddressSpaceHostConfig) -> Self {
+        let total_bytes = config.size();
+        let leaves_per_metering_page = 1 << PAGE_MASK_LEAF_BITS;
+        let metering_page_bytes = leaves_per_metering_page * VM_DIGEST_WIDTH * config.layout.size();
+        Self {
+            touched: TouchedPages::new(total_bytes),
+            total_bytes,
+            metering_page_bytes,
+        }
+    }
+
+    fn record(&mut self, touch: &PageTouch) {
+        debug_assert_ne!(touch.leaf_mask, 0);
+        let byte_start = (touch.page_id as usize)
+            .checked_mul(self.metering_page_bytes)
+            .expect("metering page byte offset overflow");
+        assert!(
+            byte_start < self.total_bytes,
+            "metering page outside address space"
+        );
+        let byte_len = self.metering_page_bytes.min(self.total_bytes - byte_start);
+        self.touched.mark_byte_range(byte_start, byte_len);
+    }
+}
+
+impl SnapshotPageTracker {
+    fn new(system_config: &SystemConfig) -> Self {
+        let address_spaces = system_config
+            .memory_config
+            .addr_spaces
+            .iter()
+            .map(AddressSpaceSnapshotPages::new)
+            .collect();
+        Self { address_spaces }
+    }
+
+    fn record(&mut self, addr_space: u32, touches: &[PageTouch]) {
+        let pages = &mut self.address_spaces[addr_space as usize];
+        for touch in touches {
+            pages.record(touch);
+        }
+    }
+
+    fn merge_into(&self, memory: &mut AddressMap) {
+        assert_eq!(memory.touched_pages.len(), self.address_spaces.len());
+        for (target, pages) in memory.touched_pages.iter_mut().zip(&self.address_spaces) {
+            target.union_with(&pages.touched);
+        }
+    }
+}
 
 // ── C-compatible metering state ─────────────────────────────────────────────
 
@@ -136,6 +203,9 @@ pub struct SegmentationState {
     deferral_page_buf: Vec<PageTouch>,
     drained_mem_page_touches: Vec<PageTouch>,
     address_height: usize,
+    /// RVR writes through raw pointers, so retain its conservative access set for sparse
+    /// snapshots.
+    snapshot_pages: Option<SnapshotPageTracker>,
 }
 
 impl SegmentationState {
@@ -145,6 +215,10 @@ impl SegmentationState {
         uses_deferral_address_space: bool,
     ) -> Self {
         let memory_dimensions = system_config.memory_config.memory_dimensions();
+        let snapshot_pages = ctx
+            .config
+            .suspend_on_segment
+            .then(|| SnapshotPageTracker::new(system_config));
         Self {
             ctx,
             mem_page_buf: vec![PageTouch::default(); MEM_PAGE_BUF_CAP],
@@ -156,6 +230,7 @@ impl SegmentationState {
             },
             drained_mem_page_touches: Vec::new(),
             address_height: memory_dimensions.address_height,
+            snapshot_pages,
         }
     }
 
@@ -232,10 +307,24 @@ impl SegmentationState {
         memory_ctx.apply_page_touches_with_offset(page_offset, touches);
     }
 
+    pub(super) fn merge_snapshot_touched_pages(&self, memory: &mut AddressMap) {
+        if let Some(snapshot_pages) = &self.snapshot_pages {
+            snapshot_pages.merge_into(memory);
+        }
+    }
+
     /// Apply all page buffers: convert local pages to global ids and update
     /// memory metering state.
     #[inline(always)]
     fn apply_page_buffers(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
+        if let Some(snapshot_pages) = &mut self.snapshot_pages {
+            snapshot_pages.record(MEMORY_AS, &self.mem_page_buf[..mem_len as usize]);
+            snapshot_pages.record(PUBLIC_VALUES_AS, &self.pv_page_buf[..pv_len as usize]);
+            snapshot_pages.record(
+                DEFERRAL_AS,
+                &self.deferral_page_buf[..deferral_len as usize],
+            );
+        }
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
@@ -258,6 +347,9 @@ impl SegmentationState {
 
     fn drain_main_memory_buffer(&mut self, mem_len: u32) {
         let len = mem_len as usize;
+        if let Some(snapshot_pages) = &mut self.snapshot_pages {
+            snapshot_pages.record(MEMORY_AS, &self.mem_page_buf[..len]);
+        }
         for &touch in &self.mem_page_buf[..len] {
             let merged = if let Some(previous) = self.drained_mem_page_touches.last_mut() {
                 if previous.page_id == touch.page_id {
@@ -694,13 +786,15 @@ mod tests {
             },
             BOUNDARY_AIR_ID, MERKLE_AIR_ID,
         },
+        system::memory::online::PAGE_SIZE,
         utils::{test_cpu_engine, test_system_config},
     };
 
-    fn make_segmentation_state_with_deferral(
+    fn make_segmentation_state_from_config(
+        system_config: &SystemConfig,
         uses_deferral_address_space: bool,
+        suspend_on_segment: bool,
     ) -> SegmentationState {
-        let system_config = test_system_config();
         let num_airs = 6;
         let mut air_names = (0..num_airs)
             .map(|idx| format!("Air {idx}"))
@@ -732,10 +826,60 @@ mod tests {
                     max_interactions: u32::MAX,
                 },
             },
-            &system_config,
+            system_config,
             test_cpu_engine().proving_memory_config(),
-        );
-        SegmentationState::new(ctx, &system_config, uses_deferral_address_space)
+        )
+        .with_suspend_on_segment(suspend_on_segment);
+        SegmentationState::new(ctx, system_config, uses_deferral_address_space)
+    }
+
+    fn make_segmentation_state_with_deferral(
+        uses_deferral_address_space: bool,
+    ) -> SegmentationState {
+        make_segmentation_state_from_config(
+            &test_system_config(),
+            uses_deferral_address_space,
+            false,
+        )
+    }
+
+    #[test]
+    fn segmentation_state_tracks_sparse_snapshot_pages() {
+        let host_page_bytes = PAGE_SIZE;
+        let mut system_config = test_system_config();
+        system_config.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
+            2 * host_page_bytes;
+        system_config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells =
+            2 * host_page_bytes / size_of::<u32>();
+        let mut state = make_segmentation_state_from_config(&system_config, true, true);
+
+        state.mem_page_buf[0] = PageTouch {
+            page_id: 4,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+        state.drain_main_memory_buffer(1);
+        state.pv_page_buf[0] = PageTouch {
+            page_id: 8,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+        state.deferral_page_buf[0] = PageTouch {
+            page_id: 2,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+        state.apply_page_buffers(0, 1, 1);
+
+        let mut memory = AddressMap::from_mem_config(&system_config.memory_config);
+        state.merge_snapshot_touched_pages(&mut memory);
+
+        for addr_space in [MEMORY_AS, PUBLIC_VALUES_AS, DEFERRAL_AS] {
+            assert_eq!(
+                memory.touched_pages[addr_space as usize].touched_byte_ranges(2 * host_page_bytes),
+                vec![(host_page_bytes, 2 * host_page_bytes)]
+            );
+        }
     }
 
     fn make_segmentation_state() -> SegmentationState {

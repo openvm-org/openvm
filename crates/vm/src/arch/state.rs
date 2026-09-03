@@ -88,6 +88,24 @@ impl VmState<GuestMemory> {
         self.streams = streams.into();
         self.rng = StdRng::seed_from_u64(DEFAULT_RNG_SEED);
     }
+
+    /// Deeply clone this state while copying only memory pages recorded in
+    /// [`AddressMap::touched_pages`](crate::system::memory::AddressMap::touched_pages).
+    ///
+    /// The returned memory mappings are independent from `self`. Initial states, interpreter
+    /// states, and RVR segment-boundary states maintain the required metadata. Other callers must
+    /// ensure that all nonzero memory pages are marked; ordinary [`Clone`] remains the exact
+    /// dense-copy operation for states that cannot provide that invariant.
+    pub fn sparse_clone(&self) -> Self {
+        Self {
+            pc: self.pc,
+            memory: GuestMemory::new(self.memory.memory.sparse_clone()),
+            streams: self.streams.clone(),
+            rng: self.rng.clone(),
+            #[cfg(feature = "metrics")]
+            metrics: self.metrics.clone(),
+        }
+    }
 }
 
 /// Represents the full execution state of a VM during execution.
@@ -258,13 +276,7 @@ where
         data: &[u8; N],
     ) {
         // SAFETY: caller guarantees the byte range is in bounds.
-        unsafe {
-            self.memory
-                .memory
-                .get_memory_mut()
-                .get_unchecked_mut(addr_space as usize)
-                .write(byte_ptr as usize, *data);
-        }
+        unsafe { self.memory.write_bytes(addr_space, byte_ptr, *data) }
     }
 
     /// Cell read: `ptr` is a pointer; byte offset is `ptr * size_of::<T>()`.
@@ -291,13 +303,7 @@ where
     ) {
         // SAFETY: caller guarantees T matches the AS layout and the range is
         // in bounds.
-        unsafe {
-            self.memory
-                .memory
-                .get_memory_mut()
-                .get_unchecked_mut(addr_space as usize)
-                .write((ptr as usize) * size_of::<T>(), *data);
-        }
+        unsafe { self.memory.write(addr_space, ptr, *data) }
     }
 
     #[inline(always)]
@@ -313,5 +319,38 @@ where
         // SAFETY:
         // - panics if the byte range is out of bounds
         unsafe { self.memory.get_u8_slice(addr_space, byte_ptr, len) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{exe::SparseMemoryImage, riscv::MEMORY_AS};
+
+    use super::*;
+    use crate::{
+        arch::execution_mode::ExecutionCtx, system::memory::online::PAGE_SIZE,
+        utils::test_system_config,
+    };
+
+    #[test]
+    fn host_write_bytes_survives_sparse_state_clone() {
+        let vm_state = VmState::initial(
+            &test_system_config(),
+            &SparseMemoryImage::new(),
+            0x1234,
+            Streams::default(),
+        );
+        let mut exec_state = VmExecState::new(vm_state, ExecutionCtx::new(None));
+        let byte_ptr = (2 * PAGE_SIZE + 17) as u32;
+
+        exec_state.host_write_bytes(MEMORY_AS, byte_ptr, &[1, 2, 3, 4]);
+        let snapshot = exec_state.vm_state.sparse_clone();
+        exec_state.host_write_bytes(MEMORY_AS, byte_ptr, &[5, 6, 7, 8]);
+
+        assert_eq!(snapshot.pc(), 0x1234);
+        assert_eq!(
+            unsafe { snapshot.memory.read_bytes::<4>(MEMORY_AS, byte_ptr) },
+            [1, 2, 3, 4]
+        );
     }
 }

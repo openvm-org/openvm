@@ -478,6 +478,7 @@ fn execute_metered_impl(
         seg_state.ctx.segmentation_ctx.num_preflight_replay_values =
             state.mode_state.num_preflight_replay_values;
     }
+    seg_state.merge_snapshot_touched_pages(&mut vm_state.memory.memory);
     Ok(if terminated {
         RvrMeteredExecutionOutcome::Terminated(seg_state)
     } else {
