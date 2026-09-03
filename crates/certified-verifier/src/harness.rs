@@ -10,11 +10,11 @@ use std::path::PathBuf;
 
 use crate::VerifierError;
 
-/// Resolve the `swirl_dump_proof` wire-format test utility compiled from the
+/// Resolve the `vm_dump_proof` wire-format test utility compiled from the
 /// vendored C sources by this crate's `build.rs`.
 #[cfg(test)]
-pub(crate) fn swirl_dump_proof_bin() -> PathBuf {
-    PathBuf::from(env!("OUT_DIR")).join("swirl_dump_proof")
+pub(crate) fn vm_dump_proof_bin() -> PathBuf {
+    PathBuf::from(env!("OUT_DIR")).join("vm_dump_proof")
 }
 
 /// Outcome of an individual certified-verifier invocation.

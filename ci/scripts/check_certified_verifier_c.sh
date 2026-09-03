@@ -5,7 +5,7 @@ set -euo pipefail
 ws_fv_dir="${1:?usage: check_certified_verifier_c.sh <ws-fv checkout>}"
 vendored_dir="crates/certified-verifier/csrc"
 vm_trace="$ws_fv_dir/.lake/build/bin/vm_verify.trace"
-dump_trace="$ws_fv_dir/.lake/packages/swirl-rbr-fv/.lake/build/bin/swirl_dump_proof.trace"
+dump_trace="$ws_fv_dir/.lake/build/bin/vm_dump_proof.trace"
 
 test -d "$vendored_dir"
 test -f "$vm_trace"
@@ -34,4 +34,4 @@ find "$vendored_dir" -type f -name '*.c' \
 
 diff -u "$scratch_dir/generated-files" "$scratch_dir/vendored-files"
 
-echo "Vendored C matches the ws-fv vm_verify and swirl_dump_proof link closures."
+echo "Vendored C matches the ws-fv vm_verify and vm_dump_proof link closures."
