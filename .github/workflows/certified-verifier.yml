@@ -32,7 +32,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # TODO: Replace this commit with a ws-fv release tag once one is available.
-  WS_FV_REV: b03daf500ac65d523047e97c6f57bb98a3b00d30
+  WS_FV_REV: 1f92b767548bb8bb6a1c21a537f7d686c141909e
 
 jobs:
   openvm-tests:
@@ -211,12 +211,7 @@ jobs:
         working-directory: ws-fv
         run: |
           test "$(tr -d '\r\n' < lean-toolchain)" = "$LEAN_TOOLCHAIN"
-          elan run "$LEAN_TOOLCHAIN" lake build vm_verify
-
-      - name: Build upstream parser utility
-        working-directory: ws-fv/.lake/packages/swirl-rbr-fv
-        run: |
-          elan run "$LEAN_TOOLCHAIN" lake build swirl_dump_proof
+          elan run "$LEAN_TOOLCHAIN" lake build vm_verify vm_dump_proof
 
       - name: Check vendored C against Lean-generated C
         run: bash ci/scripts/check_certified_verifier_c.sh ws-fv

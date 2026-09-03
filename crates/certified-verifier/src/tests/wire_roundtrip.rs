@@ -2,33 +2,40 @@
 //!
 //! Generates a real FibonacciAir / BabyBearPoseidon2 proof through this
 //! OpenVM workspace's `openvm-stark-backend` revision, encodes
-//! `(vk, proof, public_values)` through `openvm-certified-verifier`, pipes the
-//! three blobs to the Lean `swirl_dump_proof` binary, and asserts byte
-//! parity on the structural digests. Also covers tampered, empty, and
-//! wrong-version inputs.
+//! the five VM verifier blobs through `openvm-certified-verifier`, pipes them
+//! to the Lean `vm_dump_proof` binary, and asserts parity on the structural
+//! digests. Also covers tampered, empty, and wrong-version inputs.
 
 use std::{
     io::Write,
     process::{Command, Stdio},
 };
 
+use openvm_circuit::system::memory::{
+    dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
+};
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
-    p3_field::PrimeField32,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     proof::Proof,
     test_utils::{FibFixture, TestFixture},
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge, F,
+    BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge, DIGEST_SIZE, F,
 };
+use openvm_verify_stark_host::{pvs::VkCommit, vk::VerificationBaseline};
 
 use crate::{
-    harness::swirl_dump_proof_bin,
-    magic::{MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_VK, WIRE_VERSION},
+    harness::vm_dump_proof_bin,
+    magic::{
+        MAGIC_PROOF, MAGIC_PUBLIC_VALUES, MAGIC_USER_PUBLIC_VALUES, MAGIC_VK, MAGIC_VM_BASELINE,
+        WIRE_VERSION,
+    },
     proof::write_proof,
     public_values::write_public_values,
     vk::write_vk,
+    vm::{write_user_public_values_proof, write_verification_baseline},
 };
 
 const LOG_TRACE_DEGREE: usize = 5;
@@ -52,17 +59,75 @@ fn fresh_fixture() -> Fixture {
     Fixture { vk, proof }
 }
 
-/// Concatenate `(vk, proof, pv)` blobs with `u64 LE` length prefixes,
-/// matching `Tools/SwirlDumpProof.lean`.
-fn frame_three_blobs(vk_bytes: &[u8], proof_bytes: &[u8], pv_bytes: &[u8]) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(24 + vk_bytes.len() + proof_bytes.len() + pv_bytes.len());
-    buf.extend_from_slice(&(vk_bytes.len() as u64).to_le_bytes());
-    buf.extend_from_slice(vk_bytes);
-    buf.extend_from_slice(&(proof_bytes.len() as u64).to_le_bytes());
-    buf.extend_from_slice(proof_bytes);
-    buf.extend_from_slice(&(pv_bytes.len() as u64).to_le_bytes());
-    buf.extend_from_slice(pv_bytes);
+fn fixture_digest(start: u32) -> [F; DIGEST_SIZE] {
+    std::array::from_fn(|i| F::from_u32(start + i as u32))
+}
+
+fn fixture_vk_commit(start: u32) -> VkCommit<F> {
+    VkCommit {
+        cached_commit: fixture_digest(start),
+        vk_pre_hash: fixture_digest(start + DIGEST_SIZE as u32),
+    }
+}
+
+fn baseline_fixture() -> VerificationBaseline {
+    VerificationBaseline {
+        app_exe_commit: fixture_digest(10),
+        memory_dimensions: MemoryDimensions {
+            addr_space_height: 3,
+            address_height: 29,
+        },
+        num_user_pvs: 16,
+        app_vk_commit: fixture_vk_commit(100),
+        leaf_vk_commit: fixture_vk_commit(200),
+        internal_for_leaf_vk_commit: fixture_vk_commit(300),
+        internal_recursive_vk_commit: fixture_vk_commit(400),
+        expected_def_hook_commit: None,
+    }
+}
+
+fn user_pvs_fixture() -> UserPublicValuesProof<DIGEST_SIZE, F> {
+    UserPublicValuesProof {
+        proof: vec![
+            fixture_digest(500),
+            fixture_digest(600),
+            fixture_digest(700),
+        ],
+        public_values: (800..816).map(F::from_u32).collect(),
+        public_values_commit: fixture_digest(900),
+    }
+}
+
+fn encode_vm_fixture() -> (Vec<u8>, Vec<u8>) {
+    let mut baseline_bytes = Vec::new();
+    write_verification_baseline(&mut baseline_bytes, &baseline_fixture())
+        .expect("write_verification_baseline");
+    let mut user_pvs_bytes = Vec::new();
+    write_user_public_values_proof(&mut user_pvs_bytes, &user_pvs_fixture())
+        .expect("write_user_public_values_proof");
+    (baseline_bytes, user_pvs_bytes)
+}
+
+/// Concatenate the production five-blob input with `u32 LE` length prefixes.
+fn frame_five_blobs(blobs: [&[u8]; 5]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    for blob in blobs {
+        let len = u32::try_from(blob.len()).expect("wire test blob length fits in u32");
+        buf.extend_from_slice(&len.to_le_bytes());
+        buf.extend_from_slice(blob);
+    }
     buf
+}
+
+fn frame_vm_blobs(vk_bytes: &[u8], proof_bytes: &[u8], pv_bytes: &[u8]) -> Vec<u8> {
+    let (baseline_bytes, user_pvs_bytes) = encode_vm_fixture();
+    frame_five_blobs([
+        vk_bytes,
+        &baseline_bytes,
+        proof_bytes,
+        pv_bytes,
+        &user_pvs_bytes,
+    ])
 }
 
 struct DumpOutcome {
@@ -71,21 +136,21 @@ struct DumpOutcome {
     stderr: String,
 }
 
-/// Pipe `stdin_bytes` to `swirl_dump_proof` and capture exit + output.
-fn run_swirl_dump_proof(stdin_bytes: &[u8]) -> DumpOutcome {
-    let mut child = Command::new(swirl_dump_proof_bin())
+/// Pipe `stdin_bytes` to `vm_dump_proof` and capture exit + output.
+fn run_vm_dump_proof(stdin_bytes: &[u8]) -> DumpOutcome {
+    let mut child = Command::new(vm_dump_proof_bin())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("spawn swirl_dump_proof");
+        .expect("spawn vm_dump_proof");
     {
         let mut child_stdin = child.stdin.take().expect("child stdin piped");
         child_stdin
             .write_all(stdin_bytes)
-            .expect("write stdin to swirl_dump_proof");
+            .expect("write stdin to vm_dump_proof");
     }
-    let output = child.wait_with_output().expect("wait swirl_dump_proof");
+    let output = child.wait_with_output().expect("wait vm_dump_proof");
     DumpOutcome {
         exit_code: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -134,6 +199,44 @@ fn pv_digest_csv(public_values: &[Vec<F>]) -> String {
         .join("|")
 }
 
+fn baseline_digest(baseline: &VerificationBaseline) -> String {
+    let mut parts = vec![
+        digest_csv(&baseline.app_exe_commit),
+        baseline.memory_dimensions.addr_space_height.to_string(),
+        baseline.memory_dimensions.address_height.to_string(),
+        baseline.num_user_pvs.to_string(),
+    ];
+    for commit in [
+        &baseline.app_vk_commit,
+        &baseline.leaf_vk_commit,
+        &baseline.internal_for_leaf_vk_commit,
+        &baseline.internal_recursive_vk_commit,
+    ] {
+        parts.push(digest_csv(&commit.cached_commit));
+        parts.push(digest_csv(&commit.vk_pre_hash));
+    }
+    parts.join("|")
+}
+
+fn user_pvs_digest(proof: &UserPublicValuesProof<DIGEST_SIZE, F>) -> String {
+    let authentication_path = proof
+        .proof
+        .iter()
+        .map(digest_csv)
+        .collect::<Vec<_>>()
+        .join(";");
+    let public_values = proof
+        .public_values
+        .iter()
+        .map(|value| value.as_canonical_u32().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{authentication_path}|{public_values}|{}",
+        digest_csv(&proof.public_values_commit)
+    )
+}
+
 /// Locate the first byte of the body (right after the 8-byte header)
 /// in a blob produced by the proof-wire encoder.
 const HEADER_LEN: usize = 8;
@@ -146,10 +249,10 @@ const HEADER_LEN: usize = 8;
 fn green_proof() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 0,
-        "swirl_dump_proof must accept a freshly encoded fixture; \
+        "vm_dump_proof must accept a freshly encoded fixture; \
          stdout={:?} stderr={:?}",
         outcome.stdout, outcome.stderr
     );
@@ -166,8 +269,8 @@ fn green_proof() {
 fn green_vk() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
-    assert_eq!(outcome.exit_code, 0, "swirl_dump_proof rejected fixture");
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    assert_eq!(outcome.exit_code, 0, "vm_dump_proof rejected fixture");
     let expected = format!("vk: {}", vk_digest_csv(&fixture.vk));
     let found = outcome.stdout.lines().any(|line| line == expected.as_str());
     assert!(
@@ -181,12 +284,66 @@ fn green_vk() {
 fn green_public_values() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
-    assert_eq!(outcome.exit_code, 0, "swirl_dump_proof rejected fixture");
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    assert_eq!(outcome.exit_code, 0, "vm_dump_proof rejected fixture");
     let expected = format!("pv: {}", pv_digest_csv(&fixture.proof.public_values));
     let found = outcome.stdout.lines().any(|line| line == expected.as_str());
     assert!(
         found,
+        "expected stdout to contain {expected:?}; stdout was:\n{}",
+        outcome.stdout
+    );
+}
+
+#[test]
+fn green_vm_baseline() {
+    let fixture = fresh_fixture();
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let baseline = baseline_fixture();
+    let mut baseline_bytes = Vec::new();
+    write_verification_baseline(&mut baseline_bytes, &baseline).expect("write VM baseline");
+    let mut user_pvs_bytes = Vec::new();
+    write_user_public_values_proof(&mut user_pvs_bytes, &user_pvs_fixture())
+        .expect("write user-PV proof");
+
+    let outcome = run_vm_dump_proof(&frame_five_blobs([
+        &vk_bytes,
+        &baseline_bytes,
+        &proof_bytes,
+        &pv_bytes,
+        &user_pvs_bytes,
+    ]));
+    assert_eq!(outcome.exit_code, 0, "vm_dump_proof rejected fixture");
+    let expected = format!("baseline: {}", baseline_digest(&baseline));
+    assert!(
+        outcome.stdout.lines().any(|line| line == expected),
+        "expected stdout to contain {expected:?}; stdout was:\n{}",
+        outcome.stdout
+    );
+}
+
+#[test]
+fn green_user_pvs_proof() {
+    let fixture = fresh_fixture();
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let user_pvs = user_pvs_fixture();
+    let mut baseline_bytes = Vec::new();
+    write_verification_baseline(&mut baseline_bytes, &baseline_fixture())
+        .expect("write VM baseline");
+    let mut user_pvs_bytes = Vec::new();
+    write_user_public_values_proof(&mut user_pvs_bytes, &user_pvs).expect("write user-PV proof");
+
+    let outcome = run_vm_dump_proof(&frame_five_blobs([
+        &vk_bytes,
+        &baseline_bytes,
+        &proof_bytes,
+        &pv_bytes,
+        &user_pvs_bytes,
+    ]));
+    assert_eq!(outcome.exit_code, 0, "vm_dump_proof rejected fixture");
+    let expected = format!("user-pvs: {}", user_pvs_digest(&user_pvs));
+    assert!(
+        outcome.stdout.lines().any(|line| line == expected),
         "expected stdout to contain {expected:?}; stdout was:\n{}",
         outcome.stdout
     );
@@ -208,7 +365,7 @@ fn tampered_proof() {
     // "non-canonical babybear value".
     let target = HEADER_LEN + 3; // 4th byte of the first u32 (LE high byte)
     proof_bytes[target] ^= 0x80;
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 13,
         "expected decodeFailure (exit 13) from tampered proof, got {}; stderr={:?}",
@@ -236,7 +393,7 @@ fn tampered_vk() {
     // would round-trip cleanly, which is why we target preHash here.
     let target = vk_bytes.len() - 1;
     vk_bytes[target] ^= 0x80;
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 13,
         "expected decodeFailure (exit 13) from tampered vk, got {}; stderr={:?}",
@@ -258,7 +415,7 @@ fn tampered_public_values() {
     // `vk.airCount` and rejects with `pv-air-count`.
     let target = HEADER_LEN;
     pv_bytes[target] ^= 0xFF;
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 13,
         "expected decodeFailure (13) from tampered pv, got {}; stderr={:?}",
@@ -269,6 +426,41 @@ fn tampered_public_values() {
         "expected pv-air-count or pv-air-len in stderr; got {:?}",
         outcome.stderr
     );
+}
+
+#[test]
+fn tampered_vm_baseline() {
+    let fixture = fresh_fixture();
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let (mut baseline_bytes, user_pvs_bytes) = encode_vm_fixture();
+    baseline_bytes[HEADER_LEN + 3] ^= 0x80;
+    let outcome = run_vm_dump_proof(&frame_five_blobs([
+        &vk_bytes,
+        &baseline_bytes,
+        &proof_bytes,
+        &pv_bytes,
+        &user_pvs_bytes,
+    ]));
+    assert_eq!(outcome.exit_code, 13);
+    assert!(outcome.stderr.contains("baseline parse error"));
+}
+
+#[test]
+fn tampered_user_pvs_proof() {
+    let fixture = fresh_fixture();
+    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let (baseline_bytes, mut user_pvs_bytes) = encode_vm_fixture();
+    let last = user_pvs_bytes.last_mut().expect("nonempty user-PV blob");
+    *last ^= 0x80;
+    let outcome = run_vm_dump_proof(&frame_five_blobs([
+        &vk_bytes,
+        &baseline_bytes,
+        &proof_bytes,
+        &pv_bytes,
+        &user_pvs_bytes,
+    ]));
+    assert_eq!(outcome.exit_code, 13);
+    assert!(outcome.stderr.contains("user-PV proof parse error"));
 }
 
 #[test]
@@ -286,7 +478,7 @@ fn noncanonical_public_value_row_lengths_are_rejected() {
         let mut malformed = pv_bytes.clone();
         malformed[row_length_offset..row_length_offset + 4]
             .copy_from_slice(&(invalid_length as u32).to_le_bytes());
-        let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &malformed));
+        let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &malformed));
         assert_eq!(
             outcome.exit_code, 13,
             "row length {invalid_length} should fail decoding; stderr={:?}",
@@ -310,7 +502,7 @@ fn noncanonical_public_value_row_lengths_are_rejected() {
 fn empty_proof_buffer() {
     let fixture = fresh_fixture();
     let (vk_bytes, _proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &[], &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &[], &pv_bytes));
     assert!(
         outcome.exit_code == 10 || outcome.exit_code == 12,
         "empty proof must surface magicMismatch (10) or unexpectedEnd (12), got {}; stderr={:?}",
@@ -326,7 +518,7 @@ fn empty_proof_buffer() {
 
 #[test]
 fn empty_vk_buffer() {
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&[], &[], &[]));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&[], &[], &[]));
     assert!(
         outcome.exit_code == 10 || outcome.exit_code == 12,
         "empty vk must surface magicMismatch (10) or unexpectedEnd (12), got {}; stderr={:?}",
@@ -344,7 +536,7 @@ fn empty_vk_buffer() {
 fn empty_public_values_buffer() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, _pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &[]));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &[]));
     assert!(
         outcome.exit_code == 10 || outcome.exit_code == 12,
         "empty pv must surface magicMismatch (10) or unexpectedEnd (12), got {}; stderr={:?}",
@@ -352,7 +544,7 @@ fn empty_public_values_buffer() {
         outcome.stderr
     );
     assert!(
-        outcome.stderr.contains("pv parse error"),
+        outcome.stderr.contains("public-values parse error"),
         "expected stderr mention of pv; got {:?}",
         outcome.stderr
     );
@@ -372,7 +564,7 @@ fn wrong_proof_version() {
     let fixture = fresh_fixture();
     let (vk_bytes, mut proof_bytes, pv_bytes) = encode_fixture(&fixture);
     write_version_word(&mut proof_bytes, 0xDEAD_BEEF);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 11,
         "expected versionMismatch (11) from bad proof version, got {}; stderr={:?}",
@@ -390,7 +582,7 @@ fn wrong_vk_version() {
     let fixture = fresh_fixture();
     let (mut vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
     write_version_word(&mut vk_bytes, 0xDEAD_BEEF);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 11,
         "expected versionMismatch (11) from bad vk version, got {}; stderr={:?}",
@@ -403,7 +595,7 @@ fn wrong_public_values_version() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, mut pv_bytes) = encode_fixture(&fixture);
     write_version_word(&mut pv_bytes, 0xDEAD_BEEF);
-    let outcome = run_swirl_dump_proof(&frame_three_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
     assert_eq!(
         outcome.exit_code, 11,
         "expected versionMismatch (11) from bad pv version, got {}; stderr={:?}",
@@ -419,10 +611,19 @@ fn wrong_public_values_version() {
 fn magic_bytes_match_proof_blob_prefix() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+    let (baseline_bytes, user_pvs_bytes) = encode_vm_fixture();
     assert_eq!(&vk_bytes[..4], &MAGIC_VK);
+    assert_eq!(&baseline_bytes[..4], &MAGIC_VM_BASELINE);
     assert_eq!(&proof_bytes[..4], &MAGIC_PROOF);
     assert_eq!(&pv_bytes[..4], &MAGIC_PUBLIC_VALUES);
-    for blob in [&vk_bytes, &proof_bytes, &pv_bytes] {
+    assert_eq!(&user_pvs_bytes[..4], &MAGIC_USER_PUBLIC_VALUES);
+    for blob in [
+        &vk_bytes,
+        &baseline_bytes,
+        &proof_bytes,
+        &pv_bytes,
+        &user_pvs_bytes,
+    ] {
         assert_eq!(
             u32::from_le_bytes(blob[4..8].try_into().unwrap()),
             WIRE_VERSION,

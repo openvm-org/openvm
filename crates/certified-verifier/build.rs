@@ -1,7 +1,7 @@
 // Build script for the vendored Lean certified verifiers (see README.md).
 // Compiles the Lean-generated C sources under csrc/ into a static library
 // linked into this crate, using `leanc` from the pinned Lean toolchain.
-// `swirl_dump_proof` is an executable, as it is a wire-format test utility.
+// `vm_dump_proof` is an executable, as it is a wire-format test utility.
 
 use std::{
     env,
@@ -34,7 +34,11 @@ fn main() {
     // executable entry point. Flags mirror what lake used to build the
     // verifier in-repo (minus -DLEAN_EXPORTING / -fvisibility, which only
     // matter for shared-library builds).
-    sources.retain(|path| path.strip_prefix(&csrc).unwrap() != Path::new("VmVerifier/Main.c"));
+    sources.retain(|path| {
+        let relative_path = path.strip_prefix(&csrc).unwrap();
+        relative_path != Path::new("VmVerifier/Main.c")
+            && relative_path != Path::new("VmVerifier/DumpProof.c")
+    });
     let mut objects: Vec<PathBuf> = std::thread::scope(|scope| {
         let jobs = std::thread::available_parallelism().map_or(4, |n| n.get());
         let mut handles = Vec::new();
@@ -92,8 +96,8 @@ fn main() {
     println!("cargo:rustc-link-lib=static=openvm_certified_verifier");
     emit_leanc_link_flags(&lean_prefix);
 
-    let dump_main = csrc.join("Tools/SwirlDumpProof.c");
-    let dump_obj = out_dir.join("dump_Tools_SwirlDumpProof.o");
+    let dump_main = csrc.join("VmVerifier/DumpProof.c");
+    let dump_obj = out_dir.join("dump_VmVerifier_DumpProof.o");
     run(leanc(&[
         "-c",
         "-O3",
@@ -103,18 +107,12 @@ fn main() {
         dump_obj.to_str().unwrap(),
         dump_main.to_str().unwrap(),
     ]));
-    let raw_obj = out_dir.join("Swirl_Protocol_Noninteractive_Wire_Raw.o");
-    assert!(
-        raw_obj.exists(),
-        "swirl_dump_proof needs {}",
-        raw_obj.display()
-    );
-    let dump_bin = out_dir.join("swirl_dump_proof");
+    let dump_bin = out_dir.join("vm_dump_proof");
     run(leanc(&[
         "-o",
         dump_bin.to_str().unwrap(),
         dump_obj.to_str().unwrap(),
-        raw_obj.to_str().unwrap(),
+        verifier_lib.to_str().unwrap(),
     ]));
 }
 
@@ -218,11 +216,7 @@ fn collect_c_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.unwrap().path();
         if path.is_dir() {
             collect_c_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "c")
-            && path
-                .file_name()
-                .is_none_or(|name| name != "SwirlDumpProof.c")
-        {
+        } else if path.extension().is_some_and(|e| e == "c") {
             out.push(path);
         }
     }

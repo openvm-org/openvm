@@ -17,7 +17,6 @@ lean_object* l_List_lengthTR___redArg(lean_object*);
 LEAN_EXPORT lean_object* l_Recursion_Spec_vkCommitWidth;
 LEAN_EXPORT uint8_t l_Recursion_Spec_instDecidableEqVkCommitData_decEq___redArg(lean_object*, lean_object*, lean_object*);
 static lean_object* l_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg___closed__1;
-LEAN_EXPORT lean_object* l_Recursion_Spec_VerifierProofPublicValuesData_ctorIdx___boxed(lean_object*, lean_object*);
 LEAN_EXPORT uint8_t l_Recursion_Spec_instDecidableEqVkCommitData___redArg(lean_object*, lean_object*, lean_object*);
 static lean_object* l_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg___closed__0;
 LEAN_EXPORT lean_object* l_Recursion_Spec_VkCommitData_fromListAt___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
@@ -50,7 +49,6 @@ static lean_object* l_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg__
 LEAN_EXPORT lean_object* l_Recursion_Spec_instDecidableEqVkCommitData_decEq___redArg___boxed(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* l_Recursion_Spec_digestPrefixOf(lean_object*, lean_object*, lean_object*);
-LEAN_EXPORT lean_object* l_Recursion_Spec_VerifierProofPublicValuesData_ctorIdx(lean_object*, lean_object*);
 static lean_object* l_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg___closed__2;
 lean_object* lean_nat_mul(lean_object*, lean_object*);
 static lean_object* l_Recursion_Spec_verifierBasePvsWidth___closed__0;
@@ -527,23 +525,6 @@ lean_object* x_5;
 x_5 = l_Recursion_Spec_VerifierBasePvsData_fromVector_x3f(x_1, x_2, x_3, x_4);
 lean_dec(x_2);
 return x_5;
-}
-}
-LEAN_EXPORT lean_object* l_Recursion_Spec_VerifierProofPublicValuesData_ctorIdx(lean_object* x_1, lean_object* x_2) {
-_start:
-{
-lean_object* x_3; 
-x_3 = lean_unsigned_to_nat(0u);
-return x_3;
-}
-}
-LEAN_EXPORT lean_object* l_Recursion_Spec_VerifierProofPublicValuesData_ctorIdx___boxed(lean_object* x_1, lean_object* x_2) {
-_start:
-{
-lean_object* x_3; 
-x_3 = l_Recursion_Spec_VerifierProofPublicValuesData_ctorIdx(x_1, x_2);
-lean_dec_ref(x_2);
-return x_3;
 }
 }
 lean_object* initialize_Init(uint8_t builtin);
