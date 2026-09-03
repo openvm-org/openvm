@@ -232,10 +232,14 @@ unsafe fn ec_double_256_entry<
 
 macro_rules! ecc_add_ne_entry {
     ($name:ident, $curve:ty) => {
+        /// Executes partial affine addition for two nonidentity points with distinct
+        /// x-coordinates.
+        ///
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
-        /// Pointer parameters must point to valid affine point coordinates.
+        /// `rd_ptr` must address writable point memory. `rs1_ptr` and `rs2_ptr` must address valid
+        /// points that meet the requirements above.
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
@@ -250,10 +254,13 @@ macro_rules! ecc_add_ne_entry {
 
 macro_rules! ecc_double_entry {
     ($name:ident, $curve:ty, $a:expr) => {
+        /// Executes partial affine doubling for a nonidentity point whose double is nonidentity.
+        ///
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
-        /// Pointer parameters must point to valid affine point coordinates.
+        /// `rd_ptr` must address writable point memory. `rs1_ptr` must address a valid point that
+        /// meets the requirements above.
         #[no_mangle]
         pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
             ec_double_256_entry::<$curve>(state, rd_ptr, rs1_ptr, $a);
