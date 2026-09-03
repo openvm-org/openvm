@@ -62,6 +62,7 @@ pub fn write_registers(vm_state: &mut VmState<GuestMemory>, regs: &[u64; NUM_REG
     {
         dst.copy_from_slice(&reg.to_le_bytes());
     }
+    vm_state.memory.memory.touched_pages[REGISTER_AS as usize].mark_byte_range(0, bytes.len());
 }
 
 pub fn map_rvr_execute_error(err: ExecuteError) -> ExecutionError {
@@ -74,5 +75,31 @@ pub fn map_rvr_execute_error(err: ExecuteError) -> ExecutionError {
 pub fn map_rvr_compile_error(err: CompileError) -> StaticProgramError {
     StaticProgramError::FailToGenerateDynamicLibrary {
         err: err.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::array;
+
+    use openvm_instructions::exe::SparseMemoryImage;
+
+    use super::*;
+    use crate::{arch::Streams, utils::test_system_config};
+
+    #[test]
+    fn register_writeback_survives_sparse_state_clone() {
+        let mut vm_state = VmState::initial(
+            &test_system_config(),
+            &SparseMemoryImage::new(),
+            0,
+            Streams::default(),
+        );
+        let regs = array::from_fn(|idx| idx as u64 * 0x0102_0304_0506_0708);
+
+        write_registers(&mut vm_state, &regs);
+        let snapshot = vm_state.sparse_clone();
+
+        assert_eq!(read_registers(&snapshot), regs);
     }
 }
