@@ -3,27 +3,27 @@ use std::{
     mem::size_of,
 };
 
-use openvm_bigint_transpiler::Rv32LessThan256Opcode;
+use openvm_bigint_transpiler::LessThan256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::LessThanExecutor;
-use openvm_rv32im_transpiler::LessThanOpcode;
+use openvm_riscv_circuit::adapters::bytes_to_u32;
+use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{self, read_int256, write_int256},
-    AluAdapterExecutor, Rv32LessThan256Executor, INT256_NUM_LIMBS,
+    LessThan256Executor, INT256_NUM_U8_LIMBS,
 };
 
-impl Rv32LessThan256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
-        Self(LessThanExecutor::new(adapter, offset))
+impl LessThan256Executor {
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -38,13 +38,20 @@ struct LessThanPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            LessThanOpcode::SLT => $execute_impl::<_, _, false>,
-            LessThanOpcode::SLTU => $execute_impl::<_, _, true>,
+            LessThanOpcode::SLT => $execute_impl::<_, false>,
+            LessThanOpcode::SLTU => $execute_impl::<_, true>,
         })
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv32LessThan256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for LessThan256Executor {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            LessThanOpcode::from_usize(opcode - LessThan256Opcode::CLASS_OFFSET)
+        )
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<LessThanPreCompute>()
     }
@@ -53,9 +60,9 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv32LessThan256Executor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -68,9 +75,9 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv32LessThan256Executor {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -80,10 +87,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv32LessThan256Executor {
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for Rv32LessThan256Executor {}
-
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32LessThan256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for LessThan256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<LessThanPreCompute>>()
     }
@@ -93,9 +97,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32LessThan256Executor 
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -110,9 +114,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32LessThan256Executor 
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -123,63 +127,61 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32LessThan256Executor 
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for Rv32LessThan256Executor {}
-
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &LessThanPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
-    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
+    let rs1_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, MEMORY_AS, bytes_to_u32(rs2_ptr))?;
     let cmp_result = if IS_U256 {
         common::u256_lt(rs1, rs2)
     } else {
         common::i256_lt(rs1, rs2)
     };
-    let mut rd = [0u8; INT256_NUM_LIMBS];
+    let mut rd = [0u8; INT256_NUM_U8_LIMBS];
     rd[0] = cmp_result as u8;
-    write_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+    write_int256(exec_state, MEMORY_AS, bytes_to_u32(rd_ptr), &rd)?;
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
     let pre_compute: &LessThanPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_U256>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_U256>(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<LessThanPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LessThanPreCompute>>())
             .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_U256>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_U256>(&pre_compute.data, exec_state)
 }
 
-impl Rv32LessThan256Executor {
-    fn pre_compute_impl<F: PrimeField32>(
+impl LessThan256Executor {
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut LessThanPreCompute,
     ) -> Result<LessThanOpcode, StaticProgramError> {
         let Instruction {
@@ -191,18 +193,17 @@ impl Rv32LessThan256Executor {
             e,
             ..
         } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = LessThanPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
-        let local_opcode = LessThanOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32LessThan256Opcode::CLASS_OFFSET),
-        );
+        let local_opcode =
+            LessThanOpcode::from_usize(opcode.local_opcode_idx(LessThan256Opcode::CLASS_OFFSET));
         Ok(local_opcode)
     }
 }

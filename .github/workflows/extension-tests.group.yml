@@ -39,6 +39,12 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
+      - name: Init rvr FFI submodules
+        if: ${{ inputs.mode != 'default' }}
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
@@ -53,6 +59,19 @@ jobs:
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
+
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+
+      - name: Install clang-22 and lld (required for rvr)
+        if: ${{ inputs.mode != 'default' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release wget software-properties-common gnupg
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
 
       - name: Check CUDA status and set environment variables
         if: inputs.mode == 'cuda'
@@ -79,25 +98,31 @@ jobs:
 
           for extension in "${extensions[@]}"; do
             [[ -f "extensions/$extension/circuit/Cargo.toml" ]] || continue
-            if [[ "${{ inputs.cuda_group }}" == "rv32im" && "$extension" != "rv32im" ]]; then
+            if [[ "${{ inputs.cuda_group }}" == "riscv" && "$extension" != "riscv" ]]; then
               continue
-            elif [[ "${{ inputs.cuda_group }}" == "extensions" && "$extension" == "rv32im" ]]; then
+            elif [[ "${{ inputs.cuda_group }}" == "extensions" && "$extension" == "riscv" ]]; then
               continue
             fi
 
             echo "::group::Running circuit tests for $extension"
             pushd "extensions/$extension/circuit"
             if [[ "${{ inputs.mode }}" == "cuda" ]]; then
-              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features=cuda,touchemall --profile=heavy --no-tests=pass
+              cuda_features="cuda,touchemall,rvr,test-utils"
+              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features="$cuda_features" --profile=heavy --no-tests=pass
             else
               test_threads=(--test-threads=32)
               if [[ "$extension" == "algebra" ]]; then
                 test_threads=(--test-threads=4)
+              elif [[ "$extension" == "riscv" ]]; then
+                test_threads=(--test-threads=16)
               fi
 
               case "${{ inputs.mode }}" in
-                aot)
-                  cargo nextest run --cargo-profile=fast --features=aot "${test_threads[@]}" --no-tests=pass --success-output=immediate
+                rvr)
+                  cargo nextest run --cargo-profile=fast --features=rvr "${test_threads[@]}" --no-tests=pass --success-output=immediate
+                  ;;
+                rvr-unprotected)
+                  cargo nextest run --cargo-profile=fast --features=rvr,openvm-circuit/unprotected "${test_threads[@]}" --no-tests=pass --success-output=immediate
                   ;;
                 default)
                   cargo nextest run --cargo-profile=fast "${test_threads[@]}" --no-tests=pass --success-output=immediate
@@ -107,11 +132,23 @@ jobs:
             popd
             echo "::endgroup::"
 
+            if [[ "${{ inputs.mode }}" == "rvr" && -f "extensions/$extension/rvr/Cargo.toml" ]]; then
+              echo "::group::Running rvr crate tests for $extension"
+              pushd "extensions/$extension/rvr"
+              rvr_feature_args=()
+              if grep -q '^rvr = \[' Cargo.toml; then
+                rvr_feature_args=(--features=rvr)
+              fi
+              cargo nextest run --cargo-profile=fast "${rvr_feature_args[@]}" --no-tests=pass --success-output=immediate
+              popd
+              echo "::endgroup::"
+            fi
+
             if [[ "${{ inputs.mode }}" == "default" && -f "extensions/$extension/guest/Cargo.toml" ]]; then
               echo "::group::Running guest tests for $extension"
               guest_feature_args=()
               if [[ "$extension" == "pairing" ]]; then
-                guest_feature_args=(--features=bn254,bls12_381,halo2curves)
+                guest_feature_args=(--features=bn254,bls12_381,halo2curves,blst)
               fi
               pushd "extensions/$extension/guest"
               cargo nextest run --cargo-profile=fast "${guest_feature_args[@]}" --no-tests=pass
@@ -122,13 +159,15 @@ jobs:
             if [[ -f "extensions/$extension/tests/Cargo.toml" ]]; then
               echo "::group::Running integration tests for $extension"
               pushd "extensions/$extension/tests"
-              rustup component add rust-src --toolchain nightly-2026-01-18
               if [[ "${{ inputs.mode }}" == "cuda" ]]; then
                 CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast --features=cuda --profile=heavy --no-tests=pass
               else
                 case "${{ inputs.mode }}" in
-                  aot)
-                    cargo nextest run --cargo-profile=fast --features=aot --profile=heavy --no-tests=pass --success-output=immediate
+                  rvr)
+                    cargo nextest run --cargo-profile=fast --features=rvr --profile=heavy --no-tests=pass --success-output=immediate
+                    ;;
+                  rvr-unprotected)
+                    cargo nextest run --cargo-profile=fast --features=rvr,unprotected --profile=heavy --no-tests=pass --success-output=immediate
                     ;;
                   default)
                     cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
@@ -139,6 +178,12 @@ jobs:
               echo "::endgroup::"
             fi
           done
+
+      - name: Run VM CUDA and RVR phantom integration tests
+        if: inputs.mode == 'cuda' && inputs.cuda_group == 'riscv'
+        working-directory: crates/vm
+        run: |
+          CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast test_cuda_phantom --features=parallel,cuda,rvr --profile=heavy --no-tests=pass
 
       - name: sccache stats
         if: always()

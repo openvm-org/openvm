@@ -11,12 +11,14 @@ license.workspace = true
 
 [dependencies]
 openvm-custom-insn.workspace = true
-openvm-rv32im-guest.workspace = true
+openvm-riscv-guest.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
-[target.'cfg(target_os = "zkvm")'.dependencies]
-critical-section = { version = "1.1.2", optional = true }
+[target.'cfg(all(target_arch = "riscv64", any(target_os = "none", target_os = "openvm")))'.dependencies]
+# Provides the single-threaded guest implementation required by no_std crates
+# that use the `critical-section` interface (for example, `once_cell`).
+critical-section.workspace = true
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
 ], optional = true }
@@ -24,14 +26,13 @@ libm = { version = "0.2", optional = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
-features = ["rust-runtime", "panic-handler", "export-libm", "export-pal-abi"]
+features = ["rust-runtime", "panic-handler", "export-libm"]
 
 [features]
 default = []
 entrypoint = []
 export-libm = ["dep:libm"]
 heap-embedded-alloc = [
-    "dep:critical-section",
     "dep:embedded-alloc",
     "rust-runtime",
 ]
@@ -39,3 +40,6 @@ panic-handler = []
 # Build a rust runtime
 rust-runtime = ["export-libm"]
 std = []
+
+[lints]
+workspace = true

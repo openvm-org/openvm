@@ -32,7 +32,6 @@ pub mod bitwise_op_lookup {
             d_trace: *mut F,
             records: DeviceBufferView,
             bitwise_count: *mut u32,
-            bitwise_num_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
     }
@@ -61,14 +60,12 @@ pub mod bitwise_op_lookup {
         d_trace: &DeviceBuffer<F>,
         records: &DeviceBuffer<u32>,
         bitwise_count: &DeviceBuffer<F>,
-        bitwise_num_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_bitwise_dummy_tracegen(
             d_trace.as_mut_ptr(),
             records.view(),
             bitwise_count.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             stream,
         ))
     }

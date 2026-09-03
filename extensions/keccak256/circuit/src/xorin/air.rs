@@ -2,19 +2,23 @@ use std::borrow::Borrow;
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{
+            pack_u8_block, MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxInput,
+        },
         MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, ColumnsAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, var_range::VariableRangeCheckerBus,
+    ColumnsAir,
 };
-use openvm_instructions::riscv::{
-    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_instructions::riscv::{MEMORY_AS, REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
+use openvm_riscv_circuit::adapters::{
+    eval_byte_ptr_limbs_to_block_index, expand_to_block, reg_byte_ptr_to_cell_ptr_limbs,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -23,7 +27,10 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS};
+use crate::{
+    xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS},
+    KECCAK_RATE_MEM_OPS,
+};
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(XorinVmCols<u8>)]
@@ -32,6 +39,8 @@ pub struct XorinVmAir {
     pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    /// Range checker for pointer-width bounds.
+    pub range_bus: VariableRangeCheckerBus,
     /// Maximum number of bits allowed for an address pointer
     pub ptr_max_bits: usize,
     pub(super) offset: usize,
@@ -46,7 +55,7 @@ impl<F> BaseAir<F> for XorinVmAir {
 }
 
 impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
-    // Increases timestamp by 105
+    // Increases timestamp by 3 + 3*17 = 54
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -57,7 +66,7 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 
         let start_read_timestamp = self.eval_instruction(builder, local, &mem.register_aux_cols);
 
-        let start_write_timestamp = self.constrain_input_read(
+        let (start_write_timestamp, buffer_base) = self.constrain_input_read(
             builder,
             local,
             start_read_timestamp,
@@ -71,7 +80,8 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
             builder,
             local,
             start_write_timestamp,
-            &mem.buffer_bytes_write_aux_cols,
+            buffer_base,
+            &mem.buffer_bytes_write_base_aux,
         );
     }
 }
@@ -97,55 +107,60 @@ impl XorinVmAir {
         ];
 
         let mut timestamp_change = AB::Expr::from_u32(3);
-        let mut not_padding_sum = AB::Expr::ZERO;
+        let mut num_used_blocks = AB::Expr::ZERO;
+        let is_padding_bytes = local.sponge.is_padding_bytes;
 
-        for is_padding in local.sponge.is_padding_bytes {
-            timestamp_change += AB::Expr::from_u32(3) * not(is_padding);
-            not_padding_sum += not(is_padding);
+        // Check that is_padding_bytes is of the form 0...01...1
+        for (i, &is_padding) in is_padding_bytes.iter().enumerate() {
             builder.assert_bool(is_padding);
-        }
-
-        not_padding_sum *= AB::Expr::from_u32(4);
-        builder
-            .when(is_enabled)
-            .assert_eq(not_padding_sum, instruction.len);
-        // check that is_padding_bytes is of the form 0...0111...1
-        for i in 0..33 {
-            builder.when(is_enabled).assert_bool(
-                local.sponge.is_padding_bytes[i + 1] - local.sponge.is_padding_bytes[i],
-            );
+            num_used_blocks += not(is_padding);
+            if i > 0 {
+                builder
+                    .when(is_enabled)
+                    .assert_bool(is_padding - is_padding_bytes[i - 1]);
+            }
+            // Each 8-byte memory block has 3 ops (buffer read + input read + buffer write).
+            timestamp_change += AB::Expr::from_u32(3) * not(is_padding);
         }
 
         self.execution_bridge
-            .execute_and_increment_pc(
+            .execute_and_increment_pc_idx(
                 AB::Expr::from_usize(XorinOpcode::XORIN as usize + self.offset),
                 [
                     buffer_reg_ptr.into(),
                     input_reg_ptr.into(),
                     len_reg_ptr.into(),
-                    AB::Expr::from_u32(RV32_REGISTER_AS),
-                    AB::Expr::from_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(REGISTER_AS),
+                    AB::Expr::from_u32(MEMORY_AS),
                 ],
-                ExecutionState::new(instruction.pc, instruction.start_timestamp),
+                ExecutionState::new(instruction.pc_idx, instruction.start_timestamp),
                 timestamp_change,
             )
             .eval(builder, is_enabled);
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
-        let buffer_ptr_limbs = instruction.buffer_ptr_limbs.map(Into::into);
-        let input_ptr_limbs = instruction.input_ptr_limbs.map(Into::into);
-        let len_limbs = instruction.len_limbs.map(Into::into);
+        // Register reads: low 32 bits as u16 cells, zero-extended to one memory block.
+        let buffer_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            expand_to_block(&instruction.buffer_ptr_limbs);
+        let input_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            expand_to_block(&instruction.input_ptr_limbs);
+        let len_in_bytes = num_used_blocks * AB::Expr::from_usize(MEMORY_BLOCK_BYTES);
+        let len_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&[len_in_bytes]);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
             [buffer_reg_ptr, input_reg_ptr, len_reg_ptr],
-            [buffer_ptr_limbs, input_ptr_limbs, len_limbs],
+            [buffer_ptr_data, input_ptr_data, len_data],
             register_aux
         ) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), ptr),
+                    MemoryAddress::new(
+                        AB::Expr::from_u32(REGISTER_AS),
+                        // Register byte pointers are small: `ptr / 2` in the low cell limb.
+                        reg_byte_ptr_to_cell_ptr_limbs::<AB>(ptr),
+                    ),
                     value,
                     timestamp.clone(),
                     aux,
@@ -155,123 +170,123 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
-        // SAFETY: this approach only works when self.ptr_max_bits >= 24
-        // because we are only range checking the last limb
-        assert!(self.ptr_max_bits >= RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1));
-        let need_range_check = [
-            *instruction.buffer_ptr_limbs.last().unwrap(),
-            *instruction.input_ptr_limbs.last().unwrap(),
-            *instruction.len_limbs.last().unwrap(),
-            *instruction.len_limbs.last().unwrap(),
-        ];
-
-        let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits));
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-                .eval(builder, is_enabled);
-        }
-
-        builder.assert_eq(
-            instruction.buffer_ptr,
-            instruction.buffer_ptr_limbs[0]
-                + instruction.buffer_ptr_limbs[1] * AB::F::from_u32(1 << 8)
-                + instruction.buffer_ptr_limbs[2] * AB::F::from_u32(1 << 16)
-                + instruction.buffer_ptr_limbs[3] * AB::F::from_u32(1 << 24),
-        );
-
-        builder.assert_eq(
-            instruction.input_ptr,
-            instruction.input_ptr_limbs[0]
-                + instruction.input_ptr_limbs[1] * AB::F::from_u32(1 << 8)
-                + instruction.input_ptr_limbs[2] * AB::F::from_u32(1 << 16)
-                + instruction.input_ptr_limbs[3] * AB::F::from_u32(1 << 24),
-        );
-
-        builder.assert_eq(
-            instruction.len,
-            instruction.len_limbs[0]
-                + instruction.len_limbs[1] * AB::F::from_u32(1 << 8)
-                + instruction.len_limbs[2] * AB::F::from_u32(1 << 16)
-                + instruction.len_limbs[3] * AB::F::from_u32(1 << 24),
-        );
-
         timestamp
     }
 
-    // Increases timestamp by <= 2 * 34 = 68
+    // Increases timestamp by <= 2 * 17 = 34
     #[inline]
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_read_timestamp: AB::Expr,
-        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
-        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
-    ) -> AB::Expr {
+        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
+        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
+    ) -> (AB::Expr, MemoryAddress<AB::Expr, AB::Expr>) {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
 
+        // Convert the base `buffer` *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment. `len = 0` is a no-op whose pointers are don't-care
+        // values, so the checks are gated on the first block being active; every block access
+        // below is likewise padding-gated, leaving the base addresses unused in that case.
+        let has_blocks = is_enabled * not(local.sponge.is_padding_bytes[0]);
+        let buffer_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.buffer_ptr_limbs[i].into());
+        let buffer_base = MemoryAddress::new(
+            AB::Expr::from_u32(MEMORY_AS),
+            eval_byte_ptr_limbs_to_block_index::<AB>(
+                builder,
+                self.range_bus,
+                buffer_byte_limbs,
+                self.ptr_max_bits,
+                has_blocks.clone(),
+            ),
+        );
+
         // Constrain read of buffer bytes
-        // Timestamp increases by <= (136/4) = 34
-        for (i, (input, is_padding, mem_aux)) in izip!(
-            local.sponge.preimage_buffer_bytes.chunks_exact(4),
-            local.sponge.is_padding_bytes,
+        // Timestamp increases by <= (136/8) = 17
+        for (i, (buffer_block, mem_aux)) in izip!(
+            local
+                .sponge
+                .preimage_buffer_bytes
+                .chunks_exact(MEMORY_BLOCK_BYTES),
             buffer_bytes_read_aux_cols
         )
         .enumerate()
         {
-            let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * 4);
+            let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
-                    [
-                        input[0].into(),
-                        input[1].into(),
-                        input[2].into(),
-                        input[3].into(),
-                    ],
+                    buffer_base.offset_blocks(i),
+                    pack_u8_block::<AB>(&[
+                        buffer_block[0].into(),
+                        buffer_block[1].into(),
+                        buffer_block[2].into(),
+                        buffer_block[3].into(),
+                        buffer_block[4].into(),
+                        buffer_block[5].into(),
+                        buffer_block[6].into(),
+                        buffer_block[7].into(),
+                    ]),
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, should_read);
+                .eval(builder, should_read.clone());
 
             timestamp += not(is_padding);
         }
 
+        // Convert the base `input` *byte* pointer to the bus address of its first heap block,
+        // enforcing eight-byte alignment.
+        let input_byte_limbs: [AB::Expr; 2] =
+            std::array::from_fn(|i| local.instruction.input_ptr_limbs[i].into());
+        let input_base = MemoryAddress::new(
+            AB::Expr::from_u32(MEMORY_AS),
+            eval_byte_ptr_limbs_to_block_index::<AB>(
+                builder,
+                self.range_bus,
+                input_byte_limbs,
+                self.ptr_max_bits,
+                has_blocks,
+            ),
+        );
+
         // Constrain read of input_bytes
-        // Timestamp increases by at most (136/4) = 34
-        for (i, (input, is_padding, mem_aux)) in izip!(
-            local.sponge.input_bytes.chunks_exact(4),
-            local.sponge.is_padding_bytes,
+        // Timestamp increases by at most (136/8) = 17
+        for (i, (input, mem_aux)) in izip!(
+            local.sponge.input_bytes.chunks_exact(MEMORY_BLOCK_BYTES),
             input_bytes_read_aux_cols
         )
         .enumerate()
         {
-            let ptr = local.instruction.input_ptr + AB::F::from_usize(i * 4);
+            let is_padding = local.sponge.is_padding_bytes[i];
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
-                    [
+                    input_base.offset_blocks(i),
+                    pack_u8_block::<AB>(&[
                         input[0].into(),
                         input[1].into(),
                         input[2].into(),
                         input[3].into(),
-                    ],
+                        input[4].into(),
+                        input[5].into(),
+                        input[6].into(),
+                        input[7].into(),
+                    ]),
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, should_read);
+                .eval(builder, should_read.clone());
 
             timestamp += not(is_padding);
         }
 
-        timestamp
+        (timestamp, buffer_base)
     }
 
     #[inline]
@@ -287,9 +302,9 @@ impl XorinVmAir {
         let is_enabled = local.instruction.is_enabled;
 
         for (x_chunks, y_chunks, x_xor_y_chunks, is_padding) in izip!(
-            buffer_bytes.chunks_exact(4),
-            input_bytes.chunks_exact(4),
-            result_bytes.chunks_exact(4),
+            buffer_bytes.chunks_exact(MEMORY_BLOCK_BYTES),
+            input_bytes.chunks_exact(MEMORY_BLOCK_BYTES),
+            result_bytes.chunks_exact(MEMORY_BLOCK_BYTES),
             padding_bytes
         ) {
             let should_send = is_enabled * not(is_padding);
@@ -307,33 +322,40 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: &[MemoryWriteAuxCols<AB::Var, 4>; 34],
+        buffer_base: MemoryAddress<AB::Expr, AB::Expr>,
+        write_base_aux: &[MemoryBaseAuxCols<AB::Var>; KECCAK_RATE_MEM_OPS],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
 
         // Constrain write of buffer bytes
-        for (i, (output, is_padding, mem_aux)) in izip!(
-            local.sponge.postimage_buffer_bytes.chunks_exact(4),
-            local.sponge.is_padding_bytes,
-            mem_aux
+        // Each block is written back to the address its buffer read came from,
+        // so preimage_buffer_bytes can act as the previous data.
+        for (i, (prev, output, base_aux)) in izip!(
+            local
+                .sponge
+                .preimage_buffer_bytes
+                .chunks_exact(MEMORY_BLOCK_BYTES),
+            local
+                .sponge
+                .postimage_buffer_bytes
+                .chunks_exact(MEMORY_BLOCK_BYTES),
+            write_base_aux
         )
         .enumerate()
         {
+            let is_padding = local.sponge.is_padding_bytes[i];
             let should_write = is_enabled * not(is_padding);
-            let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * 4);
+
+            let prev_data = pack_u8_block::<AB>(&std::array::from_fn(|j| prev[j].into()));
+            let data = pack_u8_block::<AB>(&std::array::from_fn(|j| output[j].into()));
 
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
-                    [
-                        output[0].into(),
-                        output[1].into(),
-                        output[2].into(),
-                        output[3].into(),
-                    ],
+                    buffer_base.offset_blocks(i),
+                    data,
                     timestamp.clone(),
-                    mem_aux,
+                    MemoryWriteAuxInput::from_prev_data_exprs(base_aux, prev_data),
                 )
                 .eval(builder, should_write);
 

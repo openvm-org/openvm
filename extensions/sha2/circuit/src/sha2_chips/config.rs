@@ -6,8 +6,8 @@ use sha2::{
 use crate::{Sha2BlockHasherVmConfig, Sha2MainChipConfig};
 
 pub const SHA2_REGISTER_READS: usize = 3;
-pub const SHA2_READ_SIZE: usize = 4;
-pub const SHA2_WRITE_SIZE: usize = 4;
+pub const SHA2_READ_SIZE: usize = 8;
+pub const SHA2_WRITE_SIZE: usize = 8;
 
 pub trait Sha2Config: Sha2MainChipConfig + Sha2BlockHasherVmConfig {
     /// Number of bits used to store the message length (part of the message padding)
@@ -63,9 +63,11 @@ impl Sha2Config for Sha512Config {
         debug_assert!(state.len() >= Sha512Config::STATE_BYTES);
         debug_assert!(input.len() == Sha512Config::BLOCK_BYTES);
 
-        // `state` may only be 4-byte aligned, so copy through an aligned `u64` buffer.
-        // We store the state as bytes in the record because the word size is
-        // not known at compile time (u32 for Sha256, u64 for Sha512).
+        // `state` is a byte sub-slice of a record and is not guaranteed to be 8-byte aligned, so we
+        // cannot reinterpret it in place as `&mut [u64; 8]`. Copy through an aligned buffer (using
+        // native-endian bytes, matching the in-place reinterpretation this replaces). We store the
+        // state as bytes in the record because the word size is not known at compile time (u32 for
+        // Sha256, u64 for Sha512).
         let mut state_u64s = [0u64; 8];
         for (w, chunk) in state_u64s.iter_mut().zip(state.chunks_exact(8)) {
             *w = u64::from_ne_bytes(chunk.try_into().unwrap());

@@ -1,8 +1,9 @@
-// ==== VM-specific constants ====
-/// Number of cells to read/write in a single memory access
-pub const KECCAK_WORD_SIZE: usize = 4;
-/// The number of memory blocks needed to access the entire keccakf state.
-pub const KECCAK_WIDTH_WORDS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
+use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
+
+/// Number of memory operations for the full keccakf state (200 / 8 = 25).
+pub const KECCAK_WIDTH_MEM_OPS: usize = KECCAK_WIDTH_BYTES / MEMORY_BLOCK_BYTES;
+/// Number of memory operations for the keccak rate portion (136 / 8 = 17).
+pub const KECCAK_RATE_MEM_OPS: usize = KECCAK_RATE_BYTES / MEMORY_BLOCK_BYTES;
 
 // ==== Do not change these constants! ====
 /// Total number of sponge bytes: number of rate bytes + number of capacity

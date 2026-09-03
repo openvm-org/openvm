@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use derive_more::derive::From;
 use eyre::Result;
@@ -25,19 +28,67 @@ use crate::OPENVM_VERSION;
 #[derive(From)]
 pub enum ExecutableFormat {
     Elf(Elf),
-    VmExe(VmExe<crate::F>),
-    SharedVmExe(Arc<VmExe<crate::F>>),
+    VmExe(VmExe),
+    SharedVmExe(Arc<VmExe>),
 }
 
 impl<'a> From<&'a [u8]> for ExecutableFormat {
     fn from(bytes: &'a [u8]) -> Self {
-        let elf = Elf::decode(bytes, MEM_SIZE.try_into().unwrap()).expect("Invalid ELF bytes");
+        let elf = Elf::decode(bytes, MEM_SIZE as u64).expect("Invalid ELF bytes");
         ExecutableFormat::Elf(elf)
     }
 }
 impl From<Vec<u8>> for ExecutableFormat {
     fn from(bytes: Vec<u8>) -> Self {
         ExecutableFormat::from(&bytes[..])
+    }
+}
+
+/// Input accepted by SDK compile methods.
+pub enum ExecutableInput {
+    /// An in-memory executable.
+    Format(ExecutableFormat),
+    /// An ELF file path. Path provenance is preserved for source maps.
+    ElfFile(PathBuf),
+    /// An in-memory executable with the ELF file it was built from.
+    #[cfg(feature = "rvr")]
+    WithElfPath {
+        executable: ExecutableFormat,
+        elf_path: PathBuf,
+    },
+}
+
+impl ExecutableInput {
+    #[cfg(feature = "rvr")]
+    pub fn with_elf_path(
+        executable: impl Into<ExecutableFormat>,
+        elf_path: impl Into<PathBuf>,
+    ) -> Self {
+        Self::WithElfPath {
+            executable: executable.into(),
+            elf_path: elf_path.into(),
+        }
+    }
+}
+
+impl From<&Path> for ExecutableInput {
+    fn from(path: &Path) -> Self {
+        Self::ElfFile(path.to_path_buf())
+    }
+}
+
+impl From<PathBuf> for ExecutableInput {
+    fn from(path: PathBuf) -> Self {
+        Self::ElfFile(path)
+    }
+}
+
+impl<T> From<T> for ExecutableInput
+where
+    ExecutableFormat: From<T>,
+{
+    fn from(value: T) -> Self {
+        Self::Format(value.into())
     }
 }
 
@@ -120,6 +171,8 @@ pub enum EvmProofConversionError {
     InvalidLengthInstances(usize),
     #[error("Accumulator length {0} is not a multiple of {BN254_BYTES}")]
     InvalidAccumulatorLength(usize),
+    #[error("User public value at index {0} does not fit in one byte")]
+    UserPublicValueOutOfRange(usize),
     #[error("Value is not a canonical Bn254 scalar")]
     NonCanonicalScalar,
     #[error(transparent)]
@@ -224,11 +277,15 @@ impl TryFrom<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let user_public_values = instances[NUM_BN254_ACCUMULATOR + 2..]
             .iter()
-            .map(|f| {
-                // Each user public value is a single byte stored in the least significant position
-                f.to_bytes()[0]
+            .enumerate()
+            .map(|(index, f)| {
+                let bytes = f.to_bytes();
+                if bytes[1..].iter().any(|&byte| byte != 0) {
+                    return Err(EvmProofConversionError::UserPublicValueOutOfRange(index));
+                }
+                Ok(bytes[0])
             })
-            .collect::<Vec<u8>>();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::try_new(app_exe_bytes)?,
@@ -351,6 +408,56 @@ impl VersionedVmStarkProof {
                 })
                 .transpose()?,
         })
+    }
+}
+
+#[cfg(all(test, feature = "evm-prove"))]
+mod tests {
+    use halo2_base::halo2_proofs::arithmetic::Field;
+    use openvm_static_verifier::{keygen::RawEvmProof, Fr};
+
+    use super::{EvmProof, NUM_BN254_ACCUMULATOR};
+
+    fn fr_from_u8(value: u8) -> Fr {
+        let mut bytes = [0u8; 32];
+        bytes[0] = value;
+        Fr::from_bytes(&bytes).unwrap()
+    }
+
+    #[test]
+    fn evm_proof_roundtrips_byte_public_values() {
+        let mut instances = vec![Fr::ZERO; NUM_BN254_ACCUMULATOR + 2];
+        instances.extend([fr_from_u8(0x34), fr_from_u8(0xab)]);
+        let raw = RawEvmProof {
+            instances,
+            proof: vec![1, 2, 3],
+        };
+
+        let proof = EvmProof::try_from(raw.clone()).unwrap();
+        assert_eq!(proof.user_public_values, [0x34, 0xab]);
+
+        let roundtrip = RawEvmProof::try_from(proof).unwrap();
+        assert_eq!(roundtrip.instances, raw.instances);
+        assert_eq!(roundtrip.proof, raw.proof);
+    }
+
+    #[test]
+    fn evm_proof_rejects_non_byte_public_values() {
+        let mut instances = vec![Fr::ZERO; NUM_BN254_ACCUMULATOR + 2];
+        let mut bytes = [0u8; 32];
+        bytes[1] = 1;
+        instances.push(Fr::from_bytes(&bytes).unwrap());
+
+        let error = EvmProof::try_from(RawEvmProof {
+            instances,
+            proof: Vec::new(),
+        })
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            super::EvmProofConversionError::UserPublicValueOutOfRange(0)
+        ));
     }
 }
 

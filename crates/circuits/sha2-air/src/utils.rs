@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use ndarray::ArrayViewMut;
 pub use openvm_circuit_primitives::utils::compose;
 use openvm_circuit_primitives::{
@@ -50,9 +52,10 @@ pub fn u32_into_bits<C: Sha2BlockHasherSubairConfig>(num: u32) -> Vec<u32> {
 
 /// Convert a list of limbs in little endian into a Word
 pub fn le_limbs_into_word<C: Sha2BlockHasherSubairConfig>(limbs: &[u32]) -> C::Word {
-    let mut limbs = limbs.to_vec();
-    limbs.reverse();
-    be_limbs_into_word::<C>(&limbs)
+    let limb_bits = C::WORD_BITS / limbs.len();
+    limbs.iter().rev().fold(C::Word::from(0), |acc, &limb| {
+        (acc << limb_bits) | limb.into()
+    })
 }
 
 /// Convert a list of limbs in big endian into a Word
@@ -304,6 +307,7 @@ pub fn constraint_word_addition<AB: AirBuilder, C: Sha2BlockHasherSubairConfig>(
     }
 }
 
+/// Fill an array view from u32 values.
 pub fn set_arrayview_from_u32_slice<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     data: impl IntoIterator<Item = u32>,
@@ -314,6 +318,18 @@ pub fn set_arrayview_from_u32_slice<F: PrimeField32, D: ndarray::Dimension>(
         .for_each(|(x, y)| *x = y);
 }
 
+/// Fill an array view from u16 values.
+pub fn set_arrayview_from_u16_slice<F: PrimeField32, D: ndarray::Dimension>(
+    arrayview: &mut ArrayViewMut<F, D>,
+    data: impl IntoIterator<Item = u16>,
+) {
+    arrayview
+        .iter_mut()
+        .zip(data.into_iter().map(|x| F::from_u16(x)))
+        .for_each(|(x, y)| *x = y);
+}
+
+/// Fill an array view from u8 values.
 pub fn set_arrayview_from_u8_slice<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     data: impl IntoIterator<Item = u8>,
@@ -322,4 +338,18 @@ pub fn set_arrayview_from_u8_slice<F: PrimeField32, D: ndarray::Dimension>(
         .iter_mut()
         .zip(data.into_iter().map(|x| F::from_u8(x)))
         .for_each(|(x, y)| *x = y);
+}
+
+/// Fill an array view by decoding bytes as little-endian u16 limbs.
+pub fn set_arrayview_from_u16_le_bytes<F: PrimeField32, D: ndarray::Dimension>(
+    arrayview: &mut ArrayViewMut<F, D>,
+    bytes: &[u8],
+) {
+    assert_eq!(arrayview.len() * size_of::<u16>(), bytes.len());
+    arrayview
+        .iter_mut()
+        .zip(bytes.chunks_exact(size_of::<u16>()))
+        .for_each(|(slot, bytes)| {
+            *slot = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
+        });
 }

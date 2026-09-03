@@ -4,25 +4,23 @@ mod tests {
 
     use eyre::Result;
     use hex::FromHex;
-    #[cfg(feature = "aot")]
-    use openvm_circuit::arch::{testing::assert_vm_states_equivalent, SystemConfig};
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::arch::testing::assert_vm_states_equivalent;
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
-    use openvm_keccak256_circuit::Keccak256Rv32Config;
+    use openvm_keccak256_circuit::Keccak256Rv64Config;
     #[cfg(not(feature = "cuda"))]
-    use openvm_keccak256_circuit::Keccak256Rv32CpuBuilder as TestBuilder;
+    use openvm_keccak256_circuit::Keccak256Rv64CpuBuilder as TestBuilder;
     #[cfg(feature = "cuda")]
-    use openvm_keccak256_circuit::Keccak256Rv32GpuBuilder as TestBuilder;
+    use openvm_keccak256_circuit::Keccak256Rv64GpuBuilder as TestBuilder;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sdk::StdIn;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-    type F = BabyBear;
 
     struct TestVector {
         input: Vec<u8>,
@@ -69,16 +67,16 @@ mod tests {
     }
 
     fn test_keccak256_base(test_vector_file_name: &str, prove: bool) -> Result<()> {
-        let config = Keccak256Rv32Config::default();
+        let config = Keccak256Rv64Config::default();
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
+            Transpiler::default()
                 .with_extension(Keccak256TranspilerExtension)
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
         )?;
 
         let test_vectors = parse_test_vectors(test_vector_file_name);
@@ -92,21 +90,16 @@ mod tests {
         if prove {
             air_test_with_min_segments(TestBuilder, config, openvm_exe, stdin, 1);
         } else {
-            let executor = VmExecutor::new(config.clone())?;
-            let interpreter = executor.instance(&openvm_exe)?;
+            let executor = VmExecutor::<BabyBear, _>::new(config.clone())?;
+            let instance = executor.instance(&openvm_exe)?;
             #[allow(unused_variables)]
-            let state = interpreter.execute(stdin.clone(), None)?;
+            let state = instance.execute(stdin.clone())?;
 
-            #[cfg(feature = "aot")]
+            #[cfg(feature = "rvr")]
             {
-                let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
-                let naive_state = naive_interpreter.execute(stdin, None)?;
-                let system_config: &SystemConfig = config.as_ref();
-                assert_vm_states_equivalent(
-                    &state,
-                    &naive_state,
-                    &system_config.memory_config.memory_dimensions(),
-                );
+                let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
+                let naive_state = interpreter_instance.execute(stdin)?;
+                assert_vm_states_equivalent(&state, &naive_state);
             }
         }
 

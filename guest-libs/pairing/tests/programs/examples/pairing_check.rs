@@ -1,4 +1,7 @@
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unused_imports)]
 
@@ -15,11 +18,18 @@ mod bn254 {
     use alloc::format;
 
     use openvm_algebra_guest::{field::FieldExtension, IntMod};
+    #[cfg(feature = "rvr_checkpoint")]
+    use openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup, Group};
+    #[cfg(feature = "rvr_checkpoint")]
+    use openvm_pairing::bn254::Bn254G1Affine;
     use openvm_pairing::bn254::{Bn254, Fp, Fp2};
 
     use super::*;
 
+    #[cfg(not(feature = "rvr_checkpoint"))]
     openvm::init!("openvm_init_pairing_check_bn254.rs");
+    #[cfg(feature = "rvr_checkpoint")]
+    openvm::init!("openvm_init_pairing_check_bn254_rvr_checkpoint.rs");
 
     pub fn test_pairing_check(io: &[u8]) {
         let s0 = &io[0..32 * 2];
@@ -38,6 +48,9 @@ mod bn254 {
         let q0_cast = AffinePoint::new(Fp2::from_bytes(&q0[..64]), Fp2::from_bytes(&q0[64..128]));
         let q1_cast = AffinePoint::new(Fp2::from_bytes(&q1[..64]), Fp2::from_bytes(&q1[64..128]));
 
+        #[cfg(feature = "rvr_checkpoint")]
+        assert_ne!(Bn254G1Affine::GENERATOR.double(), Bn254G1Affine::GENERATOR);
+
         let f = Bn254::pairing_check(
             &[s0_cast.clone(), s1_cast.clone()],
             &[q0_cast.clone(), q1_cast.clone()],
@@ -52,11 +65,18 @@ mod bls12_381 {
     use alloc::format;
 
     use openvm_algebra_guest::{field::FieldExtension, IntMod};
+    #[cfg(feature = "rvr_checkpoint")]
+    use openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup, Group};
+    #[cfg(feature = "rvr_checkpoint")]
+    use openvm_pairing::bls12_381::Bls12_381G1Affine;
     use openvm_pairing::bls12_381::{Bls12_381, Fp, Fp2};
 
     use super::*;
 
+    #[cfg(not(feature = "rvr_checkpoint"))]
     openvm::init!("openvm_init_pairing_check_bls12_381.rs");
+    #[cfg(feature = "rvr_checkpoint")]
+    openvm::init!("openvm_init_pairing_check_bls12_381_rvr_checkpoint.rs");
 
     pub fn test_pairing_check(io: &[u8]) {
         let s0 = &io[0..48 * 2];
@@ -74,6 +94,12 @@ mod bls12_381 {
         );
         let q0_cast = AffinePoint::new(Fp2::from_bytes(&q0[..96]), Fp2::from_bytes(&q0[96..192]));
         let q1_cast = AffinePoint::new(Fp2::from_bytes(&q1[..96]), Fp2::from_bytes(&q1[96..192]));
+
+        #[cfg(feature = "rvr_checkpoint")]
+        assert_ne!(
+            Bls12_381G1Affine::GENERATOR.double(),
+            Bls12_381G1Affine::GENERATOR
+        );
 
         let f = Bls12_381::pairing_check(
             &[s0_cast.clone(), s1_cast.clone()],

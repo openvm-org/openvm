@@ -12,7 +12,7 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    arch::DEFAULT_BLOCK_SIZE,
+    arch::BLOCK_FE_WIDTH,
     system::memory::{offline_checker::MemoryBus, MemoryAddress},
 };
 
@@ -52,11 +52,11 @@ impl<'a, T> DummyMemoryInteractionColsRef<'a, T> {
 impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
     pub fn from_mut_slice(slice: &'a mut [T]) -> Self {
         let (addr_space, slice) = slice.split_first_mut().unwrap();
-        let (ptr, slice) = slice.split_first_mut().unwrap();
+        let (pointer, slice) = slice.split_first_mut().unwrap();
         let (count, slice) = slice.split_last_mut().unwrap();
         let (timestamp, data) = slice.split_last_mut().unwrap();
         Self {
-            address: MemoryAddress::new(addr_space, ptr),
+            address: MemoryAddress::new(addr_space, pointer),
             data,
             timestamp,
             count,
@@ -64,7 +64,8 @@ impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
     }
 }
 
-/// AIR width = DEFAULT_BLOCK_SIZE + 4 (addr_space, ptr, data[DEFAULT_BLOCK_SIZE], timestamp, count)
+/// AIR width = BLOCK_FE_WIDTH + 4
+/// (addr_space, pointer, data[BLOCK_FE_WIDTH], timestamp, count)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct MemoryDummyAir {
     pub bus: MemoryBus,
@@ -77,7 +78,7 @@ impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
 impl ColumnsAir for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
-        DEFAULT_BLOCK_SIZE + 4
+        BLOCK_FE_WIDTH + 4
     }
 }
 
@@ -122,20 +123,21 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     }
 
     pub fn push(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32, count: F) {
-        assert_eq!(data.len(), DEFAULT_BLOCK_SIZE);
+        assert_eq!(data.len(), BLOCK_FE_WIDTH);
         self.trace.push(F::from_u32(addr_space));
-        self.trace.push(F::from_u32(ptr));
+        assert!(ptr.is_multiple_of(BLOCK_FE_WIDTH as u32));
+        self.trace.push(F::from_u32(ptr / BLOCK_FE_WIDTH as u32));
         self.trace.extend_from_slice(data);
         self.trace.push(F::from_u32(timestamp));
         self.trace.push(count);
     }
 }
 
-impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let width = BaseAir::<Val<SC>>::width(&self.air);
         let height = (self.trace.len() / width).next_power_of_two();
         let mut trace = self.trace.clone();

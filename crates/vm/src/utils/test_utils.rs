@@ -1,11 +1,14 @@
 use std::array;
 
 use openvm_circuit::arch::{MemoryConfig, SystemConfig};
-use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
+use openvm_instructions::{
+    riscv::{MEMORY_AS, REGISTER_AS},
+    PUBLIC_VALUES_AS,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
-use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::PAGE_SIZE};
+use crate::system::memory::online::PAGE_SIZE;
 
 pub fn i32_to_f<F: PrimeField32>(val: i32) -> F {
     if val.signum() == -1 {
@@ -38,8 +41,8 @@ pub fn u32_sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
 
 pub fn test_system_config() -> SystemConfig {
     let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-    addr_spaces[RV32_REGISTER_AS as usize].num_cells = PAGE_SIZE;
-    addr_spaces[RV32_MEMORY_AS as usize].num_cells = 1 << 22;
+    addr_spaces[REGISTER_AS as usize].num_cells = PAGE_SIZE;
+    addr_spaces[MEMORY_AS as usize].num_cells = 1 << 22;
     addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = PAGE_SIZE;
     SystemConfig::new(3, MemoryConfig::new(2, addr_spaces, 29, 29, 17), 32)
 }

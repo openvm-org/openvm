@@ -20,9 +20,9 @@ use openvm_continuations::{
     SC,
 };
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
-use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_circuit::{Rv64IConfig, Rv64ImConfig, Rv64ImCpuBuilder};
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, proof::Proof, prover::CommittedTraceData,
@@ -32,7 +32,8 @@ use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security,
         baby_bear_poseidon2::{
-            default_duplex_sponge_recorder, poseidon2_compress_with_capacity, DIGEST_SIZE, F,
+            default_duplex_sponge_recorder, poseidon2_compress_with_capacity,
+            BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
         },
         internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
         root_params_with_100_bits_security,
@@ -43,7 +44,6 @@ use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use openvm_verify_stark_host::pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
-use p3_field::PrimeCharacteristicRing;
 use test_case::test_case;
 use tracing::Level;
 
@@ -57,18 +57,19 @@ cfg_if::cfg_if! {
     } else {
         use openvm_continuations::prover::InnerCpuProver as InnerProver;
         use openvm_cpu_backend::CpuBackend;
-        use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
         use crate::prover::DeferredVerifyCpuProver as DeferredVerifyProver;
         type Engine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
         type PB = CpuBackend<SC>;
     }
 }
 
+type AppEngine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
+
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
-fn test_rv32im_config() -> Rv32ImConfig {
-    Rv32ImConfig {
-        rv32i: Rv32IConfig {
+fn test_rv64im_config() -> Rv64ImConfig {
+    Rv64ImConfig {
+        rv64i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -84,25 +85,24 @@ fn run_leaf_aggregation(
     Proof<SC>,
     UserPublicValuesProof<DIGEST_SIZE, F>,
 )> {
-    let config = test_rv32im_config();
+    let config = test_rv64im_config();
     let elf = Elf::decode(
         include_bytes!("../../../../crates/continuations/programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
     let exe = VmExe::from_elf(
         elf,
-        Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+        Transpiler::default()
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
-    let input = (1u64 << log_fib_input)
-        .to_le_bytes()
-        .map(F::from_u8)
-        .to_vec();
+    let input = (1u64 << log_fib_input).to_le_bytes().to_vec();
 
-    let engine = Engine::new(app_params_with_100_bits_security(21));
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config)?;
+    // This test targets recursive verification. GPU app preflight is covered by
+    // extension and SDK tests, so build the input app proof through the generic CPU path.
+    let engine = AppEngine::new(app_params_with_100_bits_security(21));
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImCpuBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
@@ -176,7 +176,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         user_pvs_proof,
     ) = run_full_aggregation(10, child_extra_recursive_layers)?;
 
-    let system_config = test_rv32im_config().rv32i.system;
+    let system_config = test_rv64im_config().rv64i.system;
     let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
         internal_recursive_vk.clone(),
         internal_recursive_pcs_data.commitment.into(),
@@ -217,7 +217,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         &vm_poseidon2_hasher::<F>(),
         &vm_pvs.program_commit,
         &vm_pvs.initial_root,
-        vm_pvs.initial_pc,
+        vm_pvs.initial_pc_idx,
     );
     let app_vm_commit =
         poseidon2_hash_slice(&vk_commit_components(verifier_pvs).into_flattened()).0;

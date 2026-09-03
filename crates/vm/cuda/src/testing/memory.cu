@@ -2,6 +2,8 @@
 #include "primitives/trace_access.h"
 #include "system/memory/address.cuh"
 
+// The dummy interaction row is `[address_space, pointer, data[BLOCK_SIZE], timestamp, count]`
+// (width `BLOCK_SIZE + 4`), matching the host `MemoryDummyAir`.
 template <typename T, size_t BLOCK_SIZE> struct DummyMemoryInteractionCols {
     MemoryAddress<T> address;
     T data[BLOCK_SIZE];
@@ -15,8 +17,8 @@ __global__ void memory_testing_tracegen(Fp *trace, size_t height, Fp *records, s
     RowSlice row(trace + idx, height);
     if (idx < num_records) {
         auto record = reinterpret_cast<DummyMemoryInteractionCols<Fp, BLOCK_SIZE> *>(records)[idx];
-        COL_WRITE_VALUE(row, MemoryAddress, address_space, record.address.address_space);
-        COL_WRITE_VALUE(row, MemoryAddress, pointer, record.address.pointer);
+        row.write(0, record.address.address_space);
+        row.write(1, record.address.pointer);
         row.write_array(2, BLOCK_SIZE, record.data);
         row.write(2 + BLOCK_SIZE, record.timestamp);
         row.write(2 + BLOCK_SIZE + 1, record.count);

@@ -1,0 +1,8 @@
+[package]
+name = "rvr-state"
+description = "Machine state shared with the generated RVR runtime"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true

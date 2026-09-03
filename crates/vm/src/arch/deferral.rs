@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,28 @@ pub type InputRaw = Vec<u8>;
 pub type OutputRaw = Vec<u8>;
 pub type InputCommit = Vec<u8>;
 pub type OutputCommit = Vec<u8>;
+
+/// A registered deferral closure: `input_raw → output_raw`.
+#[allow(clippy::type_complexity)]
+pub struct DeferralFn {
+    f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,
+}
+
+impl Debug for DeferralFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeferralFn").finish()
+    }
+}
+
+impl DeferralFn {
+    pub fn new<FN: Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>(f: FN) -> Self {
+        Self { f: Box::new(f) }
+    }
+
+    pub fn call_raw(&self, input_raw: &[u8]) -> OutputRaw {
+        (self.f)(input_raw)
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum InputMapVal {
@@ -59,11 +81,33 @@ impl DeferralState {
         self.output_map.insert(output_commit, output_raw);
     }
 
+    pub fn try_store_output(
+        &mut self,
+        input_commit: &InputCommit,
+        output_commit: OutputCommit,
+        output_raw: OutputRaw,
+    ) -> bool {
+        if !self.input_map.contains_key(input_commit) || self.output_map.try_reserve(1).is_err() {
+            return false;
+        }
+        self.output_map.insert(output_commit.clone(), output_raw);
+        *self.input_map.get_mut(input_commit).unwrap() = InputMapVal::Output(output_commit);
+        true
+    }
+
     pub fn get_input(&self, input_commit: &InputCommit) -> &InputMapVal {
         self.input_map.get(input_commit).unwrap()
     }
 
+    pub fn try_get_input(&self, input_commit: &InputCommit) -> Option<&InputMapVal> {
+        self.input_map.get(input_commit)
+    }
+
     pub fn get_output(&self, output_commit: &OutputCommit) -> &OutputRaw {
         self.output_map.get(output_commit).unwrap()
+    }
+
+    pub fn try_get_output(&self, output_commit: &OutputCommit) -> Option<&OutputRaw> {
+        self.output_map.get(output_commit)
     }
 }

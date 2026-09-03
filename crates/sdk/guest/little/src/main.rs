@@ -1,3 +1,9 @@
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 extern crate alloc;
 
 use openvm_algebra_guest::IntMod;
@@ -5,6 +11,7 @@ use openvm_k256::{Secp256k1Coord, Secp256k1Scalar};
 use openvm_p256::{P256Coord, P256Scalar};
 use openvm_pairing::{bls12_381::Bls12_381Fp, bn254::Bn254Fp};
 
+openvm::entry!(main);
 openvm::init!();
 
 // Based on https://en.wikipedia.org/wiki/Fermat%27s_little_theorem. If this

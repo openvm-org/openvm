@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomExecutor,
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
@@ -19,7 +19,13 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig};
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_pairing::PairingExtension as PairingRvrExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -64,24 +70,24 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
-pub enum PairingExtensionExecutor<F: Field> {
-    Phantom(PhantomExecutor<F>),
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(PairingRvrExtension::new());
+    }
 }
 
-impl<F: Field> VmExecutionExtension<F> for PairingExtension {
-    type Executor = PairingExtensionExecutor<F>;
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
+pub enum PairingExtensionExecutor {
+    Phantom(PhantomExecutor),
+}
+
+impl VmExecutionExtension for PairingExtension {
+    type Executor = PairingExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, PairingExtensionExecutor<F>>,
+        inventory: &mut ExecutorInventoryBuilder<PairingExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         inventory.add_phantom_sub_executor(
             phantom::PairingHintSubEx,
@@ -92,37 +98,37 @@ impl<F: Field> VmExecutionExtension<F> for PairingExtension {
 }
 
 impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for PairingExtension {
+    // Pairing hints execute as phantoms and add no AIRs.
     fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         Ok(())
     }
 }
 
 pub struct PairingProverExt;
-impl<E, RA> VmProverExtension<E, RA, PairingExtension> for PairingProverExt
+impl<E> VmProverExtension<E, PairingExtension> for PairingProverExt
 where
     E: StarkEngine,
 {
+    // Pairing hints execute as phantoms and add no prover chips.
     fn extend_prover(
         &self,
         _: &PairingExtension,
-        _inventory: &mut ChipInventory<E::SC, RA, E::PB>,
+        _inventory: &mut ChipInventory<E::SC, E::PB>,
     ) -> Result<(), ChipInventoryError> {
         Ok(())
     }
 }
 
 pub(crate) mod phantom {
-    use std::collections::VecDeque;
-
     use eyre::bail;
     use halo2curves_axiom::ff;
     use openvm_circuit::{
-        arch::{PhantomSubExecutor, Streams},
+        arch::{HintStream, PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
     use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
     use openvm_instructions::{
-        riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
+        riscv::{MEMORY_AS, REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
     use openvm_pairing_guest::{
@@ -130,52 +136,51 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
-    use openvm_stark_backend::p3_field::Field;
+    use openvm_riscv_circuit::adapters::{memory_read, read_register_as_u32};
     use rand::rngs::StdRng;
 
     use super::PairingCurve;
 
     pub struct PairingHintSubEx;
 
-    impl<F: Field> PhantomSubExecutor<F> for PairingHintSubEx {
+    impl PhantomSubExecutor for PairingHintSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
-            streams: &mut Streams<F>,
+            streams: &mut Streams,
             _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = read_rv32_register(memory, a);
-            let rs2 = read_rv32_register(memory, b);
+            let rs1 = read_register_as_u32(memory, a);
+            let rs2 = read_register_as_u32(memory, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
 
-    fn hint_pairing<F: Field>(
+    fn hint_pairing(
         memory: &GuestMemory,
-        hint_stream: &mut VecDeque<F>,
+        hint_stream: &mut HintStream,
         rs1: u32,
         rs2: u32,
         c_upper: u16,
     ) -> eyre::Result<()> {
-        let p_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs1));
+        let p_ptr = u32::from_le_bytes(memory_read(memory, MEMORY_AS, rs1));
         // len in bytes
         let p_len = u32::from_le_bytes(memory_read(
             memory,
-            RV32_MEMORY_AS,
-            rs1 + RV32_REGISTER_NUM_LIMBS as u32,
+            MEMORY_AS,
+            rs1 + REGISTER_NUM_LIMBS as u32,
         ));
 
-        let q_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs2));
+        let q_ptr = u32::from_le_bytes(memory_read(memory, MEMORY_AS, rs2));
         // len in bytes
         let q_len = u32::from_le_bytes(memory_read(
             memory,
-            RV32_MEMORY_AS,
-            rs2 + RV32_REGISTER_NUM_LIMBS as u32,
+            MEMORY_AS,
+            rs2 + REGISTER_NUM_LIMBS as u32,
         ));
 
         match PairingCurve::from_repr(c_upper as usize) {
@@ -211,14 +216,13 @@ pub(crate) mod phantom {
 
                 let f: Fq12 = Bn254::multi_miller_loop(&p, &q);
                 let (c, u) = Bn254::final_exp_hint(&f);
-                hint_stream.clear();
-                hint_stream.extend(
+                hint_stream.set_hint(
                     c.to_coeffs()
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
                         .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_u8),
+                        .collect(),
                 );
             }
             Some(PairingCurve::Bls12_381) => {
@@ -253,14 +257,13 @@ pub(crate) mod phantom {
 
                 let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
                 let (c, u) = Bls12_381::final_exp_hint(&f);
-                hint_stream.clear();
-                hint_stream.extend(
+                hint_stream.set_hint(
                     c.to_coeffs()
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
                         .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_u8),
+                        .collect(),
                 );
             }
             _ => {
@@ -278,12 +281,12 @@ pub(crate) mod phantom {
         Fp::Repr: From<[u8; N]>,
     {
         // SAFETY:
-        // - RV32_MEMORY_AS consists of `u8`s
-        // - RV32_MEMORY_AS is in bounds
+        // - MEMORY_AS consists of `u8`s
+        // - MEMORY_AS is in bounds
         let repr: &[u8; N] = unsafe {
             memory
                 .memory
-                .get_slice::<u8>((RV32_MEMORY_AS, ptr), N)
+                .get_u8_slice(MEMORY_AS, ptr as usize, N)
                 .try_into()
                 .unwrap()
         };

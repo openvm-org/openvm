@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use hex_literal::hex;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
@@ -7,33 +5,39 @@ use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension, DEFAULT_BLOCK_SIZE,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-    var_range::VariableRangeCheckerBus,
-};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+use openvm_riscv_circuit::adapters::U16_BITS;
+use openvm_stark_backend::{
+    p3_field::PrimeField32, prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val,
+};
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_ecc::EccExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
+#[cfg(feature = "rvr")]
+use crate::{get_curve_type, CurveType};
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
-    get_ec_double_chip, get_ec_double_executor, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt,
-    WeierstrassAir, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    get_ec_double_chip, get_ec_double_executor,
+    weierstrass_chip::{
+        generate_add_ne_trace_from_postflight, generate_double_trace_from_postflight,
+    },
+    EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir, ECC_BLOCKS_32,
+    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 #[serde_as]
@@ -89,36 +93,47 @@ impl WeierstrassExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
-pub enum WeierstrassExtensionExecutor {
-    // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeExecutor<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>),
-    EcDoubleRv32_32(EcDoubleExecutor<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>),
-    // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeExecutor<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>),
-    EcDoubleRv32_48(EcDoubleExecutor<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>),
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        for curve in &self.supported_curves {
+            if let Some(expected) = CurveType::from_struct_name(&curve.struct_name) {
+                assert_eq!(
+                    get_curve_type(&curve.modulus, &curve.a),
+                    Some(expected),
+                    "RVR curve parameters do not match {}",
+                    curve.struct_name
+                );
+            }
+        }
+        let struct_names = self
+            .supported_curves
+            .iter()
+            .map(|c| c.struct_name.clone())
+            .collect();
+        extensions.register_lifter(EccExtension::new_from_struct_names(struct_names));
+    }
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor)]
+pub enum WeierstrassExtensionExecutor {
+    // 32 limbs prime
+    EcAddNe32(EcAddNeExecutor<ECC_BLOCKS_32>),
+    EcDouble32(EcDoubleExecutor<ECC_BLOCKS_32>),
+    // 48 limbs prime
+    EcAddNe48(EcAddNeExecutor<ECC_BLOCKS_48>),
+    EcDouble48(EcDoubleExecutor<ECC_BLOCKS_48>),
+}
+
+impl VmExecutionExtension for WeierstrassExtension {
     type Executor = WeierstrassExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, WeierstrassExtensionExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
-        // TODO: somehow get the range checker bus from `ExecutorInventory`
-        let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, curve) in self.supported_curves.iter().enumerate() {
-            let start_offset =
-                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
+            let start_offset = WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {
@@ -127,32 +142,22 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_executor(
-                    config.clone(),
-                    dummy_range_checker_bus,
-                    pointer_max_bits,
-                    start_offset,
-                );
+                let addne = get_ec_addne_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    WeierstrassExtensionExecutor::EcAddNe32(addne),
+                    ((WeierstrassOpcode::EC_ADD_NE as usize)
+                        ..=(WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_executor(
-                    config,
-                    dummy_range_checker_bus,
-                    pointer_max_bits,
-                    start_offset,
-                    curve.a.clone(),
-                );
+                let double =
+                    get_ec_double_executor(config, U16_BITS, start_offset, curve.a.clone());
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    WeierstrassExtensionExecutor::EcDouble32(double),
+                    ((WeierstrassOpcode::EC_DOUBLE as usize)
+                        ..=(WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
@@ -161,32 +166,22 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_executor(
-                    config.clone(),
-                    dummy_range_checker_bus,
-                    pointer_max_bits,
-                    start_offset,
-                );
+                let addne = get_ec_addne_executor(config.clone(), U16_BITS, start_offset);
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_48(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    WeierstrassExtensionExecutor::EcAddNe48(addne),
+                    ((WeierstrassOpcode::EC_ADD_NE as usize)
+                        ..=(WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_executor(
-                    config,
-                    dummy_range_checker_bus,
-                    pointer_max_bits,
-                    start_offset,
-                    curve.a.clone(),
-                );
+                let double =
+                    get_ec_double_executor(config, U16_BITS, start_offset, curve.a.clone());
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    WeierstrassExtensionExecutor::EcDouble48(double),
+                    ((WeierstrassOpcode::EC_DOUBLE as usize)
+                        ..=(WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
@@ -208,23 +203,9 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
-
-        let bitwise_lu = {
-            // A trick to get around Rust's borrow rules
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, curve) in self.supported_curves.iter().enumerate() {
-            let start_offset =
-                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
+            let start_offset = WeierstrassOpcode::CLASS_OFFSET + i * WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {
@@ -234,24 +215,22 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                let addne = get_ec_addne_air::<ECC_BLOCKS_32>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                let double = get_ec_double_air::<ECC_BLOCKS_32>(
                     exec_bridge,
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                     curve.a.clone(),
                 );
@@ -263,24 +242,22 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                let addne = get_ec_addne_air::<ECC_BLOCKS_48>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                let double = get_ec_double_air::<ECC_BLOCKS_48>(
                     exec_bridge,
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                     curve.a.clone(),
                 );
@@ -296,37 +273,25 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, E, RA> VmProverExtension<E, RA, WeierstrassExtension> for EccCpuProverExt
+impl<SC, E> VmProverExtension<E, WeierstrassExtension> for EccCpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &WeierstrassExtension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
-        for curve in extension.supported_curves.iter() {
+        for (curve_idx, curve) in extension.supported_curves.iter().enumerate() {
+            let opcode_base =
+                WeierstrassOpcode::CLASS_OFFSET + curve_idx * WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
             if bytes <= NUM_LIMBS_32 {
@@ -336,26 +301,30 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, ECC_BLOCKS_32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
+                    generate_add_ne_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
 
-                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
-                let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32>>()?;
+                let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(double);
+                inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
+                    generate_double_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -363,26 +332,30 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, ECC_BLOCKS_48>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_executor_chip_with_tracegen(addne, move |chip, postflight| {
+                    generate_add_ne_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
 
-                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
-                let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48>>()?;
+                let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_48>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     curve.a.clone(),
                 );
-                inventory.add_executor_chip(double);
+                inventory.add_executor_chip_with_tracegen(double, move |chip, postflight| {
+                    generate_double_trace_from_postflight(chip, postflight, opcode_base)
+                        .map(AirProvingContext::simple_no_pis)
+                });
             } else {
                 panic!("Modulus too large");
             }

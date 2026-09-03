@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, SystemConfig, VmBuilder,
-        VmChipComplex,
+        AirInventory, ChipInventory, ChipInventoryError, SystemConfig, VmBuilder, VmChipComplex,
     },
     system::poseidon2::air::Poseidon2PeripheryAir,
 };
@@ -22,7 +21,7 @@ use super::{phantom::PhantomChipGPU, Poseidon2PeripheryChipGPU, SystemChipInvent
 /// A utility method to get the `VariableRangeCheckerChipGPU` from [ChipInventory].
 /// Note, `VariableRangeCheckerChipGPU` always will always exist in the inventory.
 pub fn get_inventory_range_checker(
-    inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+    inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
 ) -> Arc<VariableRangeCheckerChipGPU> {
     inventory
         .find_chip::<Arc<VariableRangeCheckerChipGPU>>()
@@ -34,7 +33,7 @@ pub fn get_inventory_range_checker(
 /// A utility method to find a **byte** [BitwiseOperationLookupChipGPU] or create one and add
 /// to the inventory if it does not exist.
 pub fn get_or_create_bitwise_op_lookup(
-    inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+    inventory: &mut ChipInventory<BabyBearPoseidon2Config, GpuBackend>,
 ) -> Result<Arc<BitwiseOperationLookupChipGPU<8>>, ChipInventoryError> {
     let device_ctx = get_inventory_range_checker(inventory).device_ctx.clone();
     let bitwise_lu = {
@@ -67,7 +66,6 @@ pub struct SystemGpuBuilder;
 
 impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
     type VmConfig = SystemConfig;
-    type RecordArena = DenseRecordArena;
     type SystemChipInventory = SystemChipInventoryGPU;
 
     fn create_chip_complex(
@@ -76,12 +74,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         airs: AirInventory<BabyBearPoseidon2Config>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
     ) -> Result<
-        VmChipComplex<
-            BabyBearPoseidon2Config,
-            DenseRecordArena,
-            GpuBackend,
-            SystemChipInventoryGPU,
-        >,
+        VmChipComplex<BabyBearPoseidon2Config, GpuBackend, SystemChipInventoryGPU>,
         ChipInventoryError,
     > {
         let device_ctx = device_ctx.clone();
@@ -95,7 +88,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 
-        assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+        assert_eq!(inventory.num_chips(), POSEIDON2_INSERTION_IDX);
         let sbox_registers = if config.max_constraint_degree >= 7 {
             0
         } else {

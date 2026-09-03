@@ -4,6 +4,7 @@ shared: &shared
   - "crates/circuits/**"
   - "crates/vm/**"
   - "crates/toolchain/**"
+  - "crates/rvr/**"
   - "Cargo.toml"
   - "Cargo.lock"
   - "rust-toolchain.toml"
@@ -12,39 +13,40 @@ shared: &shared
   - ".github/filters/extension-tests.yml"
   - ".github/workflows/extension-tests.group.yml"
   - ".github/workflows/extension-tests.yml"
+  - "ci/install-openvm-toolchain.sh"
 cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/extension-tests.cuda.yml"
-rv32im: &rv32im
+riscv: &riscv
   - *shared
-  - "extensions/rv32im/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv/**"
+  - "extensions/riscv-adapters/**"
 keccak256:
-  - *rv32im
+  - *riscv
   - "extensions/keccak256/**"
 sha2:
-  - *rv32im
+  - *riscv
   - "extensions/sha2/**"
 bigint:
-  - *rv32im
+  - *riscv
   - "extensions/bigint/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
 algebra: &algebra
-  - *rv32im
+  - *riscv
   - "extensions/algebra/**"
   - "extensions/ecc/**"
   - "extensions/pairing/guest/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
 ecc:
   - *algebra
   - "crates/sdk/**"
   - "crates/sdk-config/**"
 pairing:
-  - *rv32im
+  - *riscv
   - "extensions/algebra/**"
   - "extensions/ecc/**"
-  - "extensions/rv32-adapters/**"
+  - "extensions/riscv-adapters/**"
   - "extensions/pairing/**"
 deferral:
-  - *rv32im
+  - *riscv
   - "extensions/deferral/**"

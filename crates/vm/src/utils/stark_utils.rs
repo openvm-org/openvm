@@ -1,24 +1,24 @@
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, VM_DIGEST_WIDTH};
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof,
-    prover::ProvingContext, Com, StarkEngine, SystemParams, Val,
+    keygen::types::MultiStarkVerifyingKey, proof::Proof, prover::ProvingContext, Com, StarkEngine,
+    SystemParams, Val,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::setup_tracing,
 };
 
-#[cfg(feature = "aot")]
-use crate::arch::testing::assert_vm_states_equivalent;
-#[cfg(feature = "aot")]
-use crate::arch::SystemConfig;
+#[cfg(feature = "rvr")]
+use crate::arch::VmState;
+#[cfg(feature = "rvr")]
+use crate::system::memory::online::{GuestMemory, LinearMemory};
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
-        ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        debug_proving_ctx, verify_segments, vm::VirtualMachine, Executor, ExitCode,
+        MeteredExecutor, PostflightTracegen, Streams, VmBuilder, VmCircuitConfig, VmConfig,
+        VmExecutionConfig, VmField,
     },
-    system::memory::{MemoryImage, CHUNK},
+    system::memory::MemoryImage,
 };
 
 /// Supports `trace height <= 2^20`.
@@ -33,8 +33,6 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         pub use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu};
         pub use openvm_cuda_backend::BabyBearPoseidon2GpuEngine as TestStarkEngine;
-        use crate::arch::DenseRecordArena;
-        pub type TestRecordArena = DenseRecordArena;
 
         pub fn test_gpu_engine() -> TestStarkEngine {
             setup_tracing();
@@ -44,23 +42,21 @@ cfg_if::cfg_if! {
         }
     } else {
         pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as TestStarkEngine;
-        use crate::arch::MatrixRecordArena;
-        pub type TestRecordArena = MatrixRecordArena<BabyBear>;
     }
 }
-type RA = TestRecordArena;
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
-pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
+pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe>)
 where
-    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
+    VB: PostflightTracegen<TestStarkEngine>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -69,17 +65,18 @@ where
 pub fn air_test_with_min_segments<VB, VC>(
     builder: VB,
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    exe: impl Into<VmExe>,
+    input: impl Into<Streams>,
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + 'static,
+    VB: PostflightTracegen<TestStarkEngine>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
@@ -100,67 +97,172 @@ where
     final_memory
 }
 
-// Compares the output of the interpreter and the AOT instance for pure and metered execution
-#[cfg(feature = "aot")]
-pub fn check_aot_equivalence<E, VB>(
+// Periphery AIRs (memory/hash system chips not tied to executors)
+fn is_periphery_air(air_name: &str) -> bool {
+    air_name.contains("MemoryMerkleAir")
+        || air_name.contains("Poseidon2PeripheryAir")
+        || air_name.contains("PersistentBoundaryAir")
+        || air_name.contains("NativeAdapterAir")
+}
+
+/// Checks that two `VmState`s are byte-identical: same `pc` and the same
+/// bytes in every guest address space. Reports the diverging AS, byte offset,
+/// and both byte values on failure. Short-circuits at the first mismatch.
+#[cfg(feature = "rvr")]
+fn check_vm_state_eq(lhs: &VmState<GuestMemory>, rhs: &VmState<GuestMemory>) -> eyre::Result<()> {
+    if lhs.pc() != rhs.pc() {
+        eyre::bail!("pc mismatch: interp={}, rvr={}", lhs.pc(), rhs.pc());
+    }
+    let lhs_mems = &lhs.memory.memory.mem;
+    let rhs_mems = &rhs.memory.memory.mem;
+    if lhs_mems.len() != rhs_mems.len() {
+        eyre::bail!(
+            "address space count mismatch: interp={}, rvr={}",
+            lhs_mems.len(),
+            rhs_mems.len()
+        );
+    }
+    for (as_idx, (l_mem, r_mem)) in lhs_mems.iter().zip(rhs_mems).enumerate() {
+        let l = l_mem.as_slice();
+        let r = r_mem.as_slice();
+        if l.len() != r.len() {
+            eyre::bail!(
+                "address space {as_idx} size mismatch: interp={}, rvr={}",
+                l.len(),
+                r.len()
+            );
+        }
+        if let Some(offset) = l.iter().zip(r).position(|(a, b)| a != b) {
+            eyre::bail!(
+                "guest memory mismatch in AS={as_idx} at byte offset 0x{offset:08x}: interp={}, rvr={}",
+                l[offset],
+                r[offset]
+            );
+        }
+    }
+    Ok(())
+}
+
+// Compares the output of the interpreter and the RVR instance for pure and metered execution.
+// Metered comparison is relaxed because rvr segments at block granularity while OpenVM segments
+// per-instruction, so segment boundaries differ. We assert: equal pure end-state, equal total
+// instret, contiguous non-empty rvr segments, and equal per-chip trace-height totals (skipping
+// boundary/merkle/poseidon2/native-adapter and constant-height airs).
+#[cfg(feature = "rvr")]
+pub fn check_rvr_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
-    config: &VB::VmConfig,
-    exe: &VmExe<Val<E::SC>>,
-    input: &Streams<Val<E::SC>>,
+    exe: &VmExe,
+    input: &Streams,
 ) -> eyre::Result<()>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
-    let system_config: &SystemConfig = config.as_ref();
-    let memory_dimensions = system_config.memory_config.memory_dimensions();
-
     /*
-    Assertions for Pure Execution AOT
+    Assertions for Pure Execution RVR
     */
     {
         let interp_state_pure = vm
-            .naive_interpreter(exe)?
-            .execute(input.clone(), None)
+            .interpreter_instance(exe)?
+            .execute(input.clone())
             .expect("Failed to execute");
 
-        let aot_state_pure = vm
-            .get_aot_instance(exe)?
-            .execute(input.clone(), None)
+        let rvr_state_pure = vm
+            .instance(exe)?
+            .execute(input.clone())
             .expect("Failed to execute");
 
-        assert_vm_states_equivalent(&interp_state_pure, &aot_state_pure, &memory_dimensions);
+        check_vm_state_eq(&interp_state_pure, &rvr_state_pure)?;
     }
 
     /*
-    Assertions for Metered AOT
+    Assertions for Metered-Cost RVR
     */
+    println!("Checking metered-cost RVR equivalence");
+    {
+        let air_idx = vm.executor_idx_to_air_idx();
+        let metered_cost_ctx = vm.build_metered_cost_ctx();
+
+        let (rvr_cost_ctx, _) = vm
+            .metered_cost_instance(exe)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+        let (interp_cost_ctx, _) = vm
+            .executor()
+            .metered_cost_interpreter_instance(exe, &air_idx)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx)?;
+
+        assert_eq!(
+            interp_cost_ctx.instret, rvr_cost_ctx.instret,
+            "metered-cost instret mismatch: interp={}, rvr={}",
+            interp_cost_ctx.instret, rvr_cost_ctx.instret
+        );
+        assert_eq!(
+            interp_cost_ctx.cost, rvr_cost_ctx.cost,
+            "metered-cost trace-cost mismatch: interp={}, rvr={}",
+            interp_cost_ctx.cost, rvr_cost_ctx.cost
+        );
+    }
+
+    /*
+    Assertions for Metered RVR (relaxed: rvr uses block-level segmentation)
+    */
+    println!("Checking metered RVR equivalence");
     {
         let metered_ctx = vm.build_metered_ctx(exe);
-        let (aot_segments, aot_state_metered) = vm
-            .get_metered_aot_instance(exe)?
+        let (rvr_segments, _rvr_state_metered) = vm
+            .metered_instance(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
-        let (segments, interp_state_metered) = vm
-            .naive_metered_interpreter(exe)?
+        let (interp_segments, _interp_state_metered) = vm
+            .metered_interpreter_instance(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
-        assert_vm_states_equivalent(
-            &interp_state_metered,
-            &aot_state_metered,
-            &memory_dimensions,
+        let interp_total: u64 = interp_segments.iter().map(|s| s.num_insns).sum();
+        let rvr_total: u64 = rvr_segments.iter().map(|s| s.num_insns).sum();
+        assert_eq!(
+            interp_total, rvr_total,
+            "total instret mismatch: interp={interp_total}, rvr={rvr_total}"
         );
 
-        assert_eq!(segments.len(), aot_segments.len());
-        for i in 0..segments.len() {
-            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
-            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
-            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+        let mut expected_start = 0u64;
+        for (i, seg) in rvr_segments.iter().enumerate() {
+            assert_eq!(
+                seg.instret_start, expected_start,
+                "rvr segment {i} not contiguous: expected {expected_start}, got {}",
+                seg.instret_start
+            );
+            assert!(seg.num_insns > 0, "rvr segment {i} is empty");
+            expected_start += seg.num_insns;
+        }
+
+        let air_names: Vec<&str> = vm.air_names().collect();
+        let num_chips = interp_segments[0].trace_heights.len();
+        for chip in 0..num_chips {
+            if metered_ctx.config.is_trace_height_constant[chip] {
+                continue;
+            }
+            let air_name = air_names.get(chip).copied().unwrap_or("unknown");
+            // For periphery airs, overestimates are expected
+            if is_periphery_air(air_name) {
+                continue;
+            }
+            let interp_sum: u64 = interp_segments
+                .iter()
+                .map(|s| s.trace_heights[chip] as u64)
+                .sum();
+            let rvr_sum: u64 = rvr_segments
+                .iter()
+                .map(|s| s.trace_heights[chip] as u64)
+                .sum();
+            assert_eq!(
+                interp_sum, rvr_sum,
+                "chip {chip} ({air_name}) trace-height total mismatch: interp={interp_sum}, rvr={rvr_sum}"
+            );
         }
     }
 
@@ -172,12 +274,13 @@ where
 //
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 pub fn air_test_impl<E, VB>(
     params: SystemParams,
     builder: VB,
     config: VB::VmConfig,
-    exe: impl Into<VmExe<Val<E::SC>>>,
-    input: impl Into<Streams<Val<E::SC>>>,
+    exe: impl Into<VmExe>,
+    input: impl Into<Streams>,
     min_segments: usize,
     debug: bool,
 ) -> eyre::Result<(
@@ -186,12 +289,12 @@ pub fn air_test_impl<E, VB>(
 )>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
+    Val<E::SC>: VmField,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        Executor<Val<E::SC>> + MeteredExecutor<Val<E::SC>> + 'static,
+    VB: PostflightTracegen<E>,
+    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     setup_tracing();
     let engine = E::new(params);
@@ -201,44 +304,30 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
 
-    #[cfg(feature = "aot")]
-    check_aot_equivalence(&vm, &config, &exe, &input)?;
+    #[cfg(feature = "rvr")]
+    check_rvr_equivalence(&vm, &exe, &input)?;
 
     let (segments, _) = vm
-        .metered_interpreter(&exe)?
+        .metered_instance(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
-    let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
+    let preflight_interpreter = vm.preflight_interpreter(&exe)?;
+    let prepared_tracegen = VB::prepare_postflight(&vm, &exe.program)?;
 
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;
     for (seg_idx, segment) in segments.iter().enumerate() {
-        let Segment {
-            num_insns,
-            trace_heights,
-            ..
-        } = segment.clone();
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
-        let PreflightExecutionOutput {
-            system_records,
-            record_arenas,
-            to_state,
-        } = vm.execute_preflight(
-            &mut preflight_interpreter,
-            from_state,
-            Some(num_insns),
-            &trace_heights,
-        )?;
-        state = Some(to_state);
-        exit_code = system_records.exit_code;
+        let output = preflight_interpreter.execute_segment(from_state, segment)?;
+        exit_code = output.exit_code;
+        let ctx = vm.generate_proving_ctx(&exe.program, &prepared_tracegen, &output)?;
+        state = Some(output.state);
 
-        let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
-
-        validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx);
+        validate_metered_estimates(&vm, &segment.trace_heights, &ctx, seg_idx);
 
         if debug {
             debug_proving_ctx(&vm, &ctx);
@@ -327,12 +416,8 @@ fn validate_metered_estimates<E, VB>(
             seg_idx
         );
 
-        // For some airs, the overestimates are expected
-        if air_name.contains("MemoryMerkleAir")
-            || air_name.contains("Poseidon2PeripheryAir")
-            || air_name.contains("PersistentBoundaryAir")
-            || air_name.contains("NativeAdapterAir")
-        {
+        // For periphery airs, overestimates are expected
+        if is_periphery_air(air_name) {
             continue;
         }
 

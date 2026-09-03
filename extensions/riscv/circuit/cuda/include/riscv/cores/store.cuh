@@ -1,0 +1,79 @@
+#pragma once
+
+#include "launcher.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/encoder.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "riscv/adapters/store.cuh"
+#include "riscv/cores/shift_selector.cuh"
+
+using namespace riscv;
+using namespace program;
+
+static __device__ __forceinline__ uint16_t store_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
+    return (cell >> (BYTE_BITS * byte_idx)) & BYTE_MASK;
+}
+
+template <typename T, size_t WIDTH_BYTES> struct StoreWidthCoreCols {
+    static_assert(
+        WIDTH_BYTES == HALFWORD_ACCESS_WIDTH || WIDTH_BYTES == WORD_ACCESS_WIDTH ||
+        WIDTH_BYTES == DOUBLEWORD_ACCESS_WIDTH
+    );
+    static constexpr size_t NUM_VALUE_CELLS = WIDTH_BYTES / 2;
+
+    T selector[BYTE_SHIFT_SELECTOR_WIDTH];
+    T read_data[BLOCK_FE_WIDTH];
+    T prev_data[2][BLOCK_FE_WIDTH];
+    T value_lo_bytes[NUM_VALUE_CELLS];
+    T prev_bound_bytes[2];
+};
+
+// Shared tracegen for the halfword/word/doubleword store cores.
+template <size_t WIDTH_BYTES> struct StoreWidthCore {
+    using Cols = StoreWidthCoreCols<uint8_t, WIDTH_BYTES>;
+    static constexpr size_t NUM_VALUE_CELLS = Cols::NUM_VALUE_CELLS;
+
+    BitwiseOperationLookup bitwise_lookup;
+
+    __device__ StoreWidthCore(BitwiseOperationLookup bitwise_lookup)
+        : bitwise_lookup(bitwise_lookup) {}
+
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&read_data)[BLOCK_FE_WIDTH],
+        uint16_t const (&prev_data)[2][BLOCK_FE_WIDTH],
+        uint8_t shift
+    ) {
+        Encoder encoder = shift_encoder();
+        encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
+        row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, read_data);
+        row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &prev_data[0][0]);
+
+        // Odd shifts materialize the value cells' low bytes and the two preserved boundary
+        // bytes. The AIR derives each paired byte; even shifts leave these columns zero and emit
+        // no byte lookups.
+        uint16_t value_lo_bytes[NUM_VALUE_CELLS] = {};
+        uint16_t prev_bound_bytes[2] = {};
+        if (shift & 1) {
+            for (size_t i = 0; i < NUM_VALUE_CELLS; i++) {
+                value_lo_bytes[i] = store_byte_from_cell(read_data[i], 0);
+                bitwise_lookup.add_range(
+                    value_lo_bytes[i], store_byte_from_cell(read_data[i], 1)
+                );
+            }
+            for (size_t which = 0; which < 2; which++) {
+                uint16_t cell =
+                    prev_data[((shift >> 1) + which * NUM_VALUE_CELLS) / BLOCK_FE_WIDTH]
+                             [((shift >> 1) + which * NUM_VALUE_CELLS) % BLOCK_FE_WIDTH];
+                bitwise_lookup.add_range(
+                    store_byte_from_cell(cell, 0), store_byte_from_cell(cell, 1)
+                );
+                prev_bound_bytes[which] = store_byte_from_cell(cell, which);
+            }
+        }
+        row.write_array(offsetof(Cols, value_lo_bytes), NUM_VALUE_CELLS, value_lo_bytes);
+        row.write_array(offsetof(Cols, prev_bound_bytes), 2, prev_bound_bytes);
+    }
+};

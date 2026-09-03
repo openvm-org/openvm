@@ -21,7 +21,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # install nightly Rust toolchain for binary builds
 rustup install nightly-2026-01-18
-rustup component add rust-src --toolchain nightly-2026-01-18
 
 # install build tools for Ubuntu
 sudo apt update
@@ -43,7 +42,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # install nightly Rust toolchain for binary builds
 rustup install nightly-2026-01-18
-rustup component add rust-src --toolchain nightly-2026-01-18
 
 # install build tools for macOS
 xcode-select --install
@@ -237,53 +235,14 @@ This will globally install `cargo-openvm`. You can validate a successful install
 cargo openvm --version
 ```
 
-## Installation with Ahead of Time Compilation
+## Install the OpenVM Rust Toolchain
 
-On host machines with the `x86_64` architecture, the CLI may be installed with ahead of time (AOT) compilation of guest programs to host binaries. This feature provides the fastest execution performance. This feature may be enabled on top of the standard CPU installation as well as the Nvidia GPU installation. We provide installation instructions for both versions, assuming the prerequisites ([CPU](#installation-prerequisites), [GPU](#installation-prerequisites-cuda)) are already met.
-
-**Caution**: AOT execution currently runs in _unprotected_ mode, and it should only be used on trusted guest programs.
-
-### Option 1: Install Via Git URL (Recommended)
-
-Begin the installation:
-
-:::code-group
-```bash [Without GPU]
-cargo +1.91 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.1.0 --features aot cargo-openvm
-```
-```bash [Nvidia GPU]
-cargo +1.91 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.1.0 --features aot,cuda cargo-openvm
-```
-:::
-
-This will globally install `cargo-openvm`. You can validate a successful installation with:
+`cargo openvm build` cross-compiles guest programs with a custom Rust toolchain built from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, which adds the `riscv64im-unknown-openvm-elf` tier-3 target with prebuilt `std`/`core`/`alloc`/`panic_abort` rlibs. Install it once after installing `cargo-openvm`:
 
 ```bash
-cargo openvm --version
+cargo openvm toolchain install
 ```
 
-### Option 2: Build from source
+This downloads the prebuilt tarball for your host triple from the fork's [Releases](https://github.com/openvm-org/rust/releases) page, extracts it under `~/.openvm/toolchains/`, and links it into rustup. The default toolchain is the stable OpenVM release `openvm-1.94.1`. To install another published release — including nightly variants for guest code that needs nightly Rust features — pass `--version <tag>` (e.g. `--version openvm-nightly-2026-01-18`).
 
-To build from source, first clone the repository.
-
-```bash
-git clone --branch v2.1.0 --single-branch https://github.com/openvm-org/openvm.git
-cd openvm
-```
-
-Then begin the installation:
-
-:::code-group
-```bash [Without GPU]
-cargo +1.91 install --locked --force --path crates/cli --features aot
-```
-```bash [Nvidia GPU]
-cargo +1.91 install --locked --force --path crates/cli --features aot,cuda
-```
-:::
-
-This will globally install `cargo-openvm`. You can validate a successful installation with:
-
-```bash
-cargo openvm --version
-```
+You can list and remove installed openvm toolchains with `cargo openvm toolchain list` and `cargo openvm toolchain uninstall`.

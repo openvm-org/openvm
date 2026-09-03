@@ -22,29 +22,33 @@ openvm-custom-insn = { workspace = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-blstrs = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+# Host-only deps — gated off the openvm guest target.
+[target.'cfg(not(any(target_os = "none", target_os = "openvm")))'.dependencies]
 num-bigint.workspace = true
 num-traits.workspace = true
 lazy_static.workspace = true
 openvm-ecc-guest = { workspace = true, features = ["halo2curves"] }
+blst = { workspace = true, optional = true }
+mcl_rust = { workspace = true, optional = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dev-dependencies]
+[target.'cfg(not(any(target_os = "none", target_os = "openvm")))'.dev-dependencies]
 subtle = "2.6.1"
 
 [features]
 default = []
 halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
-blstrs = ["bls12_381", "dep:blstrs"]
+blst = ["bls12_381", "dep:blst"]
+mcl = ["bn254", "dep:mcl_rust"]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro
 bn254 = []
 bls12_381 = []
-aot = []
-
 [package.metadata.cargo-shear]
 ignored = ["openvm", "openvm-custom-insn", "serde" ]
+
+[lints]
+workspace = true

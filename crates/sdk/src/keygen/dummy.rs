@@ -20,7 +20,7 @@ use {
         SC,
     },
     openvm_circuit::arch::{
-        Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
     },
     openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, Val},
 };
@@ -29,7 +29,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::AppProvingKey,
     prover::{AggProver, StarkProver},
-    DeferralSetup, StdIn, F,
+    DeferralSetup, StdIn,
 };
 
 type CpuRootE =
@@ -43,8 +43,8 @@ cfg_if::cfg_if! {
     }
 }
 
-fn dummy_terminate_exe() -> Arc<VmExe<F>> {
-    let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
+fn dummy_terminate_exe() -> Arc<VmExe> {
+    let dummy_program = Program::from_instructions(&[Instruction::from_isize(
         SystemOpcode::TERMINATE.global_opcode(),
         0,
         0,
@@ -67,10 +67,11 @@ pub(crate) fn compute_root_proof_heights(
     let memory_dimensions = system_config.memory_config.memory_dimensions();
     let num_user_pvs = system_config.num_public_values;
 
-    let mut app_config = AppConfig::riscv32(app_params_with_100_bits_security(
+    let mut app_config = AppConfig::riscv64(app_params_with_100_bits_security(
         MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;
+    app_config.app_vm_config.apply_optimizations();
 
     let def_hook_cached_commit = deferral_setup.hook_cached_commit();
     let def_hook_commit = deferral_setup.hook_commit().map(Into::into);
@@ -139,10 +140,10 @@ pub fn generate_dummy_root_proof<E, VB>(
 ) -> Proof<RootSC>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
+    VB: ContinuationProverBuilder<E> + Clone,
     Val<SC>: PrimeField32,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+        Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
 {
     let dummy_exe = dummy_terminate_exe();
 

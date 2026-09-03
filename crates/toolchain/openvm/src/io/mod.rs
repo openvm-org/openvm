@@ -1,26 +1,27 @@
 //! User IO functions
 
 use alloc::vec::Vec;
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use core::alloc::Layout;
 use core::fmt::Write;
 
-#[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::{hint_buffer_chunked, hint_input, hint_store_u32};
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+use openvm_riscv_guest::{hint_buffer_chunked, hint_input, hint_store_u64};
 use serde::de::DeserializeOwned;
 
-#[cfg(not(target_os = "zkvm"))]
-use crate::host::{hint_input, read_n_bytes, read_u32};
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
+use crate::host::{hint_input, read_n_bytes, read_u64};
 use crate::serde::Deserializer;
 
 mod read;
 
 pub use openvm_platform::print::{print, println};
+use openvm_platform::WORD_SIZE;
 
-/// Read `size: u32` and then `size` bytes from the hint stream into a vector.
+/// Read `size: u64` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
     hint_input();
-    read_vec_by_len(read_u32() as usize)
+    read_vec_by_len(read_u64() as usize)
 }
 
 /// Deserialize the next item from the next input stream into a type `T`.
@@ -30,58 +31,60 @@ pub fn read<T: DeserializeOwned>() -> T {
     T::deserialize(&mut deserializer).unwrap()
 }
 
-/// Read the next 4 bytes from the hint stream into a register.
-/// Because [hint_store_u32] stores a word to memory, this function first reads to memory and then
+/// Read the next 8 bytes from the hint stream into a register.
+/// Because [hint_store_u64] stores a word to memory, this function first reads to memory and then
 /// loads from memory to register.
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[inline(always)]
 #[allow(asm_sub_register)]
-pub fn read_u32() -> u32 {
-    let ptr = unsafe { alloc::alloc::alloc(Layout::from_size_align(4, 4).unwrap()) };
-    let addr = ptr as u32;
-    hint_store_u32!(addr);
-    let result: u32;
+pub fn read_u64() -> u64 {
+    let ptr = unsafe { alloc::alloc::alloc(Layout::from_size_align(8, 8).unwrap()) };
+    hint_store_u64!(ptr);
+    let result: u64;
     unsafe {
-        core::arch::asm!("lw {rd}, ({rs1})", rd = out(reg) result, rs1 = in(reg) addr);
+        core::arch::asm!("ld {rd}, ({rs1})", rd = out(reg) result, rs1 = in(reg) ptr);
     }
     result
 }
 
-fn hint_store_word(ptr: *mut u32) {
-    #[cfg(target_os = "zkvm")]
-    hint_store_u32!(ptr);
-    #[cfg(not(target_os = "zkvm"))]
+fn hint_store_word(ptr: *mut u64) {
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+    hint_store_u64!(ptr);
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     unsafe {
-        *ptr = crate::host::read_u32();
+        *ptr = crate::host::read_u64();
     }
 }
 
 /// Read the next `len` bytes from the hint stream into a vector.
 pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
-    let num_words = len.div_ceil(4);
-    let capacity = num_words.checked_mul(4).expect("hint length overflow");
+    let num_words = len.div_ceil(WORD_SIZE);
+    let capacity = num_words
+        .checked_mul(WORD_SIZE)
+        .expect("hint length overflow");
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     {
         // Allocate a buffer of the required length
-        // We prefer that the allocator should allocate this buffer to a 4-byte boundary,
+        // We prefer that the allocator should allocate this buffer to a 8-byte boundary,
         // but we do not specify it here because `Vec<u8>` safety requires the alignment to
         // exactly equal the alignment of `u8`, which is 1. See `Vec::from_raw_parts` for more
         // details.
         //
-        // Note: the bump allocator we use by default has minimum alignment of 4 bytes.
+        // Note: the bump allocator we use by default has minimum alignment of 8 bytes.
         // The heap-embedded-alloc uses linked list allocator, which has a minimum alignment of
-        // `sizeof(usize) * 2 = 8` on 32-bit architectures: https://github.com/rust-osdev/linked-list-allocator/blob/b5caf3271259ddda60927752fa26527e0ccd2d56/src/hole.rs#L429
+        // `sizeof(usize) * 2 = 16` on 64-bit architectures: https://github.com/rust-osdev/linked-list-allocator/blob/b5caf3271259ddda60927752fa26527e0ccd2d56/src/hole.rs#L429
         let mut bytes = Vec::with_capacity(capacity);
-        hint_buffer_chunked(bytes.as_mut_ptr(), num_words as usize);
-        // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the
-        // length to `len` and don't care about the extra `capacity - len` bytes stored.
+        // SAFETY: `bytes` has `capacity = num_words * WORD_SIZE` bytes reserved, so the
+        // hintstore writes stay within the allocation. We then set the length to `len`
+        // and don't care about the extra `capacity - len` bytes stored.
         unsafe {
+            hint_buffer_chunked(bytes.as_mut_ptr(), num_words as usize);
             bytes.set_len(len);
         }
         bytes
     }
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     {
         let mut buffer = Vec::with_capacity(capacity);
         buffer.append(&mut read_n_bytes(len));
@@ -96,24 +99,24 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
 /// Note: this will overwrite any previous data in the first 32 bytes of the user public
 /// output if it had been previously set.
 pub fn reveal_bytes32(bytes: [u8; 32]) {
-    for (i_u32, chunk) in bytes.chunks_exact(4).enumerate() {
-        let x = u32::from_le_bytes(chunk.try_into().unwrap());
-        reveal_u32(x, i_u32);
+    for (i_u64, chunk) in bytes.chunks_exact(8).enumerate() {
+        let x = u64::from_le_bytes(chunk.try_into().unwrap());
+        reveal_u64(x, i_u64);
     }
 }
 
-/// Publish `x` as the `index`-th u32 output.
+/// Publish `x` as the `index`-th u64 output.
 ///
 /// This is a low-level API. It is **highly recommended** that developers use [reveal_bytes32]
 /// instead to publish a hash digest of program's logical outputs.
 #[allow(unused_variables)]
 #[inline(always)]
-pub fn reveal_u32(x: u32, index: usize) {
-    let byte_index = (index * 4) as u32;
-    #[cfg(target_os = "zkvm")]
-    openvm_rv32im_guest::reveal!(byte_index, x, 0);
-    #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
-    println!("reveal {} at byte location {}", x, index * 4);
+pub fn reveal_u64(x: u64, index: usize) {
+    let byte_index = (index * 8) as u64;
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+    openvm_riscv_guest::reveal!(byte_index, x, 0);
+    #[cfg(all(not(any(openvm_intrinsics, target_os = "openvm")), feature = "std"))]
+    println!("reveal {} at byte location {}", x, index * 8);
 }
 
 /// A no-alloc writer to print to stdout on host machine for debugging purposes.

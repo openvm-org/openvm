@@ -50,6 +50,10 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 metrics = { workspace = true, optional = true }
 
+[dev-dependencies]
+openvm-sdk-config = { workspace = true, features = ["test-utils"] }
+tempfile = { workspace = true }
+
 [features]
 default = ["parallel", "jemalloc"]
 certified-verifier = ["dep:openvm-certified-verifier"]
@@ -75,7 +79,11 @@ metrics = [
     "openvm-continuations/metrics",
     "openvm-sdk-config/metrics",
 ]
-aot = ["openvm-circuit/aot", "openvm-sdk-config/aot"]
+rvr = [
+    "openvm-circuit/rvr",
+    "openvm-sdk-config/rvr",
+]
+profiling = ["openvm-circuit/profiling"]
 tco = ["openvm-circuit/tco", "openvm-sdk-config/tco"]
 unprotected = ["openvm-circuit/unprotected"]
 
@@ -88,7 +96,7 @@ perf-metrics = [
 
 # turns on stark-backend debugger in all proofs
 stark-debug = ["openvm-circuit/stark-debug"]
-test-utils = ["openvm-circuit/test-utils"]
+test-utils = ["openvm-circuit/test-utils", "openvm-sdk-config/test-utils"]
 
 parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]

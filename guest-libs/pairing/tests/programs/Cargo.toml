@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 [package]
 name = "openvm-pairing-test-programs"
 version = "0.0.0"
@@ -31,6 +32,10 @@ std = ["serde/std", "openvm/std"]
 
 bn254 = ["openvm-pairing/bn254"]
 bls12_381 = ["openvm-pairing/bls12_381"]
+# Adds one real curve operation and a test-only advice/materialization call
+# boundary so the checkpoint proof covers the composed ECC inventory and can
+# suspend immediately after the pairing phantom.
+rvr_checkpoint = ["openvm-pairing/rvr-checkpoint-tests"]
 
 [profile.release]
 panic = "abort"
@@ -48,3 +53,6 @@ required-features = ["bls12_381"]
 [[example]]
 name = "bls_ec"
 required-features = ["bls12_381"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }

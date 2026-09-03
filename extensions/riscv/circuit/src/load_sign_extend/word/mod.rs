@@ -1,0 +1,33 @@
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
+
+use crate::{
+    adapters::{LoadMultiByteAdapterAir, LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH},
+    load_sign_extend::{
+        common::LoadSignExtendExecutor,
+        core::{LoadSignExtendCoreAir, LoadSignExtendFiller},
+    },
+};
+
+/// Cells overlapped by an odd-shift word load.
+pub const LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS: usize = WORD_ACCESS_WIDTH / U16_CELL_SIZE + 1;
+
+pub type LoadSignExtendWordCoreAir =
+    LoadSignExtendCoreAir<WORD_ACCESS_WIDTH, LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS>;
+pub type LoadSignExtendWordFiller = LoadSignExtendFiller<
+    LoadMultiByteAdapterFiller,
+    WORD_ACCESS_WIDTH,
+    LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
+>;
+
+pub type LoadSignExtendWordAir = VmAirWrapper<LoadMultiByteAdapterAir, LoadSignExtendWordCoreAir>;
+pub type LoadSignExtendWordExecutor = LoadSignExtendExecutor<WORD_ACCESS_WIDTH>;
+pub type LoadSignExtendWordChip<F> = VmChipWrapper<F, LoadSignExtendWordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
+#[cfg(test)]
+mod tests;
+pub(crate) mod trace;

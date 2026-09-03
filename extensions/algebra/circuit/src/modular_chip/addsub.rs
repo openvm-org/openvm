@@ -1,22 +1,18 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
-    FieldExpressionFiller, FieldVariable,
+    FieldExpressionFiller, FieldExpressionProgram, FieldVariable,
 };
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
-};
+use openvm_riscv_adapters::{VecHeapAdapterAir, VecHeapAdapterFiller};
 
 use super::{ModularAir, ModularChip, ModularExecutor};
 use crate::FieldExprVecHeapExecutor;
@@ -25,8 +21,16 @@ pub fn addsub_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, usize, usize) {
+    let (program, is_add_flag, is_sub_flag) = addsub_program(config, range_bus.range_max_bits);
+    (FieldExpr::new(program, range_bus), is_add_flag, is_sub_flag)
+}
+
+fn addsub_program(
+    config: ExprBuilderConfig,
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, usize, usize) {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config, range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x1 = ExprBuilder::new_input(builder.clone());
@@ -41,60 +45,54 @@ pub fn addsub_expr(
     let builder = (*builder).borrow().clone();
 
     (
-        FieldExpr::new(builder, range_bus, true),
+        FieldExpressionProgram::new(builder, true),
         is_add_flag,
         is_sub_flag,
     )
 }
 
-fn gen_base_expr(
+fn gen_base_program(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-) -> (FieldExpr, Vec<usize>, Vec<usize>) {
-    let (expr, is_add_flag, is_sub_flag) = addsub_expr(config, range_checker_bus);
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, Vec<usize>, Vec<usize>) {
+    let (program, is_add_flag, is_sub_flag) = addsub_program(config, range_max_bits);
 
     let local_opcode_idx = vec![
-        Rv32ModularArithmeticOpcode::ADD as usize,
-        Rv32ModularArithmeticOpcode::SUB as usize,
-        Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
+        ModularArithmeticOpcode::ADD as usize,
+        ModularArithmeticOpcode::SUB as usize,
+        ModularArithmeticOpcode::SETUP_ADDSUB as usize,
     ];
     let opcode_flag_idx = vec![is_add_flag, is_sub_flag];
 
-    (expr, local_opcode_idx, opcode_flag_idx)
+    (program, local_opcode_idx, opcode_flag_idx)
 }
 
-pub fn get_modular_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_air<const BLOCKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> ModularAir<BLOCKS, BLOCK_SIZE> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+) -> ModularAir<BLOCKS> {
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_checker_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_checker_bus);
     ModularAir::new(
-        Rv32VecHeapAdapterAir::new(
-            exec_bridge,
-            mem_bridge,
-            bitwise_lookup_bus,
-            pointer_max_bits,
-        ),
+        VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
     )
 }
 
-pub fn get_modular_addsub_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-    pointer_max_bits: usize,
+    range_max_bits: usize,
     offset: usize,
-) -> ModularExecutor<BLOCKS, BLOCK_SIZE> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+) -> ModularExecutor<BLOCKS> {
+    let (program, local_opcode_idx, opcode_flag_idx) = gen_base_program(config, range_max_bits);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
-        expr,
+        program,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
@@ -102,17 +100,19 @@ pub fn get_modular_addsub_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>
     ))
 }
 
-pub fn get_modular_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pointer_max_bits: usize,
-) -> ModularChip<F, BLOCKS, BLOCK_SIZE> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+) -> ModularChip<F, BLOCKS> {
+    let range_bus = range_checker.bus();
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_bus);
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

@@ -12,8 +12,9 @@ on:
       - "crates/recursion/**"
       - "crates/continuations/**"
       - "crates/verify/**"
-      - "extensions/rv32im/**"
-      - "extensions/rv32-adapters/**"
+      - "crates/rvr/**"
+      - "extensions/riscv/**"
+      - "extensions/riscv-adapters/**"
       - "extensions/deferral/**"
       - "extensions/keccak256/**"
       - "extensions/sha2/**"
@@ -30,6 +31,7 @@ on:
       - ".github/workflows/guest-lib-tests.group.yml"
       - ".github/workflows/guest-lib-tests.yml"
       - "crates/sdk/guest/fib/**"
+      - "ci/install-openvm-toolchain.sh"
   pull_request:
     branches: ["**"]
     paths: *guest_lib_test_paths
@@ -61,14 +63,17 @@ jobs:
   integration-tests:
     needs: changes
     if: needs.changes.outputs.crates != '[]'
-    name: ${{ matrix.crate }}
+    name: ${{ format('{0} ({1})', matrix.crate, matrix.mode == 'rvr' && 'RVR' || matrix.mode) }}
     strategy:
       matrix:
         crate: ${{ fromJSON(needs.changes.outputs.crates) }}
-        mode: [default]
+        mode: [default, rvr]
         exclude:
           - { crate: shared, mode: default }
           - { crate: cuda, mode: default }
+          - { crate: shared, mode: rvr }
+          - { crate: cuda, mode: rvr }
+          - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/guest-lib-tests.group.yml

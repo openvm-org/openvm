@@ -2,24 +2,18 @@ use std::{collections::BTreeMap, mem};
 
 use backtrace::Backtrace;
 use cycle_tracker::CycleTracker;
-#[cfg(feature = "perf-metrics")]
-use itertools::Itertools;
 use metrics::counter;
+#[cfg(feature = "perf-metrics")]
+use openvm_instructions::SysPhantom;
 use openvm_instructions::{
     exe::{FnBound, FnBounds},
     program::ProgramDebugInfo,
 };
 use openvm_stark_backend::prover::{DeviceMultiStarkProvingKey, ProverBackend};
 
-use crate::{
-    arch::{
-        execution_mode::PreflightCtx, interpreter_preflight::PcEntry, Arena, PreflightExecutor,
-        VmExecState,
-    },
-    system::memory::online::TracingMemory,
-};
-
 pub mod cycle_tracker;
+#[cfg(all(test, feature = "perf-metrics"))]
+mod tests;
 
 #[derive(Clone, Debug, Default)]
 pub struct VmMetrics {
@@ -51,64 +45,6 @@ pub struct VmMetrics {
     /// Cycle span by function if function start/end addresses are available
     #[allow(dead_code)]
     pub(crate) current_fn: FnBound,
-}
-
-/// We assume this will be called after execute_instruction, so less error-handling is needed.
-#[allow(unused_variables)]
-#[inline(always)]
-pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
-    executor: &Executor,
-    prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
-    pc_entry: &PcEntry<F>,
-) where
-    F: Clone + Send + Sync,
-    RA: Arena,
-    Executor: PreflightExecutor<F, RA>,
-{
-    #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
-    {
-        let pc = state.pc();
-        state.metrics.update_backtrace(pc);
-    }
-
-    #[cfg(feature = "perf-metrics")]
-    {
-        use std::iter::zip;
-
-        let pc = state.pc();
-        let opcode = pc_entry.insn.opcode;
-        let opcode_name = executor.get_opcode_name(opcode.as_usize());
-
-        let debug_info = state.metrics.debug_infos.get(prev_pc);
-        let dsl_instr = debug_info.as_ref().map(|info| info.dsl_instruction.clone());
-
-        let now_trace_heights: Vec<usize> = state
-            .ctx
-            .arenas
-            .iter()
-            .map(|arena| arena.current_trace_height())
-            .collect();
-        let now_trace_cells = zip(&state.metrics.main_widths, &now_trace_heights)
-            .map(|(main_width, h)| main_width * h)
-            .collect_vec();
-        state
-            .metrics
-            .update_trace_cells(now_trace_cells, opcode_name, dsl_instr);
-
-        state.metrics.update_current_fn(pc);
-    }
-}
-
-// We clear the current trace cell counts so there aren't negative diffs at the start of the next
-// segment.
-#[cfg(feature = "perf-metrics")]
-pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>)
-where
-    F: Clone + Send + Sync,
-    RA: Arena,
-{
-    state.metrics.current_trace_cells.fill(0);
 }
 
 #[cfg(feature = "metrics")]
@@ -148,6 +84,38 @@ impl VmMetrics {
     }
 
     #[cfg(feature = "perf-metrics")]
+    pub(crate) fn record_instruction(&mut self, opcode_name: String, dsl_instr: Option<String>) {
+        let key = (dsl_instr, opcode_name);
+        self.cycle_tracker.increment_opcode(&key);
+        *self.counts.entry(key).or_insert(0) += 1;
+    }
+
+    #[cfg(feature = "perf-metrics")]
+    pub(crate) fn record_replayed_instruction(
+        &mut self,
+        opcode_name: String,
+        dsl_instr: Option<String>,
+        system_phantom: Option<SysPhantom>,
+        next_pc: u32,
+    ) {
+        match system_phantom {
+            Some(SysPhantom::CtStart) => {
+                if let Some(name) = &dsl_instr {
+                    self.cycle_tracker.start(name.clone());
+                }
+            }
+            Some(SysPhantom::CtEnd) => {
+                if let Some(name) = &dsl_instr {
+                    self.cycle_tracker.end(name.clone());
+                }
+            }
+            _ => {}
+        }
+        self.record_instruction(opcode_name, dsl_instr);
+        self.update_current_fn(next_pc);
+    }
+
+    #[cfg(feature = "perf-metrics")]
     pub fn update_trace_cells(
         &mut self,
         now_trace_cells: Vec<usize>,
@@ -155,8 +123,7 @@ impl VmMetrics {
         dsl_instr: Option<String>,
     ) {
         let key = (dsl_instr, opcode_name.clone());
-        self.cycle_tracker.increment_opcode(&key);
-        *self.counts.entry(key.clone()).or_insert(0) += 1;
+        self.record_instruction(opcode_name, key.0.clone());
 
         for (air_name, now_value, prev_value) in
             itertools::izip!(&self.air_names, &now_trace_cells, &self.current_trace_cells)

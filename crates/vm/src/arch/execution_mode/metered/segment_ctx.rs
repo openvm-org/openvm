@@ -1,11 +1,12 @@
 use bytesize::ByteSize;
 use itertools::izip;
+use openvm_instructions::metering::SEGMENT_CHECK_INSNS;
+#[cfg(feature = "metrics")]
+use openvm_stark_backend::interaction::BusIndex;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
-
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 
@@ -13,6 +14,8 @@ pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
+    /// Values required to replay this segment from preflight.
+    pub num_preflight_replay_values: u32,
     pub trace_heights: Vec<u32>,
 }
 
@@ -23,8 +26,24 @@ pub struct SegmentationLimits {
     pub max_interactions: u32,
 }
 
-#[derive(Clone, Debug)]
-struct SegmentationParams {
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "ProvingMemoryConfig")]
+struct ProvingMemoryConfigSerde {
+    base_field_size: usize,
+    extension_degree: usize,
+    digest_size: usize,
+    log_blowup: usize,
+    l_skip: usize,
+    log_stacked_height: usize,
+    k_whir: usize,
+    max_constraint_degree: usize,
+    cache_stacked_matrix: bool,
+    cache_rs_code_matrix: bool,
+    zerocheck_save_memory: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SegmentationConfig {
     air_names: Vec<String>,
     widths: Vec<usize>,
     interactions: Vec<usize>,
@@ -33,12 +52,22 @@ struct SegmentationParams {
     max_trace_height: u32,
     max_memory: usize,
     max_interactions: u32,
+    #[serde(with = "ProvingMemoryConfigSerde")]
     memory_config: ProvingMemoryConfig,
-    segment_check_insns: u64,
+    /// Symbolic interaction slots per AIR and bus, in AIR order.
+    ///
+    /// A slot may have zero or non-unit multiplicity at runtime, so this is not an active-message
+    /// count.
+    #[cfg(feature = "metrics")]
+    #[serde(default)]
+    bus_interactions: Vec<Vec<(BusIndex, usize)>>,
+    #[cfg(feature = "metrics")]
+    #[serde(default)]
+    bus_names: Vec<String>,
 }
 
-impl SegmentationParams {
-    fn new(
+impl SegmentationConfig {
+    pub(crate) fn new(
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
@@ -61,8 +90,8 @@ impl SegmentationParams {
             .checked_shl(u32::from(limits.max_trace_height_bits))
             .expect("max_trace_height_bits must fit in u32 trace height");
         assert!(
-            u64::from(max_trace_height) >= 2 * DEFAULT_SEGMENT_CHECK_INSNS,
-            "max_trace_height must be at least twice DEFAULT_SEGMENT_CHECK_INSNS"
+            u64::from(max_trace_height) >= 2 * u64::from(SEGMENT_CHECK_INSNS),
+            "max_trace_height must be at least twice SEGMENT_CHECK_INSNS"
         );
 
         Self {
@@ -75,24 +104,108 @@ impl SegmentationParams {
             max_memory: limits.max_memory,
             max_interactions: limits.max_interactions,
             memory_config,
-            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
+            #[cfg(feature = "metrics")]
+            bus_interactions: Vec::new(),
+            #[cfg(feature = "metrics")]
+            bus_names: Vec::new(),
         }
     }
+
+    #[cfg(feature = "metrics")]
+    pub(crate) fn set_bus_interactions(
+        &mut self,
+        bus_names: Vec<String>,
+        bus_interactions: Vec<Vec<(BusIndex, usize)>>,
+    ) {
+        self.bus_names = bus_names;
+        self.bus_interactions = bus_interactions;
+    }
+
+    #[cfg(feature = "metrics")]
+    fn validate_bus_interactions(&self, bus_interactions: &[Vec<(BusIndex, usize)>]) {
+        if bus_interactions.is_empty() {
+            return;
+        }
+        assert_eq!(bus_interactions.len(), self.interactions.len());
+        for (air_id, (by_bus, &total)) in bus_interactions
+            .iter()
+            .zip(self.interactions.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                by_bus.iter().map(|(_, count)| count).sum::<usize>(),
+                total,
+                "per-bus interactions do not match AIR {air_id} total"
+            );
+        }
+    }
+
+    #[inline(always)]
+    pub fn air_names(&self) -> &[String] {
+        &self.air_names
+    }
+
+    #[inline(always)]
+    pub fn widths(&self) -> &[usize] {
+        &self.widths
+    }
+
+    pub fn set_max_memory(&mut self, max_memory: usize) {
+        self.max_memory = max_memory;
+    }
+
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.memory_config.cache_rs_code_matrix = cache_rs_code_matrix;
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.memory_config.cache_rs_code_matrix
+    }
+
+    #[inline(always)]
+    pub fn max_memory(&self) -> usize {
+        self.max_memory
+    }
+}
+
+/// AIR metadata read during each segmentation check.
+#[derive(Clone, Debug)]
+struct VariableAir {
+    air_id: usize,
+    width: usize,
+    interactions: usize,
+    need_rot: bool,
+    constraint_eval_buffer: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
-    params: SegmentationParams,
+    config: SegmentationConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
+    /// Replay values already accumulated in the current segment.
+    ///
+    /// This is zero for the interpreter and is carried across compiled
+    /// segment-boundary suspension so resumed metered execution keeps exact
+    /// replay sizing.
+    pub(crate) num_preflight_replay_values: u32,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
     checkpoint_instret: u64,
+    /// Preflight replay-value count at the last safe block boundary.
+    checkpoint_replay_values: u32,
+    /// AIRs whose heights can change between segments.
+    variable_airs: Vec<VariableAir>,
+    /// Proving-memory contribution from AIRs whose heights are fixed.
+    constant_counts: ProvingMemoryCounts,
+    /// Interaction contribution from AIRs whose heights are fixed.
+    constant_total_interactions: u64,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SegmentationTrigger {
     Height {
         #[cfg(feature = "metrics")]
@@ -144,53 +257,117 @@ struct MeteredMemoryBreakdown {
     unpadded: usize,
 }
 
+#[cfg(feature = "metrics")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct BusInteractionCells {
+    air_id: usize,
+    bus_index: BusIndex,
+    unpadded: usize,
+    padding: usize,
+}
+
 impl SegmentationCtx {
-    pub fn new(
-        air_names: Vec<String>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
-        need_rot: Vec<bool>,
-        constraint_eval_buffers: Vec<usize>,
-        limits: SegmentationLimits,
-        memory_config: ProvingMemoryConfig,
+    pub(crate) fn new(
+        config: SegmentationConfig,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
     ) -> Self {
-        let num_airs = air_names.len();
-        let params = SegmentationParams::new(
-            air_names,
-            widths,
-            interactions,
-            need_rot,
-            constraint_eval_buffers,
-            limits,
-            memory_config,
-        );
+        assert_eq!(trace_heights.len(), is_trace_height_constant.len());
+        assert_eq!(trace_heights.len(), config.air_names.len());
+        assert_eq!(trace_heights.len(), config.widths.len());
+        assert_eq!(trace_heights.len(), config.interactions.len());
+        assert_eq!(trace_heights.len(), config.need_rot.len());
+        assert_eq!(trace_heights.len(), config.constraint_eval_buffers.len());
+        #[cfg(feature = "metrics")]
+        config.validate_bus_interactions(&config.bus_interactions);
+
+        let mut variable_airs = Vec::with_capacity(trace_heights.len());
+        let mut constant_main_with_rot = 0;
+        let mut constant_main_without_rot = 0;
+        let mut constant_interaction_cells = 0;
+        let mut constant_constraint_eval_cells = 0;
+        let mut constant_total_interactions = 0;
+
+        for (air_idx, row) in izip!(
+            trace_heights,
+            &config.widths,
+            &config.interactions,
+            is_trace_height_constant,
+            &config.need_rot,
+            &config.constraint_eval_buffers
+        )
+        .enumerate()
+        {
+            let (&height, &width, &interactions, &is_constant, &need_rot, &constraint_eval_buffer) =
+                row;
+            if is_constant {
+                let padded_height = next_power_of_two_or_zero(height as usize);
+                let main_cells = padded_height * width;
+                if need_rot {
+                    constant_main_with_rot += main_cells;
+                } else {
+                    constant_main_without_rot += main_cells;
+                }
+                constant_interaction_cells += padded_height * interactions;
+                constant_constraint_eval_cells += padded_height * constraint_eval_buffer;
+                constant_total_interactions += add_one_or_zero(height) as u64 * interactions as u64;
+            } else {
+                variable_airs.push(VariableAir {
+                    air_id: air_idx,
+                    width,
+                    interactions,
+                    need_rot,
+                    constraint_eval_buffer,
+                });
+            }
+        }
+
+        let num_airs = config.air_names.len();
         Self {
             segments: Vec::new(),
-            instrets_until_check: params.segment_check_insns,
-            params,
+            instrets_until_check: u64::from(SEGMENT_CHECK_INSNS),
+            config,
             instret: 0,
+            num_preflight_replay_values: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
+            checkpoint_replay_values: 0,
+            variable_airs,
+            constant_counts: ProvingMemoryCounts::new(
+                constant_main_with_rot,
+                constant_main_without_rot,
+                constant_interaction_cells,
+                constant_constraint_eval_cells,
+            ),
+            constant_total_interactions,
         }
     }
 
     #[inline(always)]
     pub(crate) fn air_names(&self) -> &[String] {
-        &self.params.air_names
+        &self.config.air_names
     }
 
     #[inline(always)]
     pub(crate) fn widths(&self) -> &[usize] {
-        &self.params.widths
-    }
-
-    #[inline(always)]
-    pub(super) fn segment_check_insns(&self) -> u64 {
-        self.params.segment_check_insns
+        &self.config.widths
     }
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
-        self.params.max_memory = max_memory;
+        self.config.set_max_memory(max_memory);
+    }
+
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.config.set_cache_rs_code_matrix(cache_rs_code_matrix);
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.config.cache_rs_code_matrix()
+    }
+
+    pub fn config(&self) -> &SegmentationConfig {
+        &self.config
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -201,7 +378,7 @@ impl SegmentationCtx {
             .enumerate()
             .map(|(i, &height)| (next_power_of_two_or_zero(height as usize) as u32, i))
             .max_by_key(|(height, _)| *height)
-            .map(|(height, idx)| (height, self.params.air_names[idx].as_str()))
+            .map(|(height, idx)| (height, self.config.air_names[idx].as_str()))
             .unwrap_or((0, "unknown"))
     }
 
@@ -218,7 +395,7 @@ impl SegmentationCtx {
         usize, /* main */
         usize, /* secondary */
     ) {
-        let estimate = self.params.memory_config.estimate(ProvingMemoryCounts::new(
+        let estimate = self.config.memory_config.estimate(ProvingMemoryCounts::new(
             main_cnt_with_rot,
             main_cnt_no_rot,
             interaction_cells,
@@ -231,21 +408,21 @@ impl SegmentationCtx {
     /// cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_count_breakdown(&self, trace_heights: &[u32]) -> MeteredCounts {
-        debug_assert_eq!(trace_heights.len(), self.params.widths.len());
-        debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
-        debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
+        debug_assert_eq!(trace_heights.len(), self.config.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.config.interactions.len());
+        debug_assert_eq!(trace_heights.len(), self.config.need_rot.len());
         debug_assert_eq!(
             trace_heights.len(),
-            self.params.constraint_eval_buffers.len()
+            self.config.constraint_eval_buffers.len()
         );
 
         let mut counts = MeteredCounts::default();
         for (&height, &width, &interactions, &need_rot, &constraint_eval_buffer) in izip!(
             trace_heights,
-            &self.params.widths,
-            &self.params.interactions,
-            &self.params.need_rot,
-            &self.params.constraint_eval_buffers
+            &self.config.widths,
+            &self.config.interactions,
+            &self.config.need_rot,
+            &self.config.constraint_eval_buffers
         ) {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
@@ -273,12 +450,12 @@ impl SegmentationCtx {
     /// cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize, usize) {
-        debug_assert_eq!(trace_heights.len(), self.params.widths.len());
-        debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
-        debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
+        debug_assert_eq!(trace_heights.len(), self.config.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.config.interactions.len());
+        debug_assert_eq!(trace_heights.len(), self.config.need_rot.len());
         debug_assert_eq!(
             trace_heights.len(),
-            self.params.constraint_eval_buffers.len()
+            self.config.constraint_eval_buffers.len()
         );
 
         let mut main_cnt_with_rot = 0;
@@ -287,10 +464,10 @@ impl SegmentationCtx {
         let mut constraint_eval_cells = 0;
         for (&height, &width, &interactions, &need_rot, &constraint_eval_buffer) in izip!(
             trace_heights,
-            &self.params.widths,
-            &self.params.interactions,
-            &self.params.need_rot,
-            &self.params.constraint_eval_buffers
+            &self.config.widths,
+            &self.config.interactions,
+            &self.config.need_rot,
+            &self.config.constraint_eval_buffers
         ) {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let main_cells = padded_height * width;
@@ -332,13 +509,13 @@ impl SegmentationCtx {
 
     #[inline(always)]
     fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
-        let unpadded = self.params.memory_config.estimate(ProvingMemoryCounts::new(
+        let unpadded = self.config.memory_config.estimate(ProvingMemoryCounts::new(
             counts.main_unpadded_with_rot,
             counts.main_unpadded_no_rot,
             counts.interaction_cells_unpadded,
             counts.constraint_eval_buffers_unpadded,
         ));
-        let total = self.params.memory_config.estimate(ProvingMemoryCounts::new(
+        let total = self.config.memory_config.estimate(ProvingMemoryCounts::new(
             counts.main_unpadded_with_rot + counts.main_padding_with_rot,
             counts.main_unpadded_no_rot + counts.main_padding_no_rot,
             counts.interaction_cells_unpadded + counts.interaction_cells_padding,
@@ -351,29 +528,47 @@ impl SegmentationCtx {
         }
     }
 
+    #[cfg(feature = "metrics")]
+    fn calculate_bus_interaction_cells(&self, trace_heights: &[u32]) -> Vec<BusInteractionCells> {
+        debug_assert_eq!(trace_heights.len(), self.config.bus_interactions.len());
+
+        let mut counts = Vec::new();
+        for (air_id, (&height, air_interactions)) in trace_heights
+            .iter()
+            .zip(self.config.bus_interactions.iter())
+            .enumerate()
+        {
+            let unpadded_height = height as usize;
+            let padded_height = next_power_of_two_or_zero(unpadded_height);
+            for &(bus_index, interactions) in air_interactions {
+                counts.push(BusInteractionCells {
+                    air_id,
+                    bus_index,
+                    unpadded: unpadded_height * interactions,
+                    padding: (padded_height - unpadded_height) * interactions,
+                });
+            }
+        }
+        counts
+    }
+
     /// Calculate the total interactions based on trace heights
     /// All padding rows contribute a single message to the interactions (+1) since
     /// we assume chips don't send/receive with nonzero multiplicity on padding rows.
     #[inline(always)]
     fn calculate_total_interactions(&self, trace_heights: &[u32]) -> u64 {
-        debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
+        debug_assert_eq!(trace_heights.len(), self.config.interactions.len());
 
         trace_heights
             .iter()
-            .zip(self.params.interactions.iter())
+            .zip(self.config.interactions.iter())
             .map(|(&height, &interactions)| add_one_or_zero(height) as u64 * interactions as u64)
             .sum()
     }
 
     #[inline(always)]
-    pub(crate) fn should_segment(
-        &self,
-        instret: u64,
-        trace_heights: &[u32],
-        is_trace_height_constant: &[bool],
-    ) -> bool {
-        self.segmentation_trigger(instret, trace_heights, is_trace_height_constant)
-            .is_some()
+    pub(crate) fn should_segment(&self, instret: u64, trace_heights: &[u32]) -> bool {
+        self.segmentation_trigger(instret, trace_heights).is_some()
     }
 
     #[inline(always)]
@@ -381,13 +576,8 @@ impl SegmentationCtx {
         &self,
         instret: u64,
         trace_heights: &[u32],
-        is_trace_height_constant: &[bool],
     ) -> Option<SegmentationTrigger> {
-        debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
-        debug_assert_eq!(trace_heights.len(), self.params.air_names.len());
-        debug_assert_eq!(trace_heights.len(), self.params.widths.len());
-        debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
-        debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
+        debug_assert_eq!(trace_heights.len(), self.config.air_names.len());
 
         let instret_start = self
             .segments
@@ -400,77 +590,64 @@ impl SegmentationCtx {
             return None;
         }
 
-        let mut main_cnt_with_rot = 0usize;
-        let mut main_cnt_no_rot = 0usize;
-        let mut interaction_cells = 0usize;
-        let mut constraint_eval_cells = 0usize;
-        let padded_heights = trace_heights
-            .iter()
-            .map(|&height| next_power_of_two_or_zero(height as usize) as u32);
-        for (i, row) in izip!(
-            padded_heights,
-            &self.params.widths,
-            &self.params.interactions,
-            is_trace_height_constant,
-            &self.params.need_rot,
-            &self.params.constraint_eval_buffers
-        )
-        .enumerate()
-        {
-            let (padded_height, &width, &interactions, &is_constant, &need_rot, &constraint_eval) =
-                row;
-            // Only segment if the height is not constant and exceeds the maximum height after
-            // padding
-            if !is_constant && padded_height > self.params.max_trace_height {
-                let air_name = unsafe { self.params.air_names.get_unchecked(i) };
+        let mut counts = self.constant_counts;
+        let mut total_interactions = self.constant_total_interactions;
+        for air in &self.variable_airs {
+            // SAFETY: `new` validates the AIR layout and creates every `air_id` from it.
+            let height = unsafe { *trace_heights.get_unchecked(air.air_id) };
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            if padded_height > self.config.max_trace_height as usize {
+                // SAFETY: `new` validates that `air_names` has the same AIR layout.
+                let air_name = unsafe { self.config.air_names.get_unchecked(air.air_id) };
                 tracing::info!(
                     "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     padded_height,
-                    self.params.max_trace_height,
-                    i,
+                    self.config.max_trace_height,
+                    air.air_id,
                     air_name,
                 );
                 return Some(SegmentationTrigger::Height {
                     #[cfg(feature = "metrics")]
-                    air_id: i,
+                    air_id: air.air_id,
                 });
             }
-            let main_cells = padded_height as usize * width;
-            if need_rot {
-                main_cnt_with_rot += main_cells;
+
+            let main_cells = padded_height * air.width;
+            if air.need_rot {
+                counts.main_cells_with_rot += main_cells;
             } else {
-                main_cnt_no_rot += main_cells;
+                counts.main_cells_without_rot += main_cells;
             }
-            interaction_cells += padded_height as usize * interactions;
-            constraint_eval_cells += padded_height as usize * constraint_eval;
+            counts.interaction_cells += padded_height * air.interactions;
+            counts.constraint_eval_cells += padded_height * air.constraint_eval_buffer;
+            total_interactions += add_one_or_zero(height) as u64 * air.interactions as u64;
         }
 
         let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
-            main_cnt_with_rot,
-            main_cnt_no_rot,
-            interaction_cells,
-            constraint_eval_cells,
+            counts.main_cells_with_rot,
+            counts.main_cells_without_rot,
+            counts.interaction_cells,
+            counts.constraint_eval_cells,
         );
-        if total_memory > self.params.max_memory {
+        if total_memory > self.config.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
                 instret,
                 ByteSize::b(total_memory as u64),
-                ByteSize::b(self.params.max_memory as u64),
+                ByteSize::b(self.config.max_memory as u64),
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
             );
             return Some(SegmentationTrigger::Memory);
         }
 
-        let total_interactions = self.calculate_total_interactions(trace_heights);
-        if total_interactions > u64::from(self.params.max_interactions) {
+        if total_interactions > u64::from(self.config.max_interactions) {
             tracing::info!(
                 "overshoot: instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
-                self.params.max_interactions
+                self.config.max_interactions
             );
             return Some(SegmentationTrigger::Interactions);
         }
@@ -479,13 +656,31 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(
-        &mut self,
-        instret: u64,
-        trace_heights: &mut [u32],
-        is_trace_height_constant: &[bool],
-    ) -> bool {
-        let trigger = self.segmentation_trigger(instret, trace_heights, is_trace_height_constant);
+    fn format_nonzero_trace_heights(&self, trace_heights: &[u32]) -> String {
+        trace_heights
+            .iter()
+            .zip(self.config.air_names.iter())
+            .filter(|(&height, _)| height > 0)
+            .map(|(&height, name)| format!("  {name} = {height}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[inline(always)]
+    pub(crate) fn warn_if_exceeds_limits(&self, instret: u64, trace_heights: &[u32]) {
+        if self.should_segment(instret, trace_heights) {
+            let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
+            tracing::warn!(
+                "Segment initialized with heights that exceed limits\n\
+                 instret={instret}\n\
+                 trace_heights=[\n{trace_heights_str}\n]"
+            );
+        }
+    }
+
+    #[inline(always)]
+    pub fn check_and_segment(&mut self, instret: u64, trace_heights: &mut [u32]) -> bool {
+        let trigger = self.segmentation_trigger(instret, trace_heights);
         let should_segment = trigger.is_some();
 
         #[cfg(feature = "metrics")]
@@ -508,63 +703,50 @@ impl SegmentationCtx {
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-        let (segment_instret, segment_heights) = if self.checkpoint_instret > instret_start {
+        let (segment_instret, segment_heights, segment_replay_values) = if self.checkpoint_instret
+            > instret_start
+        {
             (
                 self.checkpoint_instret,
                 self.checkpoint_trace_heights.clone(),
+                self.checkpoint_replay_values,
             )
         } else {
-            let trace_heights_str = trace_heights
-                .iter()
-                .zip(self.params.air_names.iter())
-                .filter(|(&height, _)| height > 0)
-                .map(|(&height, name)| format!("  {name} = {height}"))
-                .collect::<Vec<_>>()
-                .join("\n");
+            let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
             tracing::warn!(
                 "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
             );
             // No valid checkpoint, use current values
-            (instret, trace_heights.to_vec())
+            (
+                instret,
+                trace_heights.to_vec(),
+                self.num_preflight_replay_values,
+            )
         };
 
         let num_insns = segment_instret - instret_start;
-        self.create_segment::<false>(instret_start, num_insns, segment_heights);
+        self.create_segment::<false>(
+            instret_start,
+            num_insns,
+            segment_replay_values,
+            segment_heights,
+        );
     }
 
     /// Initialize state for a new segment
     #[inline(always)]
-    pub(crate) fn initialize_segment(
-        &mut self,
-        trace_heights: &mut [u32],
-        is_trace_height_constant: &[bool],
-    ) {
-        // Reset trace heights by subtracting the last segment's heights
+    pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         let last_segment = self.segments.last().unwrap();
-        self.reset_trace_heights(
-            trace_heights,
-            &last_segment.trace_heights,
-            is_trace_height_constant,
-        );
-    }
-
-    /// Resets trace heights by subtracting segment heights
-    #[inline(always)]
-    fn reset_trace_heights(
-        &self,
-        trace_heights: &mut [u32],
-        segment_heights: &[u32],
-        is_trace_height_constant: &[bool],
-    ) {
-        for ((trace_height, &segment_height), &is_trace_height_constant) in trace_heights
-            .iter_mut()
-            .zip(segment_heights.iter())
-            .zip(is_trace_height_constant.iter())
-        {
-            if !is_trace_height_constant {
-                *trace_height = trace_height.checked_sub(segment_height).unwrap();
-            }
+        for air in &self.variable_airs {
+            let trace_height = &mut trace_heights[air.air_id];
+            *trace_height = trace_height
+                .checked_sub(last_segment.trace_heights[air.air_id])
+                .unwrap();
         }
+        self.num_preflight_replay_values = self
+            .num_preflight_replay_values
+            .checked_sub(last_segment.num_preflight_replay_values)
+            .expect("segment preflight replay values exceed the running count");
     }
 
     /// Updates the checkpoint with current safe state
@@ -572,20 +754,26 @@ impl SegmentationCtx {
     pub(crate) fn update_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
         self.checkpoint_trace_heights.copy_from_slice(trace_heights);
         self.checkpoint_instret = instret;
+        self.checkpoint_replay_values = self.num_preflight_replay_values;
     }
 
     /// Try segment if there is at least one instruction
     #[inline(always)]
     pub fn create_final_segment(&mut self, trace_heights: &[u32]) {
-        self.instret += self.params.segment_check_insns - self.instrets_until_check;
-        self.instrets_until_check = self.params.segment_check_insns;
+        self.instret += u64::from(SEGMENT_CHECK_INSNS) - self.instrets_until_check;
+        self.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
         let num_insns = self.instret - instret_start;
-        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
+        self.create_segment::<true>(
+            instret_start,
+            num_insns,
+            self.num_preflight_replay_values,
+            trace_heights.to_vec(),
+        );
     }
 
     /// Push a new segment with logging
@@ -594,6 +782,7 @@ impl SegmentationCtx {
         &mut self,
         instret_start: u64,
         num_insns: u64,
+        num_preflight_replay_values: u32,
         trace_heights: Vec<u32>,
     ) {
         debug_assert!(
@@ -607,10 +796,12 @@ impl SegmentationCtx {
             let segment = self.segments.len().to_string();
             self.emit_metered_segment_metrics(&segment, &trace_heights);
             self.emit_metered_air_metrics(&segment, &trace_heights);
+            self.emit_metered_bus_metrics(&segment, &trace_heights);
         }
         self.segments.push(Segment {
             instret_start,
             num_insns,
+            num_preflight_replay_values,
             trace_heights,
         });
     }
@@ -673,7 +864,7 @@ impl SegmentationCtx {
                     ("segment", segment),
                     ("reason", reason.to_string()),
                     ("air_id", air_id.to_string()),
-                    ("air_name", self.params.air_names[air_id].clone()),
+                    ("air_name", self.config.air_names[air_id].clone()),
                 ];
                 metrics::counter!("segmentation_trigger", &labels).absolute(1);
             }
@@ -688,7 +879,7 @@ impl SegmentationCtx {
         let counts = self.calculate_count_breakdown(trace_heights);
         let memory = self.calculate_memory_breakdown(&counts);
         let padding = memory.total - memory.unpadded;
-        let estimate = self.params.memory_config.estimate(ProvingMemoryCounts::new(
+        let estimate = self.config.memory_config.estimate(ProvingMemoryCounts::new(
             counts.main_unpadded_with_rot + counts.main_padding_with_rot,
             counts.main_unpadded_no_rot + counts.main_padding_no_rot,
             counts.interaction_cells_unpadded + counts.interaction_cells_padding,
@@ -712,14 +903,14 @@ impl SegmentationCtx {
     }
 
     fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
-        let memory_config = self.params.memory_config;
+        let memory_config = self.config.memory_config;
 
         for (air_id, row) in izip!(
             trace_heights,
-            &self.params.widths,
-            &self.params.interactions,
-            &self.params.constraint_eval_buffers,
-            &self.params.air_names
+            &self.config.widths,
+            &self.config.interactions,
+            &self.config.constraint_eval_buffers,
+            &self.config.air_names
         )
         .enumerate()
         {
@@ -762,5 +953,231 @@ impl SegmentationCtx {
             metrics::counter!("metered_main_memory_padding_bytes", &labels)
                 .absolute(memory_config.main_memory_bytes(padding_cells) as u64);
         }
+    }
+
+    fn emit_metered_bus_metrics(&self, segment: &str, trace_heights: &[u32]) {
+        if self.config.bus_interactions.is_empty() {
+            return;
+        }
+
+        let memory_config = self.config.memory_config;
+        for cells in self.calculate_bus_interaction_cells(trace_heights) {
+            let total_cells = cells.unpadded + cells.padding;
+            if total_cells == 0 {
+                continue;
+            }
+            let labels = [
+                ("air_name", self.config.air_names[cells.air_id].clone()),
+                ("air_id", cells.air_id.to_string()),
+                ("bus_index", cells.bus_index.to_string()),
+                (
+                    "bus_name",
+                    self.config
+                        .bus_names
+                        .get(usize::from(cells.bus_index))
+                        .filter(|name| name.as_str() != "unnamed")
+                        .cloned()
+                        .unwrap_or_else(|| format!("bus_{}", cells.bus_index)),
+                ),
+                ("segment", segment.to_string()),
+            ];
+            // Attribute only the linear GKR leaf storage to a bus. The work buffer and fixed GKR
+            // overhead depend on the segment-wide interaction count and cannot be apportioned
+            // exactly; the segment metrics report the complete GKR estimate.
+            let bytes_per_cell = 2 * memory_config.extension_degree * memory_config.base_field_size;
+            let unpadded_memory = cells.unpadded * bytes_per_cell;
+            let total_memory = total_cells * bytes_per_cell;
+
+            metrics::counter!("metered_bus_interaction_cells_unpadded", &labels)
+                .absolute(cells.unpadded as u64);
+            metrics::counter!("metered_bus_interaction_cells_padding", &labels)
+                .absolute(cells.padding as u64);
+            metrics::counter!("metered_bus_interaction_memory_unpadded_bytes", &labels)
+                .absolute(unpadded_memory as u64);
+            metrics::counter!("metered_bus_interaction_memory_padding_bytes", &labels)
+                .absolute((total_memory - unpadded_memory) as u64);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn small_segmentation_ctx() -> SegmentationCtx {
+        let limits = SegmentationLimits {
+            max_trace_height_bits: 11,
+            max_memory: 1,
+            max_interactions: u32::MAX,
+        };
+        let memory_config = ProvingMemoryConfig {
+            base_field_size: 4,
+            extension_degree: 4,
+            digest_size: 32,
+            log_blowup: 1,
+            l_skip: 4,
+            log_stacked_height: 4,
+            k_whir: 4,
+            max_constraint_degree: 4,
+            cache_stacked_matrix: false,
+            cache_rs_code_matrix: false,
+            zerocheck_save_memory: false,
+        };
+        let config = SegmentationConfig::new(
+            vec!["air".to_string()],
+            vec![1],
+            vec![0],
+            vec![false],
+            vec![0],
+            limits,
+            memory_config,
+        );
+        SegmentationCtx::new(config, &[0], &[false])
+    }
+
+    #[test]
+    fn test_check_and_segment_uses_last_safe_checkpoint() {
+        let mut ctx = small_segmentation_ctx();
+        ctx.num_preflight_replay_values = 5;
+        ctx.update_checkpoint(10, &[2]);
+
+        let mut trace_heights = vec![8];
+        ctx.num_preflight_replay_values = 8;
+        assert!(ctx.check_and_segment(15, &mut trace_heights));
+
+        assert_eq!(ctx.segments.len(), 1);
+        assert_eq!(ctx.segments[0].instret_start, 0);
+        assert_eq!(ctx.segments[0].num_insns, 10);
+        assert_eq!(ctx.segments[0].num_preflight_replay_values, 5);
+        assert_eq!(ctx.segments[0].trace_heights, vec![2]);
+
+        ctx.initialize_segment(&mut trace_heights);
+        assert_eq!(ctx.num_preflight_replay_values, 3);
+    }
+
+    fn scan_test_ctx(initial_heights: &[u32], is_constant: &[bool]) -> SegmentationCtx {
+        let config = SegmentationConfig::new(
+            (0..4).map(|i| format!("air{i}")).collect(),
+            vec![2, 3, 5, 7],
+            vec![1, 2, 3, 4],
+            vec![false, true, false, true],
+            vec![11, 13, 17, 19],
+            SegmentationLimits {
+                max_trace_height_bits: 11,
+                max_memory: usize::MAX,
+                max_interactions: u32::MAX,
+            },
+            ProvingMemoryConfig {
+                base_field_size: 4,
+                extension_degree: 4,
+                digest_size: 32,
+                log_blowup: 1,
+                l_skip: 4,
+                log_stacked_height: 4,
+                k_whir: 4,
+                max_constraint_degree: 4,
+                cache_stacked_matrix: false,
+                cache_rs_code_matrix: false,
+                zerocheck_save_memory: false,
+            },
+        );
+        SegmentationCtx::new(config, initial_heights, is_constant)
+    }
+
+    #[test]
+    fn segmentation_trigger_uses_preaggregated_counts() {
+        let mut ctx = scan_test_ctx(&[5, 8, 0, 0], &[true, true, false, false]);
+
+        assert_eq!(ctx.segmentation_trigger(50, &[5, 8, 2048, 0]), None);
+        let height_trigger = ctx.segmentation_trigger(50, &[5, 8, 2049, 0]);
+        #[cfg(feature = "metrics")]
+        assert_eq!(
+            height_trigger,
+            Some(SegmentationTrigger::Height { air_id: 2 })
+        );
+        #[cfg(not(feature = "metrics"))]
+        assert_eq!(height_trigger, Some(SegmentationTrigger::Height {}));
+
+        assert_eq!(
+            ctx.segmentation_trigger(50, &[5, 8, u32::MAX, 0]),
+            height_trigger
+        );
+
+        let heights = [5, 8, 9, 4];
+        let total_memory = ctx.calculate_total_memory(&heights).0;
+        ctx.set_max_memory(total_memory);
+        assert_eq!(ctx.segmentation_trigger(50, &heights), None);
+        ctx.set_max_memory(total_memory - 1);
+        assert_eq!(
+            ctx.segmentation_trigger(50, &heights),
+            Some(SegmentationTrigger::Memory)
+        );
+
+        ctx.set_max_memory(usize::MAX);
+        let total_interactions = ctx.calculate_total_interactions(&heights) as u32;
+        ctx.config.max_interactions = total_interactions;
+        assert_eq!(ctx.segmentation_trigger(50, &heights), None);
+        ctx.config.max_interactions = total_interactions - 1;
+        assert_eq!(
+            ctx.segmentation_trigger(50, &heights),
+            Some(SegmentationTrigger::Interactions)
+        );
+
+        let ctx = scan_test_ctx(&[2049, 8, 0, 0], &[true, true, false, false]);
+        assert_eq!(ctx.segmentation_trigger(50, &[2049, 8, 0, 0]), None);
+    }
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn bus_interaction_cells_reconcile_with_air_totals() {
+        let mut ctx = scan_test_ctx(&[0, 0, 0, 0], &[false; 4]);
+        ctx.config.set_bus_interactions(
+            vec!["Execution".to_string(), "Memory".to_string()],
+            vec![
+                vec![(0, 1)],
+                vec![(0, 1), (1, 1)],
+                vec![(1, 3)],
+                vec![(0, 2), (1, 2)],
+            ],
+        );
+
+        let heights = [3, 0, 5, 8];
+        let counts = ctx.calculate_bus_interaction_cells(&heights);
+        let by_bus = |bus_index| {
+            counts
+                .iter()
+                .filter(|counts| counts.bus_index == bus_index)
+                .fold((0, 0), |(unpadded, padding), counts| {
+                    (unpadded + counts.unpadded, padding + counts.padding)
+                })
+        };
+        assert_eq!(by_bus(0), (19, 1));
+        assert_eq!(by_bus(1), (31, 9));
+
+        let air_counts = ctx.calculate_count_breakdown(&heights);
+        assert_eq!(
+            counts.iter().map(|counts| counts.unpadded).sum::<usize>(),
+            air_counts.interaction_cells_unpadded
+        );
+        assert_eq!(
+            counts.iter().map(|counts| counts.padding).sum::<usize>(),
+            air_counts.interaction_cells_padding
+        );
+    }
+
+    #[test]
+    fn initialize_segment_preserves_constant_heights() {
+        let mut ctx = scan_test_ctx(&[5, 8, 0, 0], &[true, true, false, false]);
+        ctx.segments.push(Segment {
+            instret_start: 0,
+            num_insns: 50,
+            num_preflight_replay_values: 0,
+            trace_heights: vec![5, 8, 9, 4],
+        });
+        let mut trace_heights = vec![5, 8, 12, 10];
+
+        ctx.initialize_segment(&mut trace_heights);
+
+        assert_eq!(trace_heights, vec![5, 8, 3, 6]);
     }
 }

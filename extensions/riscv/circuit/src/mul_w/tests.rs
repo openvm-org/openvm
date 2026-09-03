@@ -1,0 +1,455 @@
+use std::{array, borrow::BorrowMut, sync::Arc};
+
+use openvm_circuit::{
+    arch::{
+        testing::{
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            RANGE_TUPLE_CHECKER_BUS,
+        },
+        ExecutionBridge,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    range_tuple::{
+        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+        SharedRangeTupleCheckerChip,
+    },
+};
+use openvm_instructions::{instruction::InstructionOperand, LocalOpcode};
+use openvm_riscv_transpiler::MulWOpcode::{self, MULW};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::{rngs::StdRng, Rng};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::MulWChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+};
+
+use super::{trace::generate_trace_from_postflight, MulWChip, MulWCoreAir, MulWFiller};
+use crate::{
+    adapters::{
+        pack_high_u16, MultWAdapterAir, MultWAdapterCols, BYTE_BITS, REGISTER_NUM_LIMBS,
+        WORD_NUM_LIMBS,
+    },
+    mul::MultiplicationCoreCols,
+    test_utils::rand_write_register_or_imm,
+    MulWAir, MulWExecutor,
+};
+
+const MAX_INS_CAPACITY: usize = 128;
+// the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
+const MAX_NUM_LIMBS: u32 = 32;
+const TUPLE_CHECKER_SIZES: [u32; 2] = [(1u32 << BYTE_BITS), (MAX_NUM_LIMBS * (1u32 << BYTE_BITS))];
+
+type F = BabyBear;
+type Harness = TestChipHarness<F, MulWExecutor, MulWAir, MulWChip<F>>;
+type MulWCoreCols<T> = MultiplicationCoreCols<T, WORD_NUM_LIMBS, BYTE_BITS>;
+
+#[inline(always)]
+fn run_mulw(x: &[u8; WORD_NUM_LIMBS], y: &[u8; WORD_NUM_LIMBS]) -> [u8; REGISTER_NUM_LIMBS] {
+    let rs1 = u32::from_le_bytes(*x);
+    let rs2 = u32::from_le_bytes(*y);
+    let rd_word = rs1.wrapping_mul(rs2);
+    (rd_word as i32 as i64 as u64).to_le_bytes()
+}
+
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
+    range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (MulWAir, MulWExecutor, MulWChip<F>) {
+    let air = MulWAir::new(
+        MultWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        MulWCoreAir::new(
+            *range_tuple_chip.bus(),
+            bitwise_chip.bus(),
+            MulWOpcode::CLASS_OFFSET,
+        ),
+    );
+    let executor = MulWExecutor::new(MulWOpcode::CLASS_OFFSET);
+    let chip = MulWChip::<F>::new(
+        MulWFiller::new(range_tuple_chip, bitwise_chip),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
+    ),
+    (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+    let range_tuple_chip =
+        SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        range_tuple_chip.clone(),
+        tester.memory_helper(),
+    );
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
+
+    (
+        harness,
+        (bitwise_chip.air, bitwise_chip),
+        (range_tuple_chip.air, range_tuple_chip),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
+    rng: &mut StdRng,
+    b: Option<[u8; REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; REGISTER_NUM_LIMBS]>,
+) -> [u8; REGISTER_NUM_LIMBS] {
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+
+    let (mut instruction, rd) =
+        rand_write_register_or_imm(tester, b, c, None, MULW.global_opcode().as_usize(), rng);
+    instruction.e = InstructionOperand::ZERO;
+    tester.execute(executor, preflight, &instruction);
+
+    let b_word: [u8; WORD_NUM_LIMBS] = b[..WORD_NUM_LIMBS].try_into().unwrap();
+    let c_word: [u8; WORD_NUM_LIMBS] = c[..WORD_NUM_LIMBS].try_into().unwrap();
+    let expected = run_mulw(&b_word, &c_word);
+    assert_eq!(
+        expected.map(F::from_u8),
+        tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd)
+    );
+    expected
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+fn run_mulw_rand_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, bitwise, range_tuple) = create_harness(&tester);
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            None,
+            None,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .load_periphery(range_tuple)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_mulw_test(
+    prank_a: [u32; WORD_NUM_LIMBS],
+    b: [u8; REGISTER_NUM_LIMBS],
+    c: [u8; REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; REGISTER_NUM_LIMBS]>,
+    prank_is_valid: bool,
+    prank_result_sign: Option<u32>,
+    _interaction_error: bool,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise, range_tuple) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        Some(b),
+        Some(c),
+    );
+
+    let default_result_sign =
+        prank_result_sign.unwrap_or((prank_a[WORD_NUM_LIMBS - 1] >> (BYTE_BITS - 1)) & 1);
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).unwrap().to_vec();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut MultWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut MulWCoreCols<F> = core_row.borrow_mut();
+
+        cols.a = prank_a.map(F::from_u32);
+        if let Some(prank_b) = prank_b {
+            let prank_b_word: [u32; WORD_NUM_LIMBS] = prank_b[..WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_b_high: [u32; REGISTER_NUM_LIMBS - WORD_NUM_LIMBS] =
+                prank_b[WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.b = prank_b_word.map(F::from_u32);
+            adapter_cols.rs1_high = pack_high_u16(&prank_b_high);
+        }
+        if let Some(prank_c) = prank_c {
+            let prank_c_word: [u32; WORD_NUM_LIMBS] = prank_c[..WORD_NUM_LIMBS].try_into().unwrap();
+            let prank_c_high: [u32; REGISTER_NUM_LIMBS - WORD_NUM_LIMBS] =
+                prank_c[WORD_NUM_LIMBS..].try_into().unwrap();
+            cols.c = prank_c_word.map(F::from_u32);
+            adapter_cols.rs2_high = pack_high_u16(&prank_c_high);
+        }
+        adapter_cols.result_sign = F::from_u32(default_result_sign);
+        cols.is_valid = F::from_bool(prank_is_valid);
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .load_periphery(range_tuple)
+        .finalize();
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
+}
+
+#[test]
+fn mulw_wrong_negative_test() {
+    run_negative_mulw_test(
+        [63, 247, 125, 234],
+        [51, 109, 78, 142, 0, 0, 0, 0],
+        [197, 85, 150, 32, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn mulw_is_valid_false_negative_test() {
+    run_negative_mulw_test(
+        [63, 247, 125, 234],
+        [51, 109, 78, 142, 0, 0, 0, 0],
+        [197, 85, 150, 32, 0, 0, 0, 0],
+        None,
+        None,
+        false,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn mulw_adapter_wrong_rs1_upper_negative_test() {
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 13, 14, 15, 16],
+        [2, 0, 0, 0, 21, 22, 23, 24],
+        Some([1, 0, 0, 0, 99, 98, 97, 96]),
+        None,
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn mulw_adapter_wrong_rs2_upper_negative_test() {
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 13, 14, 15, 16],
+        [2, 0, 0, 0, 21, 22, 23, 24],
+        None,
+        Some([2, 0, 0, 0, 95, 94, 93, 92]),
+        true,
+        None,
+        true,
+    );
+}
+
+#[test]
+fn mulw_wrong_upper_sign_extension_negative_test() {
+    // 1 * 2 = 2 (positive), so result_sign must be 0.
+    run_negative_mulw_test(
+        [2, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        Some(1),
+        true,
+    );
+}
+
+#[test]
+fn mulw_wrong_upper_sign_extension_negative_to_zero_test() {
+    // 0x80000000 * 1 = 0x80000000 (negative), so result_sign must be 1.
+    run_negative_mulw_test(
+        [0, 0, 0, 128],
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        true,
+        Some(0),
+        true,
+    );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// SANITY TESTS
+///
+/// Ensure that solve functions produce the correct results.
+///////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+fn run_mulw_sanity_test() {
+    let x: [u8; WORD_NUM_LIMBS] = [197, 85, 150, 32];
+    let y: [u8; WORD_NUM_LIMBS] = [51, 109, 78, 142];
+    let z: [u8; WORD_NUM_LIMBS] = [63, 247, 125, 232];
+    let c: [u32; WORD_NUM_LIMBS] = [39, 100, 126, 205];
+    let (result, carry) = crate::mul::run_mul::<WORD_NUM_LIMBS, BYTE_BITS>(&x, &y);
+    for i in 0..WORD_NUM_LIMBS {
+        assert_eq!(z[i], result[i]);
+        assert_eq!(c[i], carry[i]);
+    }
+}
+
+#[test]
+fn run_mulw_sign_extension_test() {
+    // MULW of 0x80000000 * 1 = 0x80000000, sign-extended to 0xFFFFFFFF_80000000
+    let result = run_mulw(&[0, 0, 0, 128], &[1, 0, 0, 0]);
+    assert_eq!(result, [0, 0, 0, 128, 255, 255, 255, 255]);
+
+    // MULW of 1 * 1 = 1, sign-extended to 0x00000000_00000001
+    let result = run_mulw(&[1, 0, 0, 0], &[1, 0, 0, 0]);
+    assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
+
+    // MULW of 0xFFFFFFFF * 0xFFFFFFFF = 1, sign-extended to 0x00000000_00000001
+    let result = run_mulw(&[255, 255, 255, 255], &[255, 255, 255, 255]);
+    assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
+}
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type GpuHarness = GpuTestChipHarness<F, MulWExecutor, MulWAir, MulWChipGpu, MulWChip<F>>;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+    let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        dummy_range_tuple_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = MulWChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.range_tuple_checker(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_rand_mul_w_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default()
+        .with_bitwise_op_lookup(default_bitwise_lookup_bus())
+        .with_range_tuple_checker(RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            TUPLE_CHECKER_SIZES,
+        ));
+
+    let mut harness = create_cuda_harness(&tester);
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            None,
+            None,
+        );
+    }
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

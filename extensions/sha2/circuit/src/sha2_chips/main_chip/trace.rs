@@ -1,222 +1,199 @@
+use std::sync::{atomic::Ordering, Arc};
+
 use openvm_circuit::{
-    arch::*,
+    arch::{Postflight, PostflightError},
     system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
-        MemoryAuxColsFactory,
+        offline_checker::pack_u8_block_bytes, MemoryAuxColsFactory, SharedMemoryHelper,
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::Chip;
-use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_sha2_air::set_arrayview_from_u8_slice;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+use openvm_instructions::{program::pc_to_idx, LocalOpcode};
+use openvm_riscv_circuit::adapters::{add_block_index_range_checks, ptr_to_u16_limbs};
+use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    StarkProtocolConfig, Val,
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
-use crate::{
-    Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2Metadata, Sha2RecordLayout, Sha2RecordMut,
-    Sha2SharedRecords, SHA2_WRITE_SIZE,
-};
+use crate::{replay_sha2_from_postflight, Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2ReplayRow};
 
-// We will allocate a new trace matrix instead of using the record arena directly,
-// because we want to pass the record arena to Sha2BlockHasherChip when we are done.
-impl<RA, SC: StarkProtocolConfig, C: Sha2Config> Chip<RA, CpuBackend<SC>>
-    for Sha2MainChip<Val<SC>, C>
+pub(crate) fn generate_trace_from_postflight<F, C>(
+    chip: &Sha2MainChip<F, C>,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError>
 where
-    Val<SC>: PrimeField32,
-    SC: StarkProtocolConfig,
-    RA: RowMajorMatrixArena<Val<SC>> + Send + Sync,
+    F: PrimeField32,
+    C: Sha2Config,
 {
-    fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<CpuBackend<SC>> {
-        // Since Sha2Metadata::get_num_rows() = 1, the number of rows used is equal to the number of
-        // SHA-2 instructions executed.
-        let rows_used = arena.trace_offset() / arena.width();
+    let steps = postflight.steps(C::OPCODE.global_opcode());
+    let height = next_power_of_two_or_zero(steps.len());
+    let mut trace =
+        RowMajorMatrix::new(F::zero_vec(height * C::MAIN_CHIP_WIDTH), C::MAIN_CHIP_WIDTH);
+    let temporary_range_checker =
+        Arc::new(VariableRangeCheckerChip::new(chip.range_checker_chip.bus()));
+    let temporary_mem_helper = SharedMemoryHelper::new(
+        temporary_range_checker.clone(),
+        chip.mem_helper.timestamp_max_bits(),
+    );
+    let mem_helper = temporary_mem_helper.as_borrowed();
+    trace.values[..steps.len() * C::MAIN_CHIP_WIDTH]
+        .par_chunks_exact_mut(C::MAIN_CHIP_WIDTH)
+        .zip(steps.par_iter().copied())
+        .enumerate()
+        .try_for_each(|(row_index, (row, step))| {
+            let replay =
+                replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)?;
+            chip.fill_trace_row_from_replay(
+                temporary_range_checker.as_ref(),
+                &mem_helper,
+                row,
+                row_index,
+                &replay,
+            );
+            Ok::<(), PostflightError>(())
+        })?;
+    if chip.range_checker_chip.count.len() != temporary_range_checker.count.len() {
+        return Err(PostflightError::new("SHA-2 range-checker shape mismatch"));
+    }
+    for (destination, source) in chip
+        .range_checker_chip
+        .count
+        .iter()
+        .zip(&temporary_range_checker.count)
+    {
+        destination.fetch_add(source.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+    Ok(trace)
+}
 
-        // We will fill the trace into a separate buffer, because we want to pass the arena to the
-        // Sha2BlockHasherChip when we are done.
-        // Sha2MainChip uses 1 row per instruction, we allocate rows_used * arena.width() space for
-        // the trace.
-        let height = next_power_of_two_or_zero(rows_used);
-        let trace = Val::<SC>::zero_vec(height * arena.width());
-        let mut trace_matrix = RowMajorMatrix::new(trace, arena.width());
+#[cfg(test)]
+pub(crate) fn generate_trace_from_postflights<F, C>(
+    chip: &Sha2MainChip<F, C>,
+    postflights: &[Postflight<'_, F>],
+) -> Result<RowMajorMatrix<F>, PostflightError>
+where
+    F: PrimeField32,
+    C: Sha2Config,
+{
+    let mut replay_rows = Vec::new();
+    for postflight in postflights {
+        for &step in postflight.steps(C::OPCODE.global_opcode()) {
+            replay_rows.push(replay_sha2_from_postflight::<F, C>(
+                postflight,
+                step,
+                chip.pointer_max_bits,
+            )?);
+        }
+    }
+    Ok(chip.generate_trace_from_replays(&replay_rows))
+}
+
+#[cfg(test)]
+impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
+    fn generate_trace_from_replays(&self, replay_rows: &[Sha2ReplayRow]) -> RowMajorMatrix<F> {
+        let height = next_power_of_two_or_zero(replay_rows.len());
+        let mut trace =
+            RowMajorMatrix::new(F::zero_vec(height * C::MAIN_CHIP_WIDTH), C::MAIN_CHIP_WIDTH);
         let mem_helper = self.mem_helper.as_borrowed();
-
-        let mut records = arena.into_matrix();
-
-        self.fill_trace(&mem_helper, &mut trace_matrix, rows_used, &mut records);
-
-        // Pass the records to Sha2BlockHasherChip
-        *self.records.lock().unwrap() = Some(Sha2SharedRecords {
-            num_records: rows_used,
-            matrix: records,
-        });
-
-        AirProvingContext::simple_no_pis(trace_matrix)
+        trace.values[..replay_rows.len() * C::MAIN_CHIP_WIDTH]
+            .par_chunks_exact_mut(C::MAIN_CHIP_WIDTH)
+            .zip(replay_rows.par_iter())
+            .enumerate()
+            .for_each(|(row_index, (row, replay))| {
+                self.fill_trace_row_from_replay(
+                    self.range_checker_chip.as_ref(),
+                    &mem_helper,
+                    row,
+                    row_index,
+                    replay,
+                );
+            });
+        trace
     }
 }
 
-// Note: we would like to just impl TraceFiller here, but we can't because we need to pass the
-// records and row_idx to the tracegen functions.
 impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
-    // Preconditions:
-    // - trace should be a matrix with width = Sha2MainAir::width() and height = rows_used
-    // - trace should be filled with all zeros
-    // - records should be a matrix with height = rows_used, where each row stores a record
-    pub fn fill_trace(
+    fn fill_trace_row_from_replay(
         &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut RowMajorMatrix<F>,
-        rows_used: usize,
-        records: &mut RowMajorMatrix<F>,
-    ) {
-        let width = trace.width();
-        trace.values[..rows_used * width]
-            .par_chunks_exact_mut(width)
-            .zip(records.par_rows_mut())
-            .enumerate()
-            .for_each(|(row_idx, (row_slice, record))| {
-                self.fill_trace_row_with_row_idx(mem_helper, row_slice, row_idx, record);
-            });
-    }
-
-    // Same as TraceFiller::fill_trace_row, except we also take the row index as a parameter.
-    //
-    // Note: the only reason the record parameter is mutable is that get_record_from_slice
-    // requires a &mut &mut [F] slice. This parameter type is useful in other places where
-    // get_record_from_slice is used, to circumvent the borrow checker. Here, we don't actually need
-    // this workaround (we could duplicate get_record_from_slice and modify it to take a &mut
-    // [F] slice), but we just use the existing function for simplicity.
-    fn fill_trace_row_with_row_idx(
-        &self,
+        range_checker: &VariableRangeCheckerChip,
         mem_helper: &MemoryAuxColsFactory<F>,
         row_slice: &mut [F],
         row_idx: usize,
-        mut record: &mut [F],
-    ) where
-        F: Clone,
-    {
-        // SAFETY:
-        // - caller ensures `record` contains a valid record representation that was previously
-        //   written by the executor
-        // - record contains a valid Sha2RecordMut with the exact layout specified
-        // - get_record_from_slice will correctly split the buffer into header and other components
-        //   based on this layout.
-        let record: Sha2RecordMut = unsafe {
-            get_record_from_slice(
-                &mut record,
-                Sha2RecordLayout::new(Sha2Metadata {
-                    variant: C::VARIANT,
-                }),
-            )
-        };
-
-        // save all the components of the record on the stack so that we don't overwrite them when
-        // filling in the trace matrix.
-        let vm_record = record.inner.clone();
-
-        let mut message_bytes = Vec::with_capacity(C::BLOCK_BYTES);
-        message_bytes.extend_from_slice(record.message_bytes);
-
-        let mut prev_state = Vec::with_capacity(C::STATE_BYTES);
-        prev_state.extend_from_slice(record.prev_state);
-
-        let mut new_state = Vec::with_capacity(C::STATE_BYTES);
-        new_state.extend_from_slice(record.new_state);
-
-        let mut input_reads_aux =
-            Vec::with_capacity(C::BLOCK_READS * size_of::<MemoryReadAuxRecord>());
-        input_reads_aux.extend_from_slice(record.input_reads_aux);
-
-        let mut state_reads_aux =
-            Vec::with_capacity(C::STATE_READS * size_of::<MemoryReadAuxRecord>());
-        state_reads_aux.extend_from_slice(record.state_reads_aux);
-
-        let mut write_aux = Vec::with_capacity(
-            C::STATE_WRITES * size_of::<MemoryWriteBytesAuxRecord<SHA2_WRITE_SIZE>>(),
-        );
-        write_aux.extend_from_slice(record.write_aux);
-
+        replay: &Sha2ReplayRow,
+    ) {
         let mut cols = Sha2ColsRefMut::from::<C>(row_slice);
 
         *cols.block.request_id = F::from_usize(row_idx);
-        set_arrayview_from_u8_slice(&mut cols.block.message_bytes, message_bytes);
-        set_arrayview_from_u8_slice(&mut cols.block.prev_state, prev_state);
-        set_arrayview_from_u8_slice(&mut cols.block.new_state, new_state);
+        set_arrayview_from_u16_le_bytes(&mut cols.block.message_u16s, &replay.message_bytes);
+        set_arrayview_from_u16_le_bytes(&mut cols.block.prev_state, &replay.prev_state);
+        set_arrayview_from_u16_le_bytes(&mut cols.block.new_state, &replay.new_state);
 
         *cols.instruction.is_enabled = F::ONE;
-        cols.instruction.from_state.timestamp = F::from_u32(vm_record.timestamp);
-        cols.instruction.from_state.pc = F::from_u32(vm_record.from_pc);
-        *cols.instruction.dst_reg_ptr = F::from_u32(vm_record.dst_reg_ptr);
-        *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
-        *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
+        cols.instruction.from_state.timestamp = F::from_u32(replay.timestamp);
+        cols.instruction.from_state.pc = F::from_u32(pc_to_idx(replay.from_pc));
+        *cols.instruction.dst_reg_ptr = F::from_u32(replay.dst_reg_ptr);
+        *cols.instruction.state_reg_ptr = F::from_u32(replay.state_reg_ptr);
+        *cols.instruction.input_reg_ptr = F::from_u32(replay.input_reg_ptr);
 
-        let dst_ptr_limbs = vm_record.dst_ptr.to_le_bytes();
-        let state_ptr_limbs = vm_record.state_ptr.to_le_bytes();
-        let input_ptr_limbs = vm_record.input_ptr.to_le_bytes();
-        set_arrayview_from_u8_slice(&mut cols.instruction.dst_ptr_limbs, dst_ptr_limbs);
-        set_arrayview_from_u8_slice(&mut cols.instruction.state_ptr_limbs, state_ptr_limbs);
-        set_arrayview_from_u8_slice(&mut cols.instruction.input_ptr_limbs, input_ptr_limbs);
-        let needs_range_check = [
-            dst_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            state_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-        ];
-        let shift: u32 = 1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits);
-        for pair in needs_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32 * shift, pair[1] as u32 * shift);
+        // Pack low 32 bits of each pointer into u16 cells.
+        set_arrayview_from_u16_slice(
+            &mut cols.instruction.dst_ptr_limbs,
+            ptr_to_u16_limbs(replay.dst_ptr),
+        );
+        set_arrayview_from_u16_slice(
+            &mut cols.instruction.state_ptr_limbs,
+            ptr_to_u16_limbs(replay.state_ptr),
+        );
+        set_arrayview_from_u16_slice(
+            &mut cols.instruction.input_ptr_limbs,
+            ptr_to_u16_limbs(replay.input_ptr),
+        );
+
+        // Block-index range-check counts for each base heap pointer, registered on the
+        // caller-provided range checker so error paths stay clean. `replay` holds stable
+        // copies of the pointer values, separate from the trace row.
+        for byte_ptr in [replay.input_ptr, replay.state_ptr, replay.dst_ptr] {
+            add_block_index_range_checks(range_checker, byte_ptr, self.pointer_max_bits);
         }
 
         // fill in the register reads aux
-        let mut timestamp = vm_record.timestamp;
-        for (cols, vm_record) in cols
+        let mut timestamp = replay.timestamp;
+        for (cols, &previous_timestamp) in cols
             .mem
             .register_aux
             .iter_mut()
-            .zip(vm_record.register_reads_aux.iter())
+            .zip(replay.register_prev_timestamps.iter())
         {
-            mem_helper.fill(vm_record.prev_timestamp, timestamp, cols.as_mut());
+            mem_helper.fill(previous_timestamp, timestamp, cols.as_mut());
             timestamp += 1;
         }
 
-        input_reads_aux.iter().zip(cols.mem.input_reads).for_each(
-            |(read_aux_record, read_aux_cols)| {
-                mem_helper.fill(
-                    read_aux_record.prev_timestamp,
-                    timestamp,
-                    read_aux_cols.as_mut(),
-                );
-                timestamp += 1;
-            },
-        );
-
-        state_reads_aux.iter().zip(cols.mem.state_reads).for_each(
-            |(state_aux_record, state_aux_cols)| {
-                mem_helper.fill(
-                    state_aux_record.prev_timestamp,
-                    timestamp,
-                    state_aux_cols.as_mut(),
-                );
-                timestamp += 1;
-            },
-        );
-
-        write_aux
+        replay
+            .input_prev_timestamps
             .iter()
+            .zip(cols.mem.input_reads)
+            .for_each(|(&previous_timestamp, read_aux_cols)| {
+                mem_helper.fill(previous_timestamp, timestamp, read_aux_cols.as_mut());
+                timestamp += 1;
+            });
+
+        replay
+            .state_prev_timestamps
+            .iter()
+            .zip(cols.mem.state_reads)
+            .for_each(|(&previous_timestamp, state_aux_cols)| {
+                mem_helper.fill(previous_timestamp, timestamp, state_aux_cols.as_mut());
+                timestamp += 1;
+            });
+
+        replay
+            .write_prev_timestamps
+            .iter()
+            .zip(&replay.write_prev_data)
             .zip(cols.mem.write_aux)
-            .for_each(|(write_aux_record, write_aux_cols)| {
-                write_aux_cols.set_prev_data(write_aux_record.prev_data.map(F::from_u8));
-                mem_helper.fill(
-                    write_aux_record.prev_timestamp,
-                    timestamp,
-                    write_aux_cols.as_mut(),
-                );
+            .for_each(|((&previous_timestamp, previous_data), write_aux_cols)| {
+                write_aux_cols.set_prev_data(pack_u8_block_bytes(previous_data));
+                mem_helper.fill(previous_timestamp, timestamp, write_aux_cols.as_mut());
                 timestamp += 1;
             });
     }

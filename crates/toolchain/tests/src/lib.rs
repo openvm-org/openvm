@@ -25,7 +25,7 @@ macro_rules! get_programs_dir {
 pub fn decode_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let data = read(dir.join(elf_path))?;
-    Elf::decode(&data, MEM_SIZE as u32)
+    Elf::decode(&data, MEM_SIZE as u64)
 }
 
 // Some tests need to manually override the init macro build script (e.g. to test invalid moduli),
@@ -95,5 +95,5 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     };
     let elf_path = output_dir.join(example_name);
     let data = read(&elf_path).with_context(|| format!("Path not found: {elf_path:?}"))?;
-    Elf::decode(&data, MEM_SIZE as u32)
+    Elf::decode(&data, MEM_SIZE as u64)
 }

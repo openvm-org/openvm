@@ -41,6 +41,11 @@ jobs:
         with:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - name: Init rvr FFI submodules
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: ./.github/actions/sccache

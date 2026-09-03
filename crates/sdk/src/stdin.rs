@@ -2,26 +2,24 @@ use std::collections::VecDeque;
 
 use itertools::Itertools;
 use openvm_circuit::arch::{deferral::DeferralState, Streams};
-use openvm_stark_backend::{
-    codec::{Decode, Encode},
-    p3_field::Field,
-};
+use openvm_stark_backend::codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
+/// Program input. Both the input records and the derived hint stream are byte-backed.
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct StdIn<F = crate::F> {
-    pub buffer: VecDeque<Vec<F>>,
+pub struct StdIn {
+    pub buffer: VecDeque<Vec<u8>>,
     pub deferrals: Vec<DeferralState>,
 }
 
-impl<F: Field> StdIn<F> {
+impl StdIn {
     pub fn from_bytes(data: &[u8]) -> Self {
         let mut ret = Self::default();
         ret.write_bytes(data);
         ret
     }
 
-    pub fn read(&mut self) -> Option<Vec<F>> {
+    pub fn read(&mut self) -> Option<Vec<u8>> {
         self.buffer.pop_front()
     }
 
@@ -32,32 +30,25 @@ impl<F: Field> StdIn<F> {
     }
 
     pub fn write_bytes(&mut self, data: &[u8]) {
-        let field_data = data.iter().map(|b| F::from_u8(*b)).collect();
-        self.buffer.push_back(field_data);
-    }
-
-    pub fn write_field(&mut self, data: &[F]) {
         self.buffer.push_back(data.to_vec());
     }
 }
 
-impl<F: Field> From<StdIn<F>> for Streams<F> {
-    fn from(mut std_in: StdIn<F>) -> Self {
-        let mut data = Vec::<Vec<F>>::new();
-        while let Some(input) = std_in.read() {
-            data.push(input);
+impl From<StdIn> for Streams {
+    fn from(std_in: StdIn) -> Self {
+        Streams {
+            input_stream: std_in.buffer,
+            deferrals: std_in.deferrals,
+            ..Default::default()
         }
-        let mut ret = Streams::new(data);
-        ret.deferrals = std_in.deferrals;
-        ret
     }
 }
 
-impl<F: Field> From<Vec<Vec<F>>> for StdIn<F> {
-    fn from(inputs: Vec<Vec<F>>) -> Self {
-        let mut ret = StdIn::<F>::default();
+impl From<Vec<Vec<u8>>> for StdIn {
+    fn from(inputs: Vec<Vec<u8>>) -> Self {
+        let mut ret = StdIn::default();
         for input in inputs {
-            ret.write_field(&input);
+            ret.write_bytes(&input);
         }
         ret
     }

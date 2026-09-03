@@ -18,6 +18,11 @@ openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
+openvm-platform.workspace = true
+rvr-openvm-ir = { workspace = true, optional = true }
+rvr-state.workspace = true
+rvr-openvm = { workspace = true, optional = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
@@ -30,6 +35,7 @@ tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 backtrace.workspace = true
+bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
@@ -43,7 +49,8 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
-abi_stable.workspace = true
+sha2 = { workspace = true, optional = true }
+nix = { workspace = true, optional = true }
 bytesize.workspace = true
 
 [build-dependencies]
@@ -59,7 +66,7 @@ test-case.workspace = true
 
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-circuit = { path = ".", default-features = false, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -75,6 +82,7 @@ metrics = [
     "openvm-stark-backend/metrics",
     "openvm-stark-sdk?/metrics",
 ]
+profiling = []
 # turns on more invasive profiling for fine-grained guest metrics
 perf-metrics = ["metrics"]
 # use basic memory instead of mmap:
@@ -85,14 +93,19 @@ test-utils = ["dep:openvm-stark-sdk", "openvm-stark-backend/test-utils"]
 # Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = ["openvm-circuit-derive/tco"]
-# Ahead-of-time execution
-aot = [
+# rvr execution backend
+rvr = [
+    "dep:rvr-openvm",
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ir",
     "dep:libloading",
-    "openvm-circuit-derive/aot",
     "dep:tempfile",
+    "dep:sha2",
+    "dep:nix",
+    "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance
-unprotected = []
+unprotected = ["rvr-openvm/unprotected"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]

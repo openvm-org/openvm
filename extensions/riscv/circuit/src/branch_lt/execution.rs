@@ -1,0 +1,236 @@
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
+
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS, LocalOpcode,
+};
+use openvm_riscv_transpiler::BranchLessThanOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
+
+use super::core::BranchLessThanCoreExecutor;
+use crate::adapters::{decode_signed_instruction_imm, RV_B_TYPE_IMM_BITS};
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct BranchLePreCompute {
+    imm: i32,
+    a: u8,
+    b: u8,
+}
+
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            BranchLessThanOpcode::BLT => Ok($execute_impl::<_, BltOp>),
+            BranchLessThanOpcode::BLTU => Ok($execute_impl::<_, BltuOp>),
+            BranchLessThanOpcode::BGE => Ok($execute_impl::<_, BgeOp>),
+            BranchLessThanOpcode::BGEU => Ok($execute_impl::<_, BgeuOp>),
+        }
+    };
+}
+
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
+{
+    #[inline(always)]
+    fn pre_compute_impl(
+        &self,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut BranchLePreCompute,
+    ) -> Result<BranchLessThanOpcode, StaticProgramError> {
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let imm = decode_signed_instruction_imm(c, RV_B_TYPE_IMM_BITS)
+            .ok_or(StaticProgramError::InvalidInstruction(pc))?;
+        if d.as_u32() != REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        *data = BranchLePreCompute {
+            imm,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+        };
+        Ok(local_opcode)
+    }
+}
+
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BranchLessThanOpcode::from_usize(opcode - self.offset)
+        )
+    }
+
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<BranchLePreCompute>()
+    }
+
+    #[inline(always)]
+    #[cfg(not(feature = "tco"))]
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
+        &self,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
+        let data: &mut BranchLePreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<Handler<Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut BranchLePreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, local_opcode)
+    }
+}
+
+impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for BranchLessThanCoreExecutor<NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn metered_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<BranchLePreCompute>>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    fn metered_pre_compute<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BranchLePreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<Handler<Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BranchLePreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, local_opcode)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
+    pre_compute: &BranchLePreCompute,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) {
+    let mut pc = exec_state.pc();
+    let rs1 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.a as u32);
+    let rs2 = exec_state.vm_read_bytes::<8>(REGISTER_AS, pre_compute.b as u32);
+    let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
+    if jmp {
+        pc = pc.wrapping_add_signed(pre_compute.imm);
+    } else {
+        pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    };
+    exec_state.set_pc(pc);
+}
+
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
+    pre_compute: *const u8,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) {
+    let pre_compute: &BranchLePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<BranchLePreCompute>()).borrow();
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
+}
+
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
+    pre_compute: *const u8,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<BranchLePreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BranchLePreCompute>>())
+            .borrow();
+    exec_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
+}
+
+trait BranchLessThanOp {
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool;
+}
+struct BltOp;
+struct BltuOp;
+struct BgeOp;
+struct BgeuOp;
+
+impl BranchLessThanOp for BltOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = i64::from_le_bytes(rs1);
+        let rs2 = i64::from_le_bytes(rs2);
+        rs1 < rs2
+    }
+}
+impl BranchLessThanOp for BltuOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = u64::from_le_bytes(rs1);
+        let rs2 = u64::from_le_bytes(rs2);
+        rs1 < rs2
+    }
+}
+impl BranchLessThanOp for BgeOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = i64::from_le_bytes(rs1);
+        let rs2 = i64::from_le_bytes(rs2);
+        rs1 >= rs2
+    }
+}
+impl BranchLessThanOp for BgeuOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 8], rs2: [u8; 8]) -> bool {
+        let rs1 = u64::from_le_bytes(rs1);
+        let rs2 = u64::from_le_bytes(rs2);
+        rs1 >= rs2
+    }
+}

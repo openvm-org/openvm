@@ -12,8 +12,9 @@ on:
       - "crates/recursion/**"
       - "crates/continuations/**"
       - "crates/verify/**"
-      - "extensions/rv32im/**"
-      - "extensions/rv32-adapters/**"
+      - "crates/rvr/**"
+      - "extensions/riscv/**"
+      - "extensions/riscv-adapters/**"
       - "extensions/deferral/**"
       - "extensions/keccak256/**"
       - "extensions/sha2/**"
@@ -31,6 +32,7 @@ on:
       - ".github/workflows/guest-lib-tests.group.yml"
       - ".github/workflows/guest-lib-tests.cuda.yml"
       - "crates/sdk/guest/fib/**"
+      - "ci/install-openvm-toolchain.sh"
   pull_request:
     branches: ["**"]
     paths: *guest_lib_cuda_test_paths

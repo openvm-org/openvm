@@ -3,8 +3,8 @@ use std::{borrow::Borrow, sync::Arc};
 use eyre::Result;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, Executor,
-        MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe,
+        ContinuationProverBuilder, Executor, MeteredExecutor, VmExecutionConfig,
     },
     system::memory::merkle::MerkleTree,
 };
@@ -27,7 +27,7 @@ use crate::{
 pub struct StarkProver<E, VB>
 where
     E: StarkEngine,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
 {
     pub app_prover: AppProver<E, VB>,
     pub agg_prover: Arc<AggProver>,
@@ -37,13 +37,13 @@ where
 impl<E, VB> StarkProver<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E>,
+    VB: ContinuationProverBuilder<E>,
     Val<SC>: PrimeField32,
 {
     pub fn new(
         vm_builder: VB,
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmExe<Val<SC>>>,
+        app_exe: Arc<VmExe>,
         agg_prover: Arc<AggProver>,
         deferral_setup: DeferralSetup,
     ) -> Result<Self> {
@@ -66,13 +66,12 @@ where
 
     pub fn prove(
         &mut self,
-        vm_input: StdIn<Val<SC>>,
+        vm_input: StdIn,
         def_inputs: &[DeferralInput],
     ) -> Result<(VmStarkProof, InternalLayerMetadata)>
     where
-        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
-            + MeteredExecutor<Val<SC>>
-            + PreflightExecutor<Val<SC>, VB::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor:
+            Executor<Val<SC>> + MeteredExecutor<Val<SC>> + 'static,
     {
         let has_deferrals = self.deferral_setup.hook_commit().is_some();
         let memory_dimensions = self.app_prover.memory_dimensions();

@@ -1,0 +1,29 @@
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
+
+use crate::{
+    adapters::{StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH},
+    store::{
+        common::StoreExecutor,
+        core::{StoreCoreAir, StoreFiller},
+    },
+};
+
+/// Source register cells decomposed on an odd-shift word store.
+pub const STORE_WORD_VALUE_CELLS: usize = WORD_ACCESS_WIDTH / U16_CELL_SIZE;
+
+pub type StoreWordCoreAir = StoreCoreAir<WORD_ACCESS_WIDTH, STORE_WORD_VALUE_CELLS>;
+pub type StoreWordFiller =
+    StoreFiller<StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH, STORE_WORD_VALUE_CELLS>;
+
+pub type StoreWordAir = VmAirWrapper<StoreMultiByteAdapterAir, StoreWordCoreAir>;
+pub type StoreWordExecutor = StoreExecutor<WORD_ACCESS_WIDTH>;
+pub type StoreWordChip<F> = VmChipWrapper<F, StoreWordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
+#[cfg(test)]
+mod tests;
+pub(crate) mod trace;

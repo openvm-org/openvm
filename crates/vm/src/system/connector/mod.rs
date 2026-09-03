@@ -1,7 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -9,7 +6,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{program::pc_to_idx, LocalOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
@@ -46,10 +43,10 @@ pub struct VmConnectorAir {
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
-    /// The initial PC of this segment.
-    pub initial_pc: F,
-    /// The final PC of this segment.
-    pub final_pc: F,
+    /// The initial circuit PC index of this segment.
+    pub initial_pc_idx: F,
+    /// The final circuit PC index of this segment.
+    pub final_pc_idx: F,
     /// The exit code of the whole program. 0 means exited normally. This is only meaningful when
     /// `is_terminate` is 1.
     pub exit_code: F,
@@ -119,7 +116,8 @@ impl VmConnectorAir {
 #[derive(Debug, Copy, Clone, AlignedBorrow, StructReflection, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ConnectorCols<T> {
-    pub pc: T,
+    /// Circuit PC index (`byte_pc / DEFAULT_PC_STEP`).
+    pub pc_idx: T,
     pub timestamp: T,
     pub is_terminate: T,
     pub exit_code: T,
@@ -133,7 +131,7 @@ pub struct ConnectorCols<T> {
 impl<T: Copy> ConnectorCols<T> {
     fn map<F>(self, f: impl Fn(T) -> F) -> ConnectorCols<F> {
         ConnectorCols {
-            pc: f(self.pc),
+            pc_idx: f(self.pc_idx),
             timestamp: f(self.timestamp),
             is_terminate: f(self.is_terminate),
             exit_code: f(self.exit_code),
@@ -144,7 +142,7 @@ impl<T: Copy> ConnectorCols<T> {
 
     fn flatten(&self) -> [T; 6] {
         [
-            self.pc,
+            self.pc_idx,
             self.timestamp,
             self.is_terminate,
             self.exit_code,
@@ -166,14 +164,18 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         let next: &ConnectorCols<AB::Var> = (*next).borrow();
 
         let &VmConnectorPvs {
-            initial_pc,
-            final_pc,
+            initial_pc_idx,
+            final_pc_idx,
             exit_code,
             is_terminate,
         } = builder.public_values().borrow();
 
-        builder.when_transition().assert_eq(local.pc, initial_pc);
-        builder.when_transition().assert_eq(next.pc, final_pc);
+        builder
+            .when_transition()
+            .assert_eq(local.pc_idx, initial_pc_idx);
+        builder
+            .when_transition()
+            .assert_eq(next.pc_idx, final_pc_idx);
         builder
             .when_transition()
             .when(next.is_terminate)
@@ -200,12 +202,12 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         self.execution_bus.execute(
             builder,
             local.is_begin, // 1 only if these are [0th, 1st] and not [1st, 0th]
-            ExecutionState::new(next.pc, next.timestamp),
-            ExecutionState::new(local.pc, local.timestamp),
+            ExecutionState::new(next.pc_idx, next.timestamp),
+            ExecutionState::new(local.pc_idx, local.timestamp),
         );
         self.program_bus.lookup_instruction(
             builder,
-            next.pc,
+            next.pc_idx,
             AB::Expr::from_usize(TERMINATE.global_opcode().as_usize()),
             [AB::Expr::ZERO, AB::Expr::ZERO, next.exit_code.into()],
             local.is_begin * next.is_terminate,
@@ -226,14 +228,13 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
     }
 }
 
-pub struct VmConnectorChip<F> {
+pub struct VmConnectorChip {
     pub range_checker: SharedVariableRangeCheckerChip,
     pub boundary_states: [Option<ConnectorCols<u32>>; 2],
     timestamp_max_bits: usize,
-    _marker: PhantomData<F>,
 }
 
-impl<F> VmConnectorChip<F> {
+impl VmConnectorChip {
     pub fn new(range_checker: SharedVariableRangeCheckerChip, timestamp_max_bits: usize) -> Self {
         let range_bus = range_checker.bus();
         assert!(
@@ -246,13 +247,14 @@ impl<F> VmConnectorChip<F> {
             range_checker,
             boundary_states: [None, None],
             timestamp_max_bits,
-            _marker: PhantomData,
         }
     }
 
+    /// `state.pc` is a byte program counter; it is stored (and later exposed as a public value)
+    /// as a PC index, matching the circuit representation.
     pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
-            pc: state.pc,
+            pc_idx: pc_to_idx(state.pc),
             timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,
@@ -261,9 +263,11 @@ impl<F> VmConnectorChip<F> {
         });
     }
 
+    /// `state.pc` is a byte program counter; it is stored (and later exposed as a public value)
+    /// as a PC index, matching the circuit representation.
     pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
-            pc: state.pc,
+            pc_idx: pc_to_idx(state.pc),
             timestamp: state.timestamp,
             is_terminate: exit_code.is_some() as u32,
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
@@ -282,13 +286,13 @@ impl<F> VmConnectorChip<F> {
     }
 }
 
-impl<RA, SC> Chip<RA, CpuBackend<SC>> for VmConnectorChip<Val<SC>>
+impl<SC> Chip<CpuBackend<SC>> for VmConnectorChip
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let [initial_state, final_state] = self.boundary_states.map(|state| {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
+        let [initial_row, final_row] = self.boundary_states.map(|state| {
             let mut state = state.unwrap();
             // Decompose and range check timestamp
             let range_max_bits = self.range_checker.range_max_bits();
@@ -303,16 +307,16 @@ where
         });
 
         let trace = RowMajorMatrix::new(
-            [initial_state.flatten(), final_state.flatten()].concat(),
+            [initial_row.flatten(), final_row.flatten()].concat(),
             ConnectorCols::<Val<SC>>::width(),
         );
 
         let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
-            initial_pc: initial_state.pc,
-            final_pc: final_state.pc,
-            exit_code: final_state.exit_code,
-            is_terminate: final_state.is_terminate,
+            initial_pc_idx: initial_row.pc_idx,
+            final_pc_idx: final_row.pc_idx,
+            exit_code: final_row.exit_code,
+            is_terminate: final_row.is_terminate,
         };
         AirProvingContext::simple(trace, public_values)
     }

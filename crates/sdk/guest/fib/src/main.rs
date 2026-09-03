@@ -1,14 +1,17 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
-#![cfg_attr(target_os = "zkvm", no_std)]
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 openvm::entry!(main);
 
-fn fibonacci(n: u32) -> (u32, u32) {
+fn fibonacci(n: u64) -> (u64, u64) {
     if n <= 1 {
         return (0, n);
     }
-    let mut a: u32 = 0;
-    let mut b: u32 = 1;
+    let mut a: u64 = 0;
+    let mut b: u64 = 1;
     for _ in 2..=n {
         let sum = a + b;
         a = b;
@@ -32,6 +35,6 @@ pub fn main() {
         panic!();
     }
 
-    openvm::io::reveal_u32(a, 0);
-    openvm::io::reveal_u32(b, 1);
+    openvm::io::reveal_u64(a, 0);
+    openvm::io::reveal_u64(b, 1);
 }

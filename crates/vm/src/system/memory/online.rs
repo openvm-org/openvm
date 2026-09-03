@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug};
+use std::{array::from_fn, fmt::Debug, mem::size_of_val, slice};
 
 use getset::Getters;
 use openvm_instructions::exe::SparseMemoryImage;
@@ -6,25 +6,45 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
 };
+use rvr_state::{
+    PreflightFieldBlock, PreflightInitialWrite, PreflightMemoryEvent, PREFLIGHT_WRITE_BIT,
+};
+use thiserror::Error;
 use tracing::instrument;
 
+use super::has_nonzero_byte;
 use crate::{
-    arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, DEFAULT_BLOCK_SIZE},
-    system::{memory::TimestampedValues, TouchedMemory},
+    arch::{
+        preflight::encode_u8_block, AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryCellType,
+        MemoryConfig, PreflightMemoryLog, BLOCK_FE_WIDTH,
+    },
+    system::{TouchedBlock, TouchedMemory},
 };
 
 mod basic;
+#[cfg(all(unix, feature = "rvr", not(feature = "basic-memory")))]
+mod guarded;
 #[cfg(any(unix, windows))]
 mod memmap;
 mod paged_vec;
+mod touched_pages;
 
 #[cfg(not(any(unix, windows)))]
 pub use basic::*;
+#[cfg(all(unix, feature = "rvr", not(feature = "basic-memory")))]
+pub use guarded::GuardedMemory;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
 pub use paged_vec::PagedVec;
+pub use touched_pages::TouchedPages;
 
-#[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
+#[cfg(all(unix, not(feature = "basic-memory"), feature = "rvr"))]
+pub type MemoryBackend = guarded::GuardedMemory;
+#[cfg(all(
+    any(unix, windows),
+    not(feature = "basic-memory"),
+    not(all(unix, feature = "rvr"))
+))]
 pub type MemoryBackend = memmap::MmapMemory;
 #[cfg(any(not(any(unix, windows)), feature = "basic-memory"))]
 pub type MemoryBackend = basic::BasicMemory;
@@ -33,13 +53,18 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 /// Default mmap page size. Change this if using THB.
 pub const PAGE_SIZE: usize = 4096;
 
-/// (address_space, pointer)
+/// `(address_space, ptr)` for typed memory-cell access.
 pub type Address = (u32, u32);
 
 /// API for any memory implementation that allocates a contiguous region of memory.
 pub trait LinearMemory {
     /// Create instance of `Self` with `size` bytes.
     fn new(size: usize) -> Self;
+    /// Clone into a zero-initialized mapping, copying only the supplied byte ranges.
+    ///
+    /// Callers must guarantee that bytes outside `ranges` are zero. This permits very large
+    /// logical address spaces to stay virtually reserved without faulting every page into RAM.
+    fn sparse_clone(&self, ranges: &[(usize, usize)]) -> Self;
     /// Allocated size of the memory in bytes.
     fn size(&self) -> usize;
     /// Returns the entire memory as a raw byte slice.
@@ -134,6 +159,41 @@ pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     pub mem: Vec<M>,
     /// Host configuration for each address space.
     pub config: Vec<AddressSpaceHostConfig>,
+    /// Per-address-space record of which pages may contain non-zero data, used by sparse
+    /// snapshots, CPU Merkle initialization, and the GPU host-to-device transfer. See
+    /// [`TouchedPages`].
+    ///
+    /// Invariant: any path that writes non-zero data into memory that may later be transferred via
+    /// `set_initial_memory` must mark the written pages (`set_from_sparse`,
+    /// `extend_touched_pages_from_touched`) or rebuild the metadata with
+    /// [`AddressMap::recompute_touched_pages`]. Unmarked pages are treated as zero. Raw mutable
+    /// access through `get_memory_mut` does not mark pages, so callers must recompute after using
+    /// that escape hatch.
+    pub touched_pages: Vec<TouchedPages>,
+}
+
+impl<M: LinearMemory> AddressMap<M> {
+    /// Clone only pages that may contain non-zero bytes into fresh zero-backed mappings.
+    ///
+    /// This is intended for immutable segment-start snapshots after all untracked writers have
+    /// updated or rebuilt `touched_pages`. Ordinary [`Clone`] remains an exact dense clone for
+    /// callers that cannot provide that invariant.
+    pub fn sparse_clone(&self) -> Self {
+        let mem = self
+            .mem
+            .iter()
+            .zip(&self.touched_pages)
+            .map(|(mem, touched)| {
+                let ranges = touched.touched_byte_ranges(mem.size());
+                mem.sparse_clone(&ranges)
+            })
+            .collect();
+        Self {
+            mem,
+            config: self.config.clone(),
+            touched_pages: self.touched_pages.clone(),
+        }
+    }
 }
 
 impl Default for AddressMap {
@@ -145,11 +205,19 @@ impl Default for AddressMap {
 impl<M: LinearMemory> AddressMap<M> {
     pub fn new(config: Vec<AddressSpaceHostConfig>) -> Self {
         assert_eq!(config[0].num_cells, 0, "Address space 0 must have 0 cells");
-        let mem = config
+        let mem: Vec<M> = config
             .iter()
             .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
-        Self { mem, config }
+        // Pages start unmarked (guaranteed zero); paths that write data (`set_from_sparse`) and the
+        // carried-forward extension (`extend_touched_pages_from_touched`) mark the pages they
+        // touch. See the invariant on `touched_pages`.
+        let touched_pages = mem.iter().map(|m| TouchedPages::new(m.size())).collect();
+        Self {
+            mem,
+            config,
+            touched_pages,
+        }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
@@ -168,8 +236,10 @@ impl<M: LinearMemory> AddressMap<M> {
 
     /// Fill each address space memory with zeros. Does not change the config.
     pub fn fill_zero(&mut self) {
-        for mem in &mut self.mem {
+        for (mem, touched) in self.mem.iter_mut().zip(self.touched_pages.iter_mut()) {
             mem.fill_zero();
+            // Memory is now all zero, so no pages are touched.
+            *touched = TouchedPages::new(mem.size());
         }
     }
 
@@ -197,19 +267,22 @@ impl<M: LinearMemory> AddressMap<M> {
             .read((ptr as usize) * size_of::<T>())
     }
 
-    /// Panics or segfaults if `ptr..ptr + len` is out of bounds
+    /// Returns a typed cell slice starting at `ptr`.
+    ///
+    /// Panics or segfaults if `ptr..ptr + len` is out of bounds.
     ///
     /// # Safety
-    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
-    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    /// - `T` must exactly match the AS's cell type.
+    /// - `addr_space` must be within the configured memory.
     pub unsafe fn get_slice<T: Copy + Debug>(
         &self,
         (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
-        debug_assert_eq!(
+        assert_eq!(
             size_of::<T>(),
-            self.config[addr_space as usize].layout.size()
+            self.config[addr_space as usize].layout.size(),
+            "typed slice access must use the AS cell type; use get_u8_slice for raw bytes"
         );
         let start = (ptr as usize) * size_of::<T>();
         let mem = self.mem.get_unchecked(addr_space as usize);
@@ -254,15 +327,64 @@ impl<M: LinearMemory> AddressMap<M> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn set_from_sparse(&mut self, sparse_map: &SparseMemoryImage) {
-        for (&(addr_space, index), &data_byte) in sparse_map.iter() {
+        // Callers always pass freshly-zeroed memory, so reset the touched-page sets: any page not
+        // written from the sparse image below is guaranteed zero. This narrows the segment-0
+        // initial image to exactly the sparse pages.
+        for (mem, touched) in self.mem.iter().zip(self.touched_pages.iter_mut()) {
+            *touched = TouchedPages::new(mem.size());
+        }
+        for (&(addr_space, ptr), &data_byte) in sparse_map.iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
             unsafe {
                 self.mem
                     .get_unchecked_mut(addr_space as usize)
-                    .write_unaligned(index as usize, data_byte);
+                    .write_unaligned(ptr as usize, data_byte);
             }
+            self.touched_pages[addr_space as usize].mark_byte_range(ptr as usize, 1);
         }
+    }
+
+    /// Marks the pages covering each touched block as possibly non-zero. Grows the touched-page
+    /// sets so that a carried-forward memory image (a preflight `to_state`) stays a correct
+    /// superset of its non-zero pages across continuation segments.
+    ///
+    /// `touched` is the [`TouchedMemory`] produced by `TracingMemory::finalize`; its `ptr` is in
+    /// AS-native cells and each block spans `BLOCK_FE_WIDTH` cells.
+    pub fn extend_touched_pages_from_touched<F>(&mut self, touched: &TouchedMemory<F>) {
+        for block in touched.iter() {
+            let cell_size = self.config[block.address_space as usize].layout.size();
+            let start = block.ptr as usize * cell_size;
+            let len = BLOCK_FE_WIDTH * cell_size;
+            self.touched_pages[block.address_space as usize].mark_byte_range(start, len);
+        }
+    }
+
+    /// Rebuilds the sparse host-to-device transfer metadata from the current memory image.
+    ///
+    /// This replaces all existing marks and is intended for snapshots produced through untracked
+    /// execution paths. Call it after the final untracked write and before transferring the image.
+    /// It scans all configured memory, so callers should use the incremental marking methods when
+    /// they already have reliable write information.
+    pub fn recompute_touched_pages(&mut self) {
+        self.touched_pages = self
+            .mem
+            .iter()
+            .map(|mem| {
+                let mut rebuilt = TouchedPages::new(mem.size());
+                // Scan pages in parallel, then update the compact non-atomic bitset serially.
+                let nonzero_pages = mem
+                    .as_slice()
+                    .par_chunks(PAGE_SIZE)
+                    .enumerate()
+                    .filter_map(|(page_idx, page)| has_nonzero_byte(page).then_some(page_idx))
+                    .collect::<Vec<_>>();
+                for page_idx in nonzero_pages {
+                    rebuilt.mark_byte_range(page_idx * PAGE_SIZE, 1);
+                }
+                rebuilt
+            })
+            .collect();
     }
 }
 
@@ -275,18 +397,32 @@ pub struct GuestMemory {
     pub memory: AddressMap,
 }
 
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum GuestMemoryAccessError {
+    #[error("address space {addr_space} is not configured")]
+    InvalidAddressSpace { addr_space: u32 },
+    #[error("range overflow")]
+    RangeOverflow,
+    #[error("memory range out of bounds: start={start} size={len} memory_size={memory_size}")]
+    RangeOutOfBounds {
+        start: u64,
+        len: u64,
+        memory_size: usize,
+    },
+}
+
 impl GuestMemory {
     pub fn new(addr: AddressMap) -> Self {
         Self { memory: addr }
     }
 
-    /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
+    /// Reads `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
-    /// and it must be the exact type used to represent a single memory cell in
-    /// address space `address_space`. For standard usage,
-    /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    /// - `T` must be stack-allocated `repr(C)` or `repr(transparent)`.
+    /// - `T` must match the configured cell type for `addr_space`.
+    /// - `addr_space` and `ptr..ptr + BLOCK_SIZE` must be in bounds.
+    /// - `T` must be plain data compatible with [`LinearMemory::read`].
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
@@ -306,7 +442,7 @@ impl GuestMemory {
             .read((ptr as usize) * size_of::<T>())
     }
 
-    /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
+    /// Writes `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
@@ -320,15 +456,20 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         self.debug_assert_cell_type::<T>(addr_space);
+        let byte_start = (ptr as usize) * size_of::<T>();
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
             .get_memory_mut()
             .get_unchecked_mut(addr_space as usize)
-            .write((ptr as usize) * size_of::<T>(), values);
+            .write(byte_start, values);
+        self.memory
+            .touched_pages
+            .get_unchecked_mut(addr_space as usize)
+            .mark_byte_range(byte_start, size_of::<T>() * BLOCK_SIZE);
     }
 
-    /// Swaps `values` with `[pointer:BLOCK_SIZE]_{address_space}`.
+    /// Swaps `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
     /// See [`GuestMemory::read`] and [`LinearMemory::swap`].
@@ -342,12 +483,17 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         self.debug_assert_cell_type::<T>(addr_space);
+        let byte_start = (ptr as usize) * size_of::<T>();
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
             .get_memory_mut()
             .get_unchecked_mut(addr_space as usize)
-            .swap((ptr as usize) * size_of::<T>(), values);
+            .swap(byte_start, values);
+        self.memory
+            .touched_pages
+            .get_unchecked_mut(addr_space as usize)
+            .mark_byte_range(byte_start, size_of::<T>() * BLOCK_SIZE);
     }
 
     #[inline(always)]
@@ -356,12 +502,81 @@ impl GuestMemory {
         self.memory.get_slice((addr_space, ptr), len)
     }
 
+    /// Reads a raw byte slice at `byte_ptr` within `addr_space`.
+    ///
+    /// # Safety
+    /// The full byte range must lie within the AS's storage.
+    #[inline(always)]
+    pub unsafe fn get_u8_slice(&self, addr_space: u32, byte_ptr: u32, len: usize) -> &[u8] {
+        self.memory.get_u8_slice(addr_space, byte_ptr as usize, len)
+    }
+
+    /// Read a byte range addressed by full RV64 register values.
+    pub fn checked_u8_slice(
+        &self,
+        addr_space: u32,
+        byte_ptr: u64,
+        len: u64,
+    ) -> Result<&[u8], GuestMemoryAccessError> {
+        let end = byte_ptr
+            .checked_add(len)
+            .ok_or(GuestMemoryAccessError::RangeOverflow)?;
+        let memory = self
+            .memory
+            .get_memory()
+            .get(addr_space as usize)
+            .ok_or(GuestMemoryAccessError::InvalidAddressSpace { addr_space })?;
+        let memory_size = memory.size();
+        if end > memory_size as u64 {
+            return Err(GuestMemoryAccessError::RangeOutOfBounds {
+                start: byte_ptr,
+                len,
+                memory_size,
+            });
+        }
+        Ok(&memory.as_slice()[byte_ptr as usize..end as usize])
+    }
+
     #[inline(always)]
     fn debug_assert_cell_type<T>(&self, addr_space: u32) {
         debug_assert_eq!(
             size_of::<T>(),
-            self.memory.config[addr_space as usize].layout.size()
+            self.memory.config[addr_space as usize].layout.size(),
+            "typed cell access must use the AS cell type"
         );
+    }
+
+    /// Reads `N` raw storage bytes starting at `byte_ptr`.
+    ///
+    /// # Safety
+    /// The full byte range must lie within the AS's storage.
+    #[inline(always)]
+    pub unsafe fn read_bytes<const N: usize>(&self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
+        self.memory
+            .get_memory()
+            .get_unchecked(addr_space as usize)
+            .read(byte_ptr as usize)
+    }
+
+    /// Writes `N` raw storage bytes starting at `byte_ptr`.
+    ///
+    /// # Safety
+    /// See [`GuestMemory::read_bytes`].
+    #[inline(always)]
+    pub unsafe fn write_bytes<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+        values: [u8; N],
+    ) {
+        self.memory
+            .get_memory_mut()
+            .get_unchecked_mut(addr_space as usize)
+            .write(byte_ptr as usize, values);
+        self.memory
+            .touched_pages
+            .get_unchecked_mut(addr_space as usize)
+            .mark_byte_range(byte_ptr as usize, N);
     }
 }
 
@@ -373,9 +588,14 @@ pub struct TracingMemory {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
-    /// Maps `(addr_space, ptr / DEFAULT_BLOCK_SIZE)` to the latest access timestamp.
-    /// A value of 0 means the 4-cell touched-memory slot has never been accessed.
+    /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
+    /// A value of 0 means the touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
+    /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to whether the block was ever written
+    /// during this segment. Dirtiness is per write access, independent of the written
+    /// content; stamped into each [`TouchedBlock`] by [`Self::finalize`].
+    pub(super) is_dirty: Vec<PagedVec<bool, PAGE_SIZE>>,
+    log: PreflightMemoryLog,
 }
 
 impl TracingMemory {
@@ -390,35 +610,62 @@ impl TracingMemory {
             .memory
             .config
             .iter()
-            .map(|config| PagedVec::new(config.num_cells.div_ceil(DEFAULT_BLOCK_SIZE)))
+            .map(|config| PagedVec::new(config.num_cells.div_ceil(BLOCK_FE_WIDTH)))
+            .collect();
+        let is_dirty = image
+            .memory
+            .config
+            .iter()
+            .map(|config| PagedVec::new(config.num_cells.div_ceil(BLOCK_FE_WIDTH)))
             .collect();
         Self {
             data: image,
             meta,
+            is_dirty,
             timestamp: INITIAL_TIMESTAMP + 1,
+            log: PreflightMemoryLog::default(),
         }
     }
 
+    /// Takes the append-only memory history accumulated so far.
+    pub fn take_log(&mut self) -> PreflightMemoryLog {
+        std::mem::take(&mut self.log)
+    }
+
     #[inline(always)]
-    fn assert_valid_access(&self, block_size: usize, addr_space: u32, ptr: u32) {
+    fn assert_valid_access<const BLOCK_SIZE: usize>(&self, addr_space: u32, ptr: u32) {
+        const {
+            assert!(
+                BLOCK_SIZE == BLOCK_FE_WIDTH,
+                "TracingMemory only supports BLOCK_FE_WIDTH-cell accesses"
+            )
+        };
         debug_assert_ne!(addr_space, 0);
-        debug_assert!(block_size.is_power_of_two());
-        debug_assert_eq!(
-            block_size, DEFAULT_BLOCK_SIZE,
-            "TracingMemory only supports {DEFAULT_BLOCK_SIZE}-cell accesses; got {block_size}"
-        );
         assert_eq!(
-            ptr % block_size as u32,
+            ptr % BLOCK_SIZE as u32,
             0,
-            "pointer={ptr} not aligned to block_size {block_size}"
+            "ptr={ptr} not aligned to BLOCK_SIZE {BLOCK_SIZE}"
         );
     }
 
-    /// Returns the previous access timestamp and updates the metadata slot.
-    /// Block size is always `DEFAULT_BLOCK_SIZE`, so this is a single-slot read/write.
     #[inline(always)]
-    fn prev_access_time(&mut self, address_space: usize, pointer: usize) -> u32 {
-        let idx = pointer / DEFAULT_BLOCK_SIZE;
+    fn assert_valid_byte_access<const N: usize>(&self, addr_space: u32, byte_ptr: u32) {
+        debug_assert_ne!(addr_space, 0);
+        let block_bytes = self.memory_block_bytes(addr_space);
+        assert_eq!(
+            N, block_bytes,
+            "raw byte access must cover one {block_bytes}-byte memory block; got {N}"
+        );
+        assert_eq!(
+            byte_ptr as usize % block_bytes,
+            0,
+            "byte_ptr={byte_ptr} not aligned to block_bytes {block_bytes}"
+        );
+    }
+
+    #[inline(always)]
+    fn prev_access_time(&mut self, address_space: usize, ptr: usize) -> u32 {
+        let idx = ptr / BLOCK_FE_WIDTH;
         // SAFETY: address_space is validated during instruction decoding
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let prev = meta_page.get(idx);
@@ -426,52 +673,253 @@ impl TracingMemory {
         prev
     }
 
-    /// Atomic read operation which increments the timestamp by 1.
-    /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})`.
+    #[inline(always)]
+    fn byte_prev_access_time(&mut self, address_space: usize, byte_ptr: usize) -> u32 {
+        let idx = byte_ptr / self.memory_block_bytes(address_space as u32);
+        // SAFETY: address_space is validated during instruction decoding
+        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let prev = meta_page.get(idx);
+        meta_page.set(idx, self.timestamp);
+        prev
+    }
+
+    #[inline(always)]
+    fn memory_block_bytes(&self, address_space: u32) -> usize {
+        BLOCK_FE_WIDTH
+            * self.data.memory.config[address_space as usize]
+                .layout
+                .size()
+    }
+
+    #[inline(always)]
+    fn mark_dirty(&mut self, address_space: usize, block_idx: usize) {
+        // SAFETY: address_space is validated during instruction decoding
+        let dirty_page = unsafe { self.is_dirty.get_unchecked_mut(address_space) };
+        dirty_page.set(block_idx, true);
+    }
+
+    #[inline(always)]
+    fn compact_field_reference(index: usize) -> [u16; BLOCK_FE_WIDTH] {
+        let index = u32::try_from(index).expect("field preflight log exceeds u32::MAX blocks");
+        [index as u16, (index >> 16) as u16, 0, 0]
+    }
+
+    #[inline(always)]
+    fn append_access(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        is_write: bool,
+        value: &[u8],
+        initial_value: Option<&[u8]>,
+    ) {
+        let layout = self.data.memory.config[address_space as usize].layout;
+        let event_value = match layout {
+            MemoryCellType::U8 => {
+                debug_assert_eq!(value.len(), BLOCK_FE_WIDTH);
+                encode_u8_block(value.try_into().unwrap())
+            }
+            MemoryCellType::U16 => {
+                debug_assert_eq!(value.len(), BLOCK_FE_WIDTH * size_of::<u16>());
+                from_fn(|lane| {
+                    let offset = lane * size_of::<u16>();
+                    u16::from_le_bytes([value[offset], value[offset + 1]])
+                })
+            }
+            MemoryCellType::FIELD32 => {
+                debug_assert_eq!(value.len(), BLOCK_FE_WIDTH * size_of::<u32>());
+                let field = PreflightFieldBlock {
+                    values: from_fn(|lane| {
+                        let offset = lane * size_of::<u32>();
+                        u32::from_ne_bytes(
+                            value[offset..offset + size_of::<u32>()].try_into().unwrap(),
+                        )
+                    }),
+                };
+                let reference = Self::compact_field_reference(self.log.field_values.len());
+                self.log.field_values.push(field);
+                reference
+            }
+            _ => panic!("preflight memory log requires u8, u16, or 32-bit field cells"),
+        };
+
+        self.log.accesses.push(PreflightMemoryEvent {
+            timestamp: self.timestamp,
+            address_space_and_kind: address_space | if is_write { PREFLIGHT_WRITE_BIT } else { 0 },
+            pointer,
+            value: event_value,
+        });
+
+        let Some(initial_value) = initial_value else {
+            return;
+        };
+        let initial_value = match layout {
+            MemoryCellType::U8 => {
+                debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH);
+                encode_u8_block(initial_value.try_into().unwrap())
+            }
+            MemoryCellType::U16 => {
+                debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH * size_of::<u16>());
+                from_fn(|lane| {
+                    let offset = lane * size_of::<u16>();
+                    u16::from_le_bytes([initial_value[offset], initial_value[offset + 1]])
+                })
+            }
+            MemoryCellType::FIELD32 => {
+                debug_assert_eq!(initial_value.len(), BLOCK_FE_WIDTH * size_of::<u32>());
+                let field = PreflightFieldBlock {
+                    values: from_fn(|lane| {
+                        let offset = lane * size_of::<u32>();
+                        u32::from_ne_bytes(
+                            initial_value[offset..offset + size_of::<u32>()]
+                                .try_into()
+                                .unwrap(),
+                        )
+                    }),
+                };
+                let reference = Self::compact_field_reference(self.log.field_initial_values.len());
+                self.log.field_initial_values.push(field);
+                reference
+            }
+            _ => unreachable!(),
+        };
+        self.log.initial_writes.push(PreflightInitialWrite {
+            address_space,
+            pointer,
+            initial_value,
+        });
+    }
+
+    #[inline(always)]
+    unsafe fn as_bytes<T, const N: usize>(values: &[T; N]) -> &[u8]
+    where
+        T: Copy,
+    {
+        // SAFETY: callers already require `T` to be the POD memory-cell type
+        // configured for this address space.
+        unsafe { slice::from_raw_parts(values.as_ptr().cast(), size_of_val(values)) }
+    }
+
+    /// Atomic cell read operation which increments the timestamp by 1.
+    /// Returns `(t_prev, values)`.
     ///
     /// # Safety
-    /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
+    /// - `T` must be `repr(C)` or `repr(transparent)`.
+    /// - `T` must match the configured cell type for `address_space`.
+    /// - `ptr` must be aligned to `BLOCK_SIZE`.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `DEFAULT_BLOCK_SIZE`
-    ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
-        pointer: u32,
+        ptr: u32,
     ) -> (u32, [T; BLOCK_SIZE])
     where
         T: Copy + Debug,
     {
-        self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
-        let values = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time(address_space as usize, pointer as usize);
+        self.assert_valid_access::<BLOCK_SIZE>(address_space, ptr);
+        let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
+        let values = self.data.read(address_space, ptr);
+        self.append_access(address_space, ptr, false, Self::as_bytes(&values), None);
         self.timestamp += 1;
 
         (t_prev, values)
     }
 
-    /// Atomic write operation. Returns `(t_prev, values_prev)`.
+    /// Atomic cell write operation. Returns `(t_prev, values_prev)`.
     ///
     /// # Safety
-    /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
+    /// - `T` must be `repr(C)` or `repr(transparent)`.
+    /// - `T` must match the configured cell type for `address_space`.
+    /// - `ptr` must be aligned to `BLOCK_SIZE`.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `DEFAULT_BLOCK_SIZE`
-    ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
-        pointer: u32,
+        ptr: u32,
         values: [T; BLOCK_SIZE],
     ) -> (u32, [T; BLOCK_SIZE])
     where
         T: Copy + Debug,
     {
-        self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
-        let values_prev = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time(address_space as usize, pointer as usize);
-        self.data.write(address_space, pointer, values);
+        self.assert_valid_access::<BLOCK_SIZE>(address_space, ptr);
+        let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
+        self.mark_dirty(address_space as usize, ptr as usize / BLOCK_FE_WIDTH);
+        let values_prev = self.data.read(address_space, ptr);
+        self.append_access(
+            address_space,
+            ptr,
+            true,
+            Self::as_bytes(&values),
+            (t_prev == INITIAL_TIMESTAMP).then(|| Self::as_bytes(&values_prev)),
+        );
+        self.data.write(address_space, ptr, values);
+        self.timestamp += 1;
+
+        (t_prev, values_prev)
+    }
+
+    /// Atomic raw byte read.
+    ///
+    /// # Safety
+    /// - `byte_ptr` must be aligned to the AS memory block size.
+    /// - `N` must equal that block size.
+    /// - `byte_ptr + N` must be within the AS's storage backing.
+    /// - `address_space` must be a valid configured address space.
+    #[inline(always)]
+    pub unsafe fn read_bytes<const N: usize>(
+        &mut self,
+        address_space: u32,
+        byte_ptr: u32,
+    ) -> (u32, [u8; N]) {
+        self.assert_valid_byte_access::<N>(address_space, byte_ptr);
+        let t_prev = self.byte_prev_access_time(address_space as usize, byte_ptr as usize);
+        let values = self.data.read_bytes::<N>(address_space, byte_ptr);
+        let cell_size = self.data.memory.config[address_space as usize]
+            .layout
+            .size();
+        self.append_access(
+            address_space,
+            byte_ptr / cell_size as u32,
+            false,
+            &values,
+            None,
+        );
+        self.timestamp += 1;
+
+        (t_prev, values)
+    }
+
+    /// Atomic raw byte write. See [`TracingMemory::read_bytes`].
+    ///
+    /// # Safety
+    /// Same as [`TracingMemory::read_bytes`].
+    #[inline(always)]
+    pub unsafe fn write_bytes<const N: usize>(
+        &mut self,
+        address_space: u32,
+        byte_ptr: u32,
+        values: [u8; N],
+    ) -> (u32, [u8; N]) {
+        self.assert_valid_byte_access::<N>(address_space, byte_ptr);
+        let t_prev = self.byte_prev_access_time(address_space as usize, byte_ptr as usize);
+        self.mark_dirty(
+            address_space as usize,
+            byte_ptr as usize / self.memory_block_bytes(address_space),
+        );
+        let values_prev = self.data.read_bytes::<N>(address_space, byte_ptr);
+        let cell_size = self.data.memory.config[address_space as usize]
+            .layout
+            .size();
+        self.append_access(
+            address_space,
+            byte_ptr / cell_size as u32,
+            true,
+            &values,
+            (t_prev == INITIAL_TIMESTAMP).then_some(values_prev.as_slice()),
+        );
+        self.data.write_bytes::<N>(address_space, byte_ptr, values);
         self.timestamp += 1;
 
         (t_prev, values_prev)
@@ -507,7 +955,7 @@ impl TracingMemory {
                     .par_iter()
                     .filter_map(move |(idx, timestamp)| {
                         if timestamp > INITIAL_TIMESTAMP {
-                            let ptr = idx as u32 * DEFAULT_BLOCK_SIZE as u32;
+                            let ptr = idx as u32 * BLOCK_FE_WIDTH as u32;
                             Some(((addr_space as u32, ptr), timestamp))
                         } else {
                             None
@@ -522,7 +970,8 @@ impl TracingMemory {
         touched_blocks
     }
 
-    /// Returns the fixed 4-byte touched memory equipartition.
+    /// Returns touched memory in `BLOCK_FE_WIDTH`-cell blocks, each stamped with its
+    /// per-write dirty bit.
     fn touched_blocks_to_equipartition<F: Field>(
         &self,
         touched_blocks: Vec<((u32, u32), u32)>,
@@ -542,8 +991,338 @@ impl TracingMemory {
                             cell_size,
                         ))
                 });
-                ((addr_space, ptr), TimestampedValues { timestamp, values })
+                let is_dirty =
+                    self.is_dirty[addr_space as usize].get(ptr as usize / BLOCK_FE_WIDTH);
+                TouchedBlock {
+                    address_space: addr_space,
+                    ptr,
+                    is_dirty: is_dirty as u32,
+                    timestamp,
+                    values,
+                }
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(all(
+        target_os = "linux",
+        target_pointer_width = "64",
+        not(feature = "basic-memory")
+    ))]
+    use openvm_instructions::riscv::MEMORY_AS;
+    use openvm_instructions::{riscv::REGISTER_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH};
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::{
+        arch::{AddressSpaceHostConfig, MemoryCellType},
+        system::memory::ptr_bits_from_address_height,
+    };
+
+    type F = BabyBear;
+
+    #[test]
+    fn sparse_clone_preserves_marked_pages_and_snapshot_independence() {
+        let config = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+            AddressSpaceHostConfig::new(4 * PAGE_SIZE, MemoryCellType::U8),
+        ];
+        let mut memory: AddressMap = AddressMap::new(config);
+        let mut sparse = SparseMemoryImage::new();
+        sparse.insert((1, 7), 11);
+        sparse.insert((1, (3 * PAGE_SIZE + 9) as u32), 22);
+        memory.set_from_sparse(&sparse);
+
+        let snapshot = memory.sparse_clone();
+        assert_eq!(snapshot.mem[1].as_slice()[7], 11);
+        assert_eq!(snapshot.mem[1].as_slice()[3 * PAGE_SIZE + 9], 22);
+        assert_eq!(snapshot.mem[1].as_slice()[2 * PAGE_SIZE], 0);
+
+        memory.mem[1].as_mut_slice()[7] = 99;
+        assert_eq!(snapshot.mem[1].as_slice()[7], 11);
+    }
+
+    #[cfg(all(
+        target_os = "linux",
+        target_pointer_width = "64",
+        not(feature = "basic-memory")
+    ))]
+    #[test]
+    fn sparse_clone_keeps_default_memory_backing_sparse_at_high_addresses() {
+        fn resident_pages(memory: &impl LinearMemory) -> usize {
+            let bytes = memory.size();
+            let mut residency = vec![0u8; bytes.div_ceil(PAGE_SIZE)];
+            let result = unsafe {
+                libc::mincore(
+                    memory.as_slice().as_ptr().cast_mut().cast(),
+                    bytes,
+                    residency.as_mut_ptr(),
+                )
+            };
+            assert_eq!(
+                result,
+                0,
+                "mincore failed: {}",
+                std::io::Error::last_os_error()
+            );
+            residency.into_iter().filter(|byte| byte & 1 != 0).count()
+        }
+
+        let mem_config = MemoryConfig::default();
+        let mut memory: AddressMap = AddressMap::from_mem_config(&mem_config);
+        // Highest addressable byte of the memory AS, derived from the configured size rather
+        // than hardcoded: the point is that touching the very top of the range must not
+        // materialize everything below it, whatever that range happens to be.
+        let high_addr = u32::try_from(memory.mem[MEMORY_AS as usize].size() - 1)
+            .expect("memory AS byte size must fit a u32 address");
+        let mut sparse = SparseMemoryImage::new();
+        sparse.insert((MEMORY_AS, 0), 11);
+        sparse.insert((MEMORY_AS, high_addr), 22);
+        memory.set_from_sparse(&sparse);
+
+        let snapshot = memory.sparse_clone();
+        let memory_backing = &snapshot.mem[MEMORY_AS as usize];
+        assert_eq!(memory_backing.as_slice()[0], 11);
+        assert_eq!(memory_backing.as_slice()[high_addr as usize], 22);
+        let partition = crate::system::memory::merkle::memory_to_vec_partition::<
+            BabyBear,
+            VM_DIGEST_WIDTH,
+        >(&snapshot, &mem_config.memory_dimensions());
+        assert_eq!(
+            partition.len(),
+            2,
+            "only two nonzero Merkle leaves should be built"
+        );
+        assert!(
+            resident_pages(memory_backing) < 1024,
+            "a sparse two-page snapshot should not materialize the full mapping"
+        );
+    }
+
+    #[test]
+    fn timed_accesses_append_minimal_u16_history() {
+        let mut memory = TracingMemory::new(&MemoryConfig::default());
+        let first_block = [1u16, 2, 3, 4];
+        let second_initial = [5u16, 6, 7, 8];
+        let second_write = [9u16, 10, 11, 12];
+
+        // Seed through the underlying image: initialization and peeks are not
+        // timed memory-bus accesses.
+        unsafe {
+            memory.data.write(REGISTER_AS, 0, first_block);
+            memory
+                .data
+                .write(REGISTER_AS, BLOCK_FE_WIDTH as u32, second_initial);
+            let _: [u16; BLOCK_FE_WIDTH] = memory.data.read(REGISTER_AS, 0);
+
+            let _ = memory.read::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 0);
+            let _ = memory.write::<u16, BLOCK_FE_WIDTH>(
+                REGISTER_AS,
+                BLOCK_FE_WIDTH as u32,
+                second_write,
+            );
+        }
+
+        let log = memory.take_log();
+        assert_eq!(
+            log.accesses,
+            vec![
+                PreflightMemoryEvent {
+                    timestamp: 1,
+                    address_space_and_kind: REGISTER_AS,
+                    pointer: 0,
+                    value: first_block,
+                },
+                PreflightMemoryEvent {
+                    timestamp: 2,
+                    address_space_and_kind: REGISTER_AS | PREFLIGHT_WRITE_BIT,
+                    pointer: BLOCK_FE_WIDTH as u32,
+                    value: second_write,
+                },
+            ]
+        );
+        assert_eq!(
+            log.initial_writes,
+            vec![PreflightInitialWrite {
+                address_space: REGISTER_AS,
+                pointer: BLOCK_FE_WIDTH as u32,
+                initial_value: second_initial,
+            }]
+        );
+        assert!(log.field_values.is_empty());
+        assert!(log.field_initial_values.is_empty());
+    }
+
+    #[test]
+    fn u8_accesses_use_packed_inline_history() {
+        let mut memory = TracingMemory::new(&MemoryConfig::default());
+        let initial = [1u8, 2, 3, 4];
+        let written = [5u8, 6, 7, 8];
+        unsafe {
+            memory.data.write(PUBLIC_VALUES_AS, 0, initial);
+            let _ = memory.write::<u8, BLOCK_FE_WIDTH>(PUBLIC_VALUES_AS, 0, written);
+        }
+
+        let log = memory.take_log();
+        assert_eq!(log.accesses[0].value, encode_u8_block(written));
+        assert_eq!(
+            log.initial_writes[0].initial_value,
+            encode_u8_block(initial)
+        );
+        assert!(log.field_values.is_empty());
+        assert!(log.field_initial_values.is_empty());
+    }
+
+    #[test]
+    fn field_accesses_use_dense_sidecars() {
+        let mem_config = MemoryConfig::new(
+            1,
+            vec![
+                AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+                AddressSpaceHostConfig::new(2 * BLOCK_FE_WIDTH, MemoryCellType::field32()),
+                AddressSpaceHostConfig::new(2 * BLOCK_FE_WIDTH, MemoryCellType::field32()),
+            ],
+            3,
+            20,
+            17,
+        );
+        let mut memory = TracingMemory::new(&mem_config);
+        let initial = [F::ONE, F::TWO, F::from_u8(3), F::from_u8(4)];
+        let written = [F::from_u8(5), F::from_u8(6), F::from_u8(7), F::from_u8(8)];
+        unsafe {
+            memory.data.write(1, 0, initial);
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 0, written);
+        }
+
+        let log = memory.take_log();
+        assert_eq!(log.accesses.len(), 1);
+        assert_eq!(log.accesses[0].value, [0, 0, 0, 0]);
+        assert_eq!(log.initial_writes.len(), 1);
+        assert_eq!(log.initial_writes[0].initial_value, [0, 0, 0, 0]);
+        assert_eq!(log.field_values.len(), 1);
+        assert_eq!(log.field_initial_values.len(), 1);
+        assert_eq!(
+            log.field_values[0].values,
+            written.map(|value| unsafe { std::mem::transmute::<F, u32>(value) })
+        );
+        assert_eq!(
+            log.field_initial_values[0].values,
+            initial.map(|value| unsafe { std::mem::transmute::<F, u32>(value) })
+        );
+    }
+
+    #[test]
+    fn recompute_touched_pages_reflects_current_memory() {
+        let config = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+            AddressSpaceHostConfig::new(2 * PAGE_SIZE + 17, MemoryCellType::U8),
+            AddressSpaceHostConfig::new(PAGE_SIZE + 1, MemoryCellType::U8),
+            AddressSpaceHostConfig::new(PAGE_SIZE + 1, MemoryCellType::U8),
+        ];
+        let mut memory: AddressMap = AddressMap::new(config);
+
+        memory.mem[1].as_mut_slice()[0] = 1;
+        memory.mem[1].as_mut_slice()[2 * PAGE_SIZE + 16] = 2;
+        memory.mem[2].as_mut_slice()[PAGE_SIZE] = 3;
+        // Recomputing replaces stale metadata, including pages that are still all zero.
+        memory.touched_pages[1].mark_byte_range(PAGE_SIZE, 1);
+        memory.touched_pages[3].mark_byte_range(PAGE_SIZE, 1);
+
+        memory.recompute_touched_pages();
+
+        assert_eq!(
+            memory.touched_pages[1].touched_byte_ranges(memory.mem[1].size()),
+            vec![(0, PAGE_SIZE), (2 * PAGE_SIZE, 2 * PAGE_SIZE + 17)]
+        );
+        assert_eq!(
+            memory.touched_pages[2].touched_byte_ranges(memory.mem[2].size()),
+            vec![(PAGE_SIZE, PAGE_SIZE + 1)]
+        );
+        assert!(memory.touched_pages[3]
+            .touched_byte_ranges(memory.mem[3].size())
+            .is_empty());
+
+        memory.mem[1].as_mut_slice()[0] = 0;
+        memory.recompute_touched_pages();
+        assert_eq!(
+            memory.touched_pages[1].touched_byte_ranges(memory.mem[1].size()),
+            vec![(2 * PAGE_SIZE, 2 * PAGE_SIZE + 17)]
+        );
+    }
+
+    #[test]
+    fn recompute_touched_pages_detects_chunk_boundaries() {
+        let config = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+            AddressSpaceHostConfig::new(3 * PAGE_SIZE, MemoryCellType::U8),
+        ];
+        let mut memory: AddressMap = AddressMap::new(config);
+        for offset in [31, PAGE_SIZE + 32, 3 * PAGE_SIZE - 1] {
+            memory.mem[1].as_mut_slice()[offset] = 1;
+        }
+
+        memory.recompute_touched_pages();
+
+        assert_eq!(
+            memory.touched_pages[1].touched_byte_ranges(memory.mem[1].size()),
+            vec![(0, 3 * PAGE_SIZE)]
+        );
+    }
+
+    /// Dirtiness is per *write*: a write marks its leaf dirty regardless of the written
+    /// content (writing the values a leaf already holds keeps it dirty), and reads never
+    /// mark anything.
+    #[test]
+    fn write_tracking_marks_dirty_leaves() {
+        let height = 2; // 4 leaves of VM_DIGEST_WIDTH cells per address space
+        let mem_config = MemoryConfig::new(
+            1,
+            vec![
+                AddressSpaceHostConfig {
+                    num_cells: 0,
+                    layout: MemoryCellType::Null,
+                },
+                AddressSpaceHostConfig {
+                    num_cells: VM_DIGEST_WIDTH << height,
+                    layout: MemoryCellType::FIELD32,
+                },
+                AddressSpaceHostConfig {
+                    num_cells: VM_DIGEST_WIDTH << height,
+                    layout: MemoryCellType::FIELD32,
+                },
+            ],
+            ptr_bits_from_address_height(height),
+            20,
+            17,
+        );
+        let mut memory = TracingMemory::new(&mem_config);
+
+        let leaf = VM_DIGEST_WIDTH as u32;
+        // SAFETY: `F` matches the configured cell type and all pointers are
+        // block-aligned and in bounds.
+        unsafe {
+            // Leaf (1, 0): written with fresh values -> dirty.
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 0, [F::ONE; BLOCK_FE_WIDTH]);
+            // Leaf (1, 8): only read -> touched but clean.
+            let _ = memory.read::<F, BLOCK_FE_WIDTH>(1, leaf);
+            // Leaf (1, 16): written with the values it already holds (zeros) -> dirty.
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 2 * leaf, [F::ZERO; BLOCK_FE_WIDTH]);
+            // Leaf (2, 0): only read, in another address space -> touched but clean.
+            let _ = memory.read::<F, BLOCK_FE_WIDTH>(2, 0);
+        }
+
+        let touched_memory = memory.finalize::<F>();
+        let touched: Vec<(u32, u32, u32)> = touched_memory
+            .iter()
+            .map(|block| (block.address_space, block.ptr, block.is_dirty))
+            .collect();
+        assert_eq!(
+            touched,
+            vec![(1, 0, 1), (1, leaf, 0), (1, 2 * leaf, 1), (2, 0, 0)]
+        );
     }
 }

@@ -53,3 +53,11 @@ profile.json.gz
 
 # test fixtures
 benchmarks/fixtures
+
+# openvm artifacts
+*.pk
+*.vk
+app.pk
+agg_prefix.pk
+app.vk
+*.vmexe

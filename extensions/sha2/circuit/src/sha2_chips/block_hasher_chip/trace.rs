@@ -1,47 +1,71 @@
 use std::slice;
 
-use openvm_circuit::arch::get_record_from_slice;
-use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
-use openvm_cpu_backend::CpuBackend;
-use openvm_sha2_air::{
-    be_limbs_into_word, le_limbs_into_word, Sha2BlockHasherFillerHelper, Sha2RoundColsRef,
-    Sha2RoundColsRefMut,
-};
+use openvm_circuit::arch::{Postflight, PostflightError};
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_instructions::LocalOpcode;
+use openvm_sha2_air::{Sha2BlockHasherFillerHelper, Sha2RoundColsRef, Sha2RoundColsRefMut};
 use openvm_stark_backend::{
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    StarkProtocolConfig, Val,
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
 use crate::{
-    Sha2BlockHasherChip, Sha2BlockHasherRoundColsRefMut, Sha2BlockHasherVmConfig, Sha2Config,
-    Sha2Metadata, Sha2RecordLayout, Sha2RecordMut, Sha2SharedRecords, INNER_OFFSET,
+    replay_sha2_from_postflight, Sha2BlockHasherChip, Sha2BlockHasherRoundColsRefMut,
+    Sha2BlockHasherVmConfig, Sha2Config, INNER_OFFSET,
 };
 
-// We don't use the record arena associated with this chip. Instead, we will use the record arena
-// provided by the main chip, which will be passed to this chip after the main chip's tracegen is
-// done.
-impl<R, SC, C: Sha2Config> Chip<R, CpuBackend<SC>> for Sha2BlockHasherChip<Val<SC>, C>
-where
-    Val<SC>: PrimeField32,
-    SC: StarkProtocolConfig,
-{
-    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        // SAFETY: the tracegen for Sha2MainChip must be done before this chip's tracegen
-        let mut records = self.records.lock().unwrap();
-        let mut records = records.take().unwrap();
-        let rows_used = records.num_records * C::ROWS_PER_BLOCK;
+struct Sha2BlockReplay {
+    message_bytes: Vec<u8>,
+    prev_state: Vec<u8>,
+}
 
-        let height = next_power_of_two_or_zero(rows_used);
-        let trace = Val::<SC>::zero_vec(height * C::BLOCK_HASHER_WIDTH);
-        let mut trace_matrix = RowMajorMatrix::new(trace, C::BLOCK_HASHER_WIDTH);
-
-        self.fill_trace(&mut trace_matrix, &mut records, rows_used);
-
-        AirProvingContext::simple_no_pis(trace_matrix)
+impl From<crate::Sha2ReplayRow> for Sha2BlockReplay {
+    fn from(replay: crate::Sha2ReplayRow) -> Self {
+        Self {
+            message_bytes: replay.message_bytes,
+            prev_state: replay.prev_state,
+        }
     }
+}
+
+pub(crate) fn generate_trace_from_postflight<F, C>(
+    chip: &Sha2BlockHasherChip<F, C>,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError>
+where
+    F: PrimeField32,
+    C: Sha2Config,
+{
+    let steps = postflight.steps(C::OPCODE.global_opcode());
+    let replay_rows = steps
+        .par_iter()
+        .map(|&step| {
+            replay_sha2_from_postflight::<F, C>(postflight, step, chip.pointer_max_bits)
+                .map(Sha2BlockReplay::from)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    chip.generate_trace_from_replays(&replay_rows)
+}
+
+#[cfg(test)]
+pub(crate) fn generate_trace_from_postflights<F, C>(
+    chip: &Sha2BlockHasherChip<F, C>,
+    postflights: &[Postflight<'_, F>],
+) -> Result<RowMajorMatrix<F>, PostflightError>
+where
+    F: PrimeField32,
+    C: Sha2Config,
+{
+    let mut replay_rows = Vec::new();
+    for postflight in postflights {
+        for &step in postflight.steps(C::OPCODE.global_opcode()) {
+            replay_rows.push(Sha2BlockReplay::from(replay_sha2_from_postflight::<F, C>(
+                postflight,
+                step,
+                chip.pointer_max_bits,
+            )?));
+        }
+    }
+    chip.generate_trace_from_replays(&replay_rows)
 }
 
 impl<F, C> Sha2BlockHasherChip<F, C>
@@ -49,79 +73,71 @@ where
     F: PrimeField32,
     C: Sha2BlockHasherVmConfig,
 {
-    fn fill_trace(
+    fn generate_trace_from_replays(
+        &self,
+        replay_rows: &[Sha2BlockReplay],
+    ) -> Result<RowMajorMatrix<F>, PostflightError> {
+        let rows_used = replay_rows
+            .len()
+            .checked_mul(C::ROWS_PER_BLOCK)
+            .ok_or_else(|| PostflightError::new("SHA-2 block-hasher trace height overflow"))?;
+        let height = next_power_of_two_or_zero(rows_used);
+        let mut trace = RowMajorMatrix::new(
+            F::zero_vec(height * C::BLOCK_HASHER_WIDTH),
+            C::BLOCK_HASHER_WIDTH,
+        );
+        self.fill_trace_from_replays(&mut trace, replay_rows);
+        Ok(trace)
+    }
+
+    fn fill_trace_from_replays(
         &self,
         trace_matrix: &mut RowMajorMatrix<F>,
-        records: &mut Sha2SharedRecords<F>,
-        rows_used: usize,
+        replay_rows: &[Sha2BlockReplay],
     ) {
-        if rows_used == 0 {
+        if replay_rows.is_empty() {
             return;
         }
 
+        let rows_used = replay_rows.len() * C::ROWS_PER_BLOCK;
         let trace = &mut trace_matrix.values[..];
-
-        // grab all the records
-        // we need to do this first, so we can pass (this_block.prev_hash, next_block.prev_hash) to
-        // each block (in the call to fill_block_trace)
-        let (records, prev_hashes): (Vec<_>, Vec<_>) = records
-            .matrix
-            .par_rows_mut()
-            .take(records.num_records)
-            .map(|mut record| {
-                // SAFETY:
-                // - caller ensures `records` contains a valid record representation that was
-                //   previously written by the executor
-                // - records contains a valid Sha2RecordMut with the exact layout specified
-                // - get_record_from_slice will correctly split the buffer into header, input, and
-                //   aux components based on this layout
-                let record: Sha2RecordMut = unsafe {
-                    get_record_from_slice(
-                        &mut record,
-                        Sha2RecordLayout {
-                            metadata: Sha2Metadata {
-                                variant: C::VARIANT,
-                            },
-                        },
-                    )
-                };
-
-                let prev_hash = (0..C::HASH_WORDS)
-                    .map(|i| {
-                        le_limbs_into_word::<C>(
-                            &record.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
-                                .iter()
-                                .map(|x| *x as u32)
-                                .collect::<Vec<_>>(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-
-                (record, prev_hash)
-            })
-            .unzip();
+        let mut prev_hashes = vec![C::Word::from(0); replay_rows.len() * C::HASH_WORDS];
+        prev_hashes
+            .par_chunks_exact_mut(C::HASH_WORDS)
+            .zip(replay_rows.par_iter())
+            .for_each(|(prev_hash, replay)| {
+                for (i, word) in prev_hash.iter_mut().enumerate() {
+                    *word = replay.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
+                        .iter()
+                        .rev()
+                        .fold(C::Word::from(0), |word, &byte| {
+                            (word << 8) | u32::from(byte).into()
+                        });
+                }
+            });
 
         // zip the prev_hashes with the next block's prev_hash
-        let prev_hashes_and_next_block_prev_hashes = prev_hashes.par_iter().zip(
-            prev_hashes[1..]
-                .par_iter()
-                .chain(prev_hashes[..1].par_iter()),
-        );
+        let prev_hashes_and_next_block_prev_hashes =
+            prev_hashes.par_chunks_exact(C::HASH_WORDS).zip(
+                prev_hashes[C::HASH_WORDS..]
+                    .par_chunks_exact(C::HASH_WORDS)
+                    .chain(prev_hashes[..C::HASH_WORDS].par_chunks_exact(C::HASH_WORDS)),
+            );
 
         // fill in used rows
         trace[..rows_used * C::BLOCK_HASHER_WIDTH]
             .par_chunks_exact_mut(C::BLOCK_HASHER_WIDTH * C::ROWS_PER_BLOCK)
             .zip(
-                records
+                replay_rows
                     .par_iter()
                     .zip(prev_hashes_and_next_block_prev_hashes),
             )
             .enumerate()
             .for_each(
-                |(block_idx, (block_slice, (record, (prev_hash, next_block_prev_hash))))| {
+                |(block_idx, (block_slice, (replay, (prev_hash, next_block_prev_hash))))| {
                     self.fill_block_trace(
                         block_slice,
-                        record.message_bytes,
+                        &replay.message_bytes,
                         block_idx + 1, // 1-indexed
                         prev_hash,
                         next_block_prev_hash,
@@ -137,7 +153,7 @@ where
         let num_blocks = rows_used / C::ROWS_PER_BLOCK;
         let first_dummy_row_cols_const = self.fill_first_dummy_row(
             &mut trace[rows_used * C::BLOCK_HASHER_WIDTH..(rows_used + 1) * C::BLOCK_HASHER_WIDTH],
-            &prev_hashes[0],
+            &prev_hashes[..C::HASH_WORDS],
             num_blocks,
         );
 
@@ -151,7 +167,7 @@ where
                     &mut Sha2RoundColsRefMut::from::<C>(
                         &mut row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
                     ),
-                    &prev_hashes[0],
+                    &prev_hashes[..C::HASH_WORDS],
                     Some(
                         first_dummy_row_cols_const
                             .work_vars
@@ -290,12 +306,11 @@ impl<F, C: Sha2BlockHasherVmConfig> Sha2BlockHasherChip<F, C> {
 
         let input_words = (0..C::BLOCK_WORDS)
             .map(|i| {
-                be_limbs_into_word::<C>(
-                    &input[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
-                        .iter()
-                        .map(|x| *x as u32)
-                        .collect::<Vec<_>>(),
-                )
+                input[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
+                    .iter()
+                    .fold(C::Word::from(0), |word, &byte| {
+                        (word << 8) | u32::from(byte).into()
+                    })
             })
             .collect::<Vec<_>>();
 
@@ -306,6 +321,7 @@ impl<F, C: Sha2BlockHasherVmConfig> Sha2BlockHasherChip<F, C> {
             INNER_OFFSET,
             &input_words,
             self.bitwise_lookup_chip.clone(),
+            &self.range_checker_chip,
             prev_hash,
             next_block_prev_hash,
             global_block_idx as u32,

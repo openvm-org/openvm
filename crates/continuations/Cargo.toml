@@ -22,6 +22,7 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cpu-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
 openvm-poseidon2-air = { workspace = true }
 
 itertools.workspace = true
@@ -39,11 +40,11 @@ openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 
 [dev-dependencies]
-openvm-rv32im-circuit = { path = "../../extensions/rv32im/circuit", default-features = false, features = ["test-utils"] }
-openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
-openvm-deferral-circuit = { path = "../../extensions/deferral/circuit", default-features = false }
-openvm-deferral-transpiler = { path = "../../extensions/deferral/transpiler", default-features = false }
-openvm-transpiler = { path = "../toolchain/transpiler", default-features = false }
+openvm-riscv-circuit = { workspace = true, features = ["test-utils"] }
+openvm-riscv-transpiler = { workspace = true }
+openvm-deferral-circuit = { workspace = true }
+openvm-deferral-transpiler = { workspace = true }
+openvm-transpiler = { workspace = true }
 test-case = { workspace = true }
 
 [features]
@@ -61,7 +62,7 @@ cuda = [
     "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-riscv-circuit/cuda",
     "openvm-deferral-circuit/cuda",
     "openvm-recursion-circuit/cuda",
 ]

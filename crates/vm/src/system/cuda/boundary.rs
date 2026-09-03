@@ -1,13 +1,14 @@
 use openvm_circuit::{
-    arch::DEFAULT_BLOCK_SIZE, system::memory::persistent::PersistentBoundaryCols,
+    arch::BLOCK_FE_WIDTH, system::memory::persistent::PersistentBoundaryCols,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
-use super::{poseidon2::SharedBuffer, DIGEST_WIDTH};
+use super::poseidon2::SharedBuffer;
 use crate::cuda_abi::boundary::persistent_boundary_tracegen;
 
 pub struct BoundaryChipGPU {
@@ -17,37 +18,48 @@ pub struct BoundaryChipGPU {
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
     /// don't own. TODO: use `Arc<DeviceBuffer>` instead?
     pub initial_leaves: Vec<*const std::ffi::c_void>,
+    pub(super) cell_types: Vec<u8>,
     pub records: Option<DeviceBuffer<u32>>,
     pub num_records: Option<usize>,
     pub trace_width: Option<usize>,
 }
 
-const BLOCKS_PER_CHUNK: usize = DIGEST_WIDTH / DEFAULT_BLOCK_SIZE;
+const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct PersistentBoundaryRecord {
     pub address_space: u32,
+    /// AS-native pointer to the first cell of this Merkle leaf.
     pub ptr: u32,
-    pub timestamps: [u32; BLOCKS_PER_CHUNK],
-    pub values: [F; DIGEST_WIDTH],
+    pub is_dirty: u32,
+    pub timestamps: [u32; BLOCKS_PER_LEAF],
+    pub values: [F; VM_DIGEST_WIDTH],
 }
 
 impl BoundaryChipGPU {
-    pub fn new(poseidon2_buffer: SharedBuffer<F>, device_ctx: GpuDeviceCtx) -> Self {
+    pub fn new(
+        poseidon2_buffer: SharedBuffer<F>,
+        device_ctx: GpuDeviceCtx,
+        cell_types: Vec<u8>,
+    ) -> Self {
         Self {
             device_ctx,
             poseidon2_buffer,
             initial_leaves: Vec::new(),
+            cell_types,
             records: None,
             num_records: None,
             trace_width: None,
         }
     }
 
-    pub fn finalize_records<const CHUNK: usize>(&mut self, records: Vec<PersistentBoundaryRecord>) {
+    pub fn finalize_records<const DIGEST_WIDTH: usize>(
+        &mut self,
+        records: Vec<PersistentBoundaryRecord>,
+    ) {
         self.num_records = Some(records.len());
-        self.trace_width = Some(PersistentBoundaryCols::<F, CHUNK>::width());
+        self.trace_width = Some(PersistentBoundaryCols::<F, DIGEST_WIDTH>::width());
         self.records = Some(if records.is_empty() {
             DeviceBuffer::new()
         } else {
@@ -58,13 +70,13 @@ impl BoundaryChipGPU {
         });
     }
 
-    pub fn finalize_records_device<const CHUNK: usize>(
+    pub fn finalize_records_device<const DIGEST_WIDTH: usize>(
         &mut self,
         records: DeviceBuffer<u32>,
         num_records: usize,
     ) {
         self.num_records = Some(num_records);
-        self.trace_width = Some(PersistentBoundaryCols::<F, CHUNK>::width());
+        self.trace_width = Some(PersistentBoundaryCols::<F, DIGEST_WIDTH>::width());
         self.records = Some(records);
     }
 
@@ -77,10 +89,15 @@ impl BoundaryChipGPU {
             .as_ref()
             .expect("Finalize records to get buffer")
     }
+
+    /// Releases tracegen-only inputs after their stream has synchronized.
+    pub(crate) fn release_records(&mut self) {
+        self.records = None;
+    }
 }
 
-impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl Chip<GpuBackend> for BoundaryChipGPU {
+    fn generate_proving_ctx(&self) -> AirProvingContext<GpuBackend> {
         let num_records = self.num_records.unwrap();
         if num_records == 0 {
             // Boundary AIR should always be present, so return a single zero-filled
@@ -90,12 +107,13 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
             trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
             return AirProvingContext::simple_no_pis(trace);
         }
-        let unpadded_height = 2 * num_records;
+        let unpadded_height = num_records;
         let trace_height = next_power_of_two_or_zero(unpadded_height);
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, self.trace_width(), &self.device_ctx);
-        trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
+        // The tracegen kernel initializes every active and padding row.
         let mem_ptrs = self.initial_leaves.to_device_on(&self.device_ctx).unwrap();
+        let cell_types = self.cell_types.to_device_on(&self.device_ctx).unwrap();
         let poseidon2_records = self.poseidon2_buffer.records();
         unsafe {
             persistent_boundary_tracegen(
@@ -103,6 +121,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
                 trace.height(),
                 trace.width(),
                 &mem_ptrs,
+                &cell_types,
                 self.records.as_ref().unwrap(),
                 num_records,
                 &poseidon2_records,

@@ -1,5 +1,8 @@
-#![cfg_attr(target_os = "zkvm", no_main)]
-#![cfg_attr(target_os = "zkvm", no_std)]
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm::io::read;
 use openvm_deferral_guest::{deferred_compute, get_deferred_output, Commit};

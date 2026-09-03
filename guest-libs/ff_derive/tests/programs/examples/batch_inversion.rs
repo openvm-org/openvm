@@ -1,4 +1,7 @@
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
 #![cfg_attr(not(feature = "std"), no_std)]
 openvm::entry!(main);
 
@@ -15,7 +18,7 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldReprEndianness = "little"]
 struct Bls381K12Scalar([u64; 4]);
 
-openvm::init!("openvm_init_batch_inversion_std.rs");
+openvm::init!("openvm_init_batch_inversion.rs");
 
 fn main() {
     use ff::{BatchInverter, Field};

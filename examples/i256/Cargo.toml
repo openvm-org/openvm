@@ -4,19 +4,19 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
+resolver = "2"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    "std",
-] }
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", features = [
     "export-intrinsics",
 ] }
-alloy-primitives = "1.1.2"
+alloy-primitives = { version = "1.1.2", default-features = false }
 
 [features]
 default = []
+std = ["openvm/std", "alloy-primitives/std"]
 
 [patch.crates-io]
 # alloy-primitives uses ruint:
@@ -29,3 +29,6 @@ openvm-bigint-guest = { path = "../../extensions/bigint/guest" }
 
 [profile.release]
 lto = "thin"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }

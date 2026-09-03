@@ -35,7 +35,10 @@ env:
   WS_FV_REV: 1f92b767548bb8bb6a1c21a537f7d686c141909e
 
 jobs:
+  # Disabled because the current certified verifier does not support RV64 proofs.
+  # Keep the workflow intact so it can be enabled when the RV64 verifier is available.
   openvm-tests:
+    if: ${{ vars.ENABLE_CERTIFIED_VERIFIER == 'true' }}
     name: OpenVM SDK and CLI
     runs-on:
       - runs-on=${{ github.run_id }}-certified-verifier-openvm/image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge/volume=80gb/spot=price-capacity-optimized/extras=s3-cache
@@ -84,8 +87,8 @@ jobs:
           cargo build --locked --profile fast -p cargo-openvm --features cuda,certified-verifier
           echo "${{ github.workspace }}/target/fast" >> "$GITHUB_PATH"
 
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Run certified verifier tests
         run: |
@@ -114,6 +117,7 @@ jobs:
         run: sccache --show-stats || true
 
   installed-cli-test:
+    if: ${{ vars.ENABLE_CERTIFIED_VERIFIER == 'true' }}
     name: Installed CUDA CLI after build target removal
     runs-on:
       - runs-on=${{ github.run_id }}-certified-verifier-install/image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge/volume=80gb/spot=price-capacity-optimized/extras=s3-cache
@@ -181,6 +185,7 @@ jobs:
         run: sccache --show-stats || true
 
   ws-fv-tests:
+    if: ${{ vars.ENABLE_CERTIFIED_VERIFIER == 'true' }}
     name: Generated C matches upstream
     runs-on: ubuntu-latest
 
