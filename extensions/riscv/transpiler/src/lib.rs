@@ -40,7 +40,8 @@ impl TranspilerExtension for Rv64ITranspilerExtension {
         let instruction_u32 = instruction_stream[0];
 
         let opcode = (instruction_u32 & 0x7f) as u8;
-        let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R-, I- or B-type
+        let funct3 = ((instruction_u32 >> 12) & 0b111) as u8; // All our instructions are R-, I- or
+                                                              // B-type
 
         let instruction = match (opcode, funct3) {
             (CSR_OPCODE, _) => {

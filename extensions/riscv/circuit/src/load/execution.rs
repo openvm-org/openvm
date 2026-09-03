@@ -201,7 +201,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
     }
 
     if ENABLED {
-        exec_state.vm_write(REGISTER_AS, pre_compute.a as u32, &write_data);
+        exec_state.vm_write_bytes(REGISTER_AS, pre_compute.a as u32, &write_data);
     } else {
         exec_state.ctx.advance_timestamp(1);
     }
