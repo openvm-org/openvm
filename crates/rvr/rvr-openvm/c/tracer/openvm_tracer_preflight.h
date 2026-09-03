@@ -80,7 +80,7 @@ static __attribute__((always_inline)) inline void
 preflight_mark_dirty_page(uint64_t* restrict dirty_pages,
                           uint64_t dirty_page_words, uint64_t page) {
   uint64_t word = page >> 6;
-  debug_assume(dirty_pages != NULL && word < dirty_page_words);
+  assert_assume(dirty_pages != NULL && word < dirty_page_words);
   dirty_pages[word] |= 1ull << (page & 63ull);
 }
 

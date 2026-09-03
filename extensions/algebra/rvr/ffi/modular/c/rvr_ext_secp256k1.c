@@ -154,7 +154,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_coord(
     RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
-  debug_assume(!fe_is_zero(&b));
+  assert_assume(!fe_is_zero(&b));
   secp256k1_fe b_inv = fe_inv(&b);
   secp256k1_fe r = fe_mul(&a, &b_inv);
   fe_write(state, rd_ptr, &r);
@@ -202,7 +202,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_scalar(
     RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
-  debug_assume(!secp256k1_scalar_is_zero(&b));
+  assert_assume(!secp256k1_scalar_is_zero(&b));
   secp256k1_scalar b_inv;
   secp256k1_scalar_inverse_var(&b_inv, &b);
   secp256k1_scalar r;
@@ -240,7 +240,7 @@ __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
   /* lambda = (y2 - y1) / (x2 - x1) */
   secp256k1_fe dy = fe_sub(&y2, &y1);
   secp256k1_fe dx = fe_sub(&x2, &x1);
-  debug_assume(!fe_is_zero(&dx));
+  assert_assume(!fe_is_zero(&dx));
   secp256k1_fe dx_inv = fe_inv(&dx);
   secp256k1_fe lambda = fe_mul(&dy, &dx_inv);
 
@@ -268,7 +268,7 @@ __attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
   secp256k1_fe x1sq = fe_mul(&x1, &x1);
   secp256k1_fe three_x1sq = fe_add(fe_add(x1sq, &x1sq), &x1sq);
   secp256k1_fe two_y1 = fe_add(y1, &y1);
-  debug_assume(!fe_is_zero(&two_y1));
+  assert_assume(!fe_is_zero(&two_y1));
   secp256k1_fe two_y1_inv = fe_inv(&two_y1);
   secp256k1_fe lambda = fe_mul(&three_x1sq, &two_y1_inv);
 
