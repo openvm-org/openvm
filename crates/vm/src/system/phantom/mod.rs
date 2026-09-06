@@ -174,7 +174,10 @@ where
                 _ => {}
             }
         } else {
-            let sub_executor = self.phantom_executors.get(&discriminant).unwrap();
+            let sub_executor =
+                self.phantom_executors
+                    .get(&discriminant)
+                    .ok_or(ExecutionError::PhantomNotFound { pc, discriminant })?;
             sub_executor
                 .phantom_execute(
                     &state.memory.data,
