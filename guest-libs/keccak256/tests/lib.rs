@@ -66,7 +66,7 @@ mod tests {
         test_vectors
     }
 
-    fn build_program(name: &str, config: &Keccak256Rv64Config) -> Result<VmExe<F>> {
+    fn build_program(name: &str, config: &Keccak256Rv64Config) -> Result<VmExe> {
         let elf = build_example_program_at_path(get_programs_dir!("tests/programs"), name, config)?;
         Ok(VmExe::from_elf(
             elf,
@@ -123,7 +123,7 @@ mod tests {
         let config = Keccak256Rv64Config::default();
         let openvm_exe = build_program("keccak_alignment", &config)?;
 
-        let executor = VmExecutor::new(config)?;
+        let executor = VmExecutor::<BabyBear, _>::new(config)?;
         let instance = executor.instance(&openvm_exe)?;
         #[allow(unused_variables)]
         let state = instance.execute(StdIn::default())?;
