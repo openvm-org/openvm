@@ -1,4 +1,7 @@
-use std::borrow::Borrow;
+use std::{
+    borrow::Borrow,
+    io::{self, Read},
+};
 
 use eyre::Result;
 use openvm_circuit::{
@@ -78,8 +81,26 @@ pub fn verify_vm_stark_proof(
     vk: &VmStarkVerifyingKey,
     encoded_proof: &[u8],
 ) -> Result<(), VerifyStarkError> {
-    let decompressed = zstd::decode_all(encoded_proof)?;
-    verify_vm_stark_proof_decoded(vk, &VmStarkProof::decode_from_bytes(&decompressed)?)
+    let proof = decode_zstd(encoded_proof)?;
+    verify_vm_stark_proof_decoded(vk, &proof)
+}
+
+fn decode_zstd<T: Decode>(encoded: &[u8]) -> io::Result<T> {
+    let mut decoder = zstd::Decoder::new(encoded)?;
+    decode_exact(&mut decoder)
+}
+
+fn decode_exact<T: Decode>(reader: &mut impl Read) -> io::Result<T> {
+    let value = T::decode(reader)?;
+
+    // Preserve `Decode::decode_from_bytes`'s canonical-encoding check without first collecting the
+    // entire decompressed stream. In particular, malformed compressed inputs should be rejected as
+    // soon as proof decoding fails instead of being fully inflated in memory.
+    if reader.read(&mut [0])? != 0 {
+        return Err(io::Error::other("trailing bytes after decoded value"));
+    }
+
+    Ok(value)
 }
 
 /// Verifies a non-root VM STARK proof given the internal-recursive layer verifying
@@ -350,4 +371,70 @@ pub fn verify_vm_stark_proof_pvs(
 
 fn is_unset(slice: &[F]) -> bool {
     slice.iter().all(|&f| f == F::ZERO)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Read, Write};
+
+    use openvm_stark_backend::codec::Encode;
+
+    use super::{decode_exact, decode_zstd, VmStarkProof};
+
+    struct CountingReader<R> {
+        inner: R,
+        bytes_read: usize,
+    }
+
+    impl<R: Read> Read for CountingReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let read = self.inner.read(buf)?;
+            self.bytes_read += read;
+            Ok(read)
+        }
+    }
+
+    #[test]
+    fn decode_zstd_accepts_exactly_one_value() {
+        let encoded = 42u32.encode_to_vec().unwrap();
+        let compressed = zstd::encode_all(encoded.as_slice(), 0).unwrap();
+
+        assert_eq!(decode_zstd::<u32>(&compressed).unwrap(), 42);
+    }
+
+    #[test]
+    fn decode_zstd_rejects_trailing_decompressed_bytes() {
+        let mut encoded = 42u32.encode_to_vec().unwrap();
+        encoded.push(0);
+        let compressed = zstd::encode_all(encoded.as_slice(), 0).unwrap();
+
+        let err = decode_zstd::<u32>(&compressed).unwrap_err();
+        assert_eq!(err.to_string(), "trailing bytes after decoded value");
+    }
+
+    #[test]
+    fn malformed_proof_stops_before_expanding_zstd_tail() {
+        const EXPANDED_SIZE: usize = 512 * 1024 * 1024;
+        static CHUNK: [u8; 64 * 1024] = [0; 64 * 1024];
+
+        // A zero codec version makes this an invalid proof after its first four decompressed bytes.
+        // Stream the input into the encoder so constructing the test case itself does not allocate
+        // the 512 MiB decompressed payload.
+        let mut encoder = zstd::Encoder::new(Vec::new(), 0).unwrap();
+        for _ in 0..EXPANDED_SIZE / CHUNK.len() {
+            encoder.write_all(&CHUNK).unwrap();
+        }
+        let compressed = encoder.finish().unwrap();
+        assert!(compressed.len() < 64 * 1024);
+
+        let decoder = zstd::Decoder::new(compressed.as_slice()).unwrap();
+        let mut reader = CountingReader {
+            inner: decoder,
+            bytes_read: 0,
+        };
+        let err = decode_exact::<VmStarkProof>(&mut reader).unwrap_err();
+
+        assert!(err.to_string().contains("CODEC_VERSION mismatch"));
+        assert_eq!(reader.bytes_read, size_of::<u32>());
+    }
 }
