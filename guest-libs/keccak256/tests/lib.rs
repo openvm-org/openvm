@@ -140,6 +140,15 @@ mod tests {
 
     #[test]
     #[ignore = "proving on CPU is slow"]
+    fn test_keccak256_alignment_prove() -> Result<()> {
+        let config = Keccak256Rv64Config::default();
+        let openvm_exe = build_program("keccak_alignment", &config)?;
+        air_test_with_min_segments(TestBuilder, config, openvm_exe, StdIn::default(), 1);
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "proving on CPU is slow"]
     fn test_keccak256_prove() -> Result<()> {
         test_keccak256_base("ShortMsgKAT_256.txt", true)?;
         test_keccak256_base("LongMsgKAT_256.txt", true)

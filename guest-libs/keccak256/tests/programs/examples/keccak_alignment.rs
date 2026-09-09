@@ -10,6 +10,8 @@ use alloc::vec::Vec;
 use core::hint::black_box;
 
 use openvm_keccak256::{keccak256, Keccak256};
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+use openvm_keccak256_guest::native_xorin;
 
 openvm::entry!(main);
 
@@ -22,8 +24,7 @@ const LENGTHS: &[usize] = &[
 
 const MAX_LEN: usize = 400;
 
-/// Chunk sizes for incremental absorbs. Sizes that are not multiples of 8 walk the sponge's
-/// fill index off the word boundary and keep it there for the rest of the hash.
+/// Chunk sizes that vary the sponge's alignment and cross rate boundaries.
 const CHUNKS: &[usize] = &[1, 3, 5, 7, 8, 9, 33, 135, 136, 137];
 
 const EMPTY_DIGEST: [u8; 32] = [
@@ -60,23 +61,43 @@ fn digest_at_offset(data: &[u8], offset: usize) -> [u8; 32] {
     keccak256(black_box(region))
 }
 
-/// `native_xorin` only exists on the guest target, so host builds of this example (clippy,
-/// `--features std` runs) compile the overlap check out.
+/// Compare the instruction wrapper with byte-wise snapshot semantics, including canaries.
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
-fn test_overlapping_xorin() {
-    const LEN: usize = 16;
-
+fn check_xorin(buffer_offset: usize, input_offset: usize, len: usize) {
     let mut buf = AlignedBuf([0u8; MAX_LEN + 8]);
-    for (i, byte) in buf.0.iter_mut().take(LEN + 1).enumerate() {
-        *byte = i as u8;
+    for (i, byte) in buf.0.iter_mut().enumerate() {
+        *byte = (i as u8).wrapping_mul(37).wrapping_add(11);
     }
     let original = buf.0;
+    let mut expected = original;
+    for i in 0..len {
+        expected[buffer_offset + i] ^= original[input_offset + i];
+    }
 
     unsafe {
-        openvm_keccak256_guest::native_xorin(buf.0.as_mut_ptr().add(1), buf.0.as_ptr(), LEN);
+        native_xorin(
+            buf.0.as_mut_ptr().add(buffer_offset),
+            buf.0.as_ptr().add(input_offset),
+            len,
+        );
     }
-    for i in 0..LEN {
-        assert_eq!(buf.0[i + 1], original[i + 1] ^ original[i]);
+    assert_eq!(
+        buf.0, expected,
+        "XORIN changed bytes outside the destination or used overwritten input"
+    );
+}
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+fn test_xorin() {
+    for len in [0, 1, 7, 8, 9, 15, 16, 17, 127, 128, 135, 136] {
+        for buffer_offset in 8..=16 {
+            for input_offset in 8..=16 {
+                // Equal pointers, overlap in both directions, and adjacent short ranges.
+                check_xorin(buffer_offset, input_offset, len);
+                // Disjoint ranges with independently varied alignment.
+                check_xorin(buffer_offset, 144 + input_offset, len);
+            }
+        }
     }
 }
 
@@ -86,7 +107,7 @@ pub fn main() {
     assert_eq!(keccak256(black_box(b"")), EMPTY_DIGEST);
     assert_eq!(keccak256(black_box(b"abc")), ABC_DIGEST);
     #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
-    test_overlapping_xorin();
+    test_xorin();
 
     for &len in LENGTHS {
         let data = sample_bytes(len);
