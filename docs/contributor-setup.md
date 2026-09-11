@@ -5,7 +5,7 @@ To get `rustfmt` to work with our nightly options, add the following to your IDE
 ```json
 {  
   "rust-analyzer.rustfmt.extraArgs": [
-    "+nightly"
+    "+nightly-2026-09-10"
   ],
 }
 ```

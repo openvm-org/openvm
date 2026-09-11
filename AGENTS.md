@@ -4,7 +4,7 @@
 
 - Prefer targeted commands (`-p <crate>` or `cd <crate-dir>`) over workspace-wide runs; full workspace builds/tests are slow.
 - Use the CI-like build profile: `cargo build --profile fast -p <crate>` (note: `--cargo-profile` is a **nextest** flag, not a Cargo build flag).
-- Formatting requires nightly rustfmt: `cargo +nightly fmt --all` (stable `cargo fmt` will fail due to unstable options in `rustfmt.toml`).
+- Formatting requires nightly rustfmt: `cargo +nightly-2026-09-10 fmt --all` (stable `cargo fmt` will fail due to unstable options in `rustfmt.toml`).
 - Run tests with nextest when available: `cargo nextest run --cargo-profile=fast -p <crate>`; fallback: `cargo test -p <crate>`.
 - Speed knob for local runs: `OPENVM_SKIP_DEBUG=1` (see below).
 - After major code edits, run `./scripts/pre-push.sh` to check formatting, linting, and tests on changed crates before pushing.
@@ -21,8 +21,8 @@ OpenVM is a modular zkVM (zero-knowledge virtual machine) framework built on STA
 - Rust 1.91.1 (stable), specified in `rust-toolchain.toml`
 - Nightly is only needed for:
   - `rustfmt` (unstable formatting options)
-  - some workflows that build `cargo-openvm` with experimental features (pinned nightly: `nightly-2026-01-18`)
-- Guest program compilation uses the prebuilt `openvm-1.94.1` (stable) toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (or `ci/install-openvm-toolchain.sh` in CI). The fork's tarball ships `std`/`core`/`alloc`/`panic_abort` rlibs for `riscv64im-unknown-openvm-elf`. Published nightly variants (`openvm-nightly-YYYY-MM-DD`) are available for users who need nightly Rust features in guest code; install one with `--version <tag>`.
+  - some workflows that build `cargo-openvm` with experimental features (pinned nightly: `nightly-2026-09-10`)
+- Guest program compilation uses the prebuilt `openvm-1.97.1` (stable) toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (or `ci/install-openvm-toolchain.sh` in CI). The fork's tarball ships `std`/`core`/`alloc`/`panic_abort` rlibs for `riscv64im-unknown-openvm-elf`. Published nightly variants (`openvm-nightly-YYYY-MM-DD`) are available for users who need nightly Rust features in guest code; install one with `--version <tag>`.
 
 ### Building
 
@@ -35,14 +35,14 @@ cargo build --release -p <crate>                # release build
 ### Formatting & Linting
 
 ```bash
-cargo +nightly fmt --all                    # format (nightly required for unstable options)
-cargo +nightly fmt --all -- --check         # check formatting
+cargo +nightly-2026-09-10 fmt --all                    # format (nightly required for unstable options)
+cargo +nightly-2026-09-10 fmt --all -- --check         # check formatting
 cargo clippy -p openvm-circuit --all-targets --tests -- -D warnings   # lint (targeted)
 cargo clippy --workspace --all-targets --tests -- -D warnings         # lint (slower)
 cargo shear                                 # check for unused dependencies (install via: cargo install cargo-shear)
 ```
 
-Formatting uses unstable options: `group_imports = "StdExternalCrate"`, `imports_granularity = "Crate"`. Configure IDE with `rust-analyzer.rustfmt.extraArgs: ["+nightly"]`.
+Formatting uses unstable options: `group_imports = "StdExternalCrate"`, `imports_granularity = "Crate"`. Configure IDE with `rust-analyzer.rustfmt.extraArgs: ["+nightly-2026-09-10"]`.
 
 ### Testing
 
