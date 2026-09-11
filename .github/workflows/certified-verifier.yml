@@ -161,7 +161,7 @@ jobs:
           fi
 
       - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+        run: rustup component add rust-src --toolchain nightly-2026-09-10
 
       - name: Install cargo-openvm with CUDA
         run: |

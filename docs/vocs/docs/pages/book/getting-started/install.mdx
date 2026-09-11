@@ -20,7 +20,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 . "$HOME/.cargo/env"
 
 # install nightly Rust toolchain for binary builds
-rustup install nightly-2026-01-18
+rustup install nightly-2026-09-10
 
 # install build tools for Ubuntu
 sudo apt update
@@ -41,7 +41,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 . "$HOME/.cargo/env"
 
 # install nightly Rust toolchain for binary builds
-rustup install nightly-2026-01-18
+rustup install nightly-2026-09-10
 
 # install build tools for macOS
 xcode-select --install
@@ -187,7 +187,7 @@ For faster execution performance, the CLI may be installed with optimizations th
 This installation requires a nightly Rust toolchain. To install the nightly toolchain, run:
 
 ```bash
-rustup install nightly-2026-01-18
+rustup install nightly-2026-09-10
 ```
 
 ### Option 1: Install Via Git URL (Recommended)
@@ -196,10 +196,10 @@ Begin the installation:
 
 :::code-group
 ```bash [Without GPU]
-cargo +nightly-2026-01-18 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.1.0 --features tco cargo-openvm
+cargo +nightly-2026-09-10 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.1.0 --features tco cargo-openvm
 ```
 ```bash [Nvidia GPU]
-cargo +nightly-2026-01-18 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.1.0 --features tco,cuda cargo-openvm
+cargo +nightly-2026-09-10 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.1.0 --features tco,cuda cargo-openvm
 ```
 :::
 
@@ -222,10 +222,10 @@ Then begin the installation:
 
 :::code-group
 ```bash [Without GPU]
-cargo +nightly-2026-01-18 install --locked --force --path crates/cli --features tco
+cargo +nightly-2026-09-10 install --locked --force --path crates/cli --features tco
 ```
 ```bash [Nvidia GPU]
-cargo +nightly-2026-01-18 install --locked --force --path crates/cli --features tco,cuda
+cargo +nightly-2026-09-10 install --locked --force --path crates/cli --features tco,cuda
 ```
 :::
 
