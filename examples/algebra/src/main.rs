@@ -43,7 +43,8 @@ openvm_algebra_complex_macros::complex_init! {
 
 pub fn main() {
     let a = Complex1::new(Mod1::ZERO, Mod1::from_u32(0x3b8) * Mod1::from_u32(0x100000)); // a = -i in the corresponding field
-    let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006)); // b = -i in the corresponding field
+    let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006)); // b = -i in the corresponding
+                                                                   // field
     assert_eq!(a.clone() * &a * &a * &a * &a, a); // a^5 = a
     assert_eq!(b.clone() * &b * &b * &b * &b, b); // b^5 = b
 
