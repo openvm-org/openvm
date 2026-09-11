@@ -34,7 +34,7 @@ mkdir -p "$artifacts_dir"
 
 cargo openvm setup --force
 
-host_build_cmd=(cargo build --release --manifest-path "$host_manifest" --bin main)
+host_build_cmd=(cargo build --locked --release --manifest-path "$host_manifest" --bin main)
 if [[ -n "$host_features" ]]; then
   host_build_cmd+=(--features "$host_features")
 fi
