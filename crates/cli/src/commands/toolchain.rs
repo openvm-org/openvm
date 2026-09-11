@@ -45,7 +45,7 @@ pub enum ToolchainAction {
 
 #[derive(Parser)]
 pub struct InstallArgs {
-    /// Release tag to install (e.g. `openvm-nightly-2026-05-13`).
+    /// Release tag to install (nightly tags use `openvm-nightly-YYYY-MM-DD`).
     /// Defaults to `DEFAULT_RUSTUP_TOOLCHAIN_NAME`.
     #[arg(long)]
     pub version: Option<String>,
