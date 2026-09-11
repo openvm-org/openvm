@@ -66,5 +66,5 @@ pub fn get_elf_path_with_pkg(manifest_dir: &Path, pkg: &Package) -> PathBuf {
 
 pub fn read_elf_file(elf_path: &PathBuf) -> Result<Elf> {
     let data = read(elf_path)?;
-    Elf::decode(&data, MEM_SIZE as u32)
+    Elf::decode(&data, MEM_SIZE as u64)
 }

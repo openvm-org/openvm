@@ -3,14 +3,12 @@ use std::{
     marker::PhantomData,
 };
 
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_poseidon2_air::p3_symmetric::Permutation;
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 
-use crate::{
-    arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH},
-    system::memory::CHUNK,
-};
+use crate::arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH};
 
 pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<F> {
     assert_eq!(F::ORDER_U32, BabyBear::ORDER_U32, "F must be BabyBear");
@@ -29,13 +27,17 @@ pub struct Poseidon2Hasher<F: Clone> {
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32> Hasher<{ CHUNK }, F> for Poseidon2Hasher<F> {
-    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+impl<F: PrimeField32> Hasher<{ VM_DIGEST_WIDTH }, F> for Poseidon2Hasher<F> {
+    fn compress(
+        &self,
+        lhs: &[F; VM_DIGEST_WIDTH],
+        rhs: &[F; VM_DIGEST_WIDTH],
+    ) -> [F; VM_DIGEST_WIDTH] {
         let mut state = from_fn(|i| {
-            if i < CHUNK {
+            if i < VM_DIGEST_WIDTH {
                 BabyBear::from_u32(lhs[i].as_canonical_u32())
             } else {
-                BabyBear::from_u32(rhs[i - CHUNK].as_canonical_u32())
+                BabyBear::from_u32(rhs[i - VM_DIGEST_WIDTH].as_canonical_u32())
             }
         });
         self.poseidon2.permute_mut(&mut state);

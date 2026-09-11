@@ -1,11 +1,14 @@
 use std::{collections::HashMap, fs::File, path::Path};
 
-use aggregate::{PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL};
 use eyre::Result;
 use memmap2::Mmap;
 
 use crate::{
-    aggregate::{EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL},
+    aggregate::{
+        EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL, POSTFLIGHT_TIME_LABEL,
+        PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, SET_INITIAL_MEMORY_TIME_LABEL,
+        TRACE_GEN_TIME_LABEL,
+    },
     types::{Labels, Metric, MetricDb, MetricsFile},
 };
 
@@ -56,7 +59,9 @@ impl MetricDb {
             }
             // otherwise, calculate it from sub-components
             let execute_metered_time = get(EXECUTE_METERED_TIME_LABEL);
+            let set_initial_memory_time = get(SET_INITIAL_MEMORY_TIME_LABEL);
             let execute_preflight_time = get(EXECUTE_PREFLIGHT_TIME_LABEL);
+            let postflight_time = get(POSTFLIGHT_TIME_LABEL);
             let trace_gen_time = get(TRACE_GEN_TIME_LABEL);
             let prove_excl_trace_time = get(PROVE_EXCL_TRACE_TIME_LABEL);
             if let (
@@ -69,7 +74,9 @@ impl MetricDb {
                 prove_excl_trace_time,
             ) {
                 let total_time = execute_metered_time.unwrap_or(0.0)
+                    + set_initial_memory_time.unwrap_or(0.0)
                     + execute_preflight_time
+                    + postflight_time.unwrap_or(0.0)
                     + trace_gen_time
                     + prove_excl_trace_time;
                 metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
@@ -581,5 +588,34 @@ impl MetricDb {
         }
 
         markdown_output
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_proof_time_includes_each_frontend_phase() {
+        let labels = Labels(vec![("group".to_string(), "app_proof".to_string())]);
+        let mut db = MetricDb::default();
+        for (name, value) in [
+            (EXECUTE_METERED_TIME_LABEL, 1.0),
+            (SET_INITIAL_MEMORY_TIME_LABEL, 2.0),
+            (EXECUTE_PREFLIGHT_TIME_LABEL, 3.0),
+            (POSTFLIGHT_TIME_LABEL, 4.0),
+            (TRACE_GEN_TIME_LABEL, 5.0),
+            (PROVE_EXCL_TRACE_TIME_LABEL, 6.0),
+        ] {
+            db.add_to_flat_dict(labels.clone(), name.to_string(), value);
+        }
+
+        db.apply_aggregations();
+
+        let total = db.flat_dict[&labels]
+            .iter()
+            .find(|metric| metric.name == PROOF_TIME_LABEL)
+            .expect("fallback proof time should be generated");
+        assert_eq!(total.value, 21.0);
     }
 }

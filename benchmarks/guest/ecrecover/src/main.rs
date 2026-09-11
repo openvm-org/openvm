@@ -1,3 +1,11 @@
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+openvm::entry!(main);
+
 use alloy_primitives::Bytes;
 #[allow(unused_imports)] // needed by init! macro
 use k256::Secp256k1Point;

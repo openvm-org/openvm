@@ -3,71 +3,71 @@ mod guest_tests {
     use eyre::Result;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
-        arch::instructions::exe::VmExe,
-        utils::{air_test, test_system_config},
+        arch::{instructions::exe::VmExe, Streams},
+        utils::{air_test, air_test_impl, test_system_config},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG,
+        CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, P256_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine, openvm_stark_backend::SystemParams,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
     use crate::guest_tests::ecdsa_config::EcdsaBuilder;
 
-    type F = BabyBear;
-
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv64weierstrass_config(curves: Vec<CurveConfig>) -> Rv64WeierstrassConfig {
+        let mut config = Rv64WeierstrassConfig::new(curves);
         *config.as_mut() = test_system_config();
         config
     }
 
     #[test]
     fn test_add() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "add", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_mul() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "mul", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_linear_combination() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "linear_combination",
@@ -75,14 +75,14 @@ mod guest_tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -91,39 +91,24 @@ mod guest_tests {
         use openvm_circuit::{
             arch::{
                 AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
-                VmChipComplex, VmProverExtension,
+                VmChipComplex, VmField, VmProverExtension,
             },
             derive::VmConfig,
+            system::SystemChipInventory,
         };
+        use openvm_cpu_backend::{CpuBackend, CpuDevice};
         use openvm_ecc_circuit::{
-            CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig,
-            Rv32WeierstrassConfigExecutor,
+            CurveConfig, Rv64WeierstrassConfig, Rv64WeierstrassConfigExecutor,
+            Rv64WeierstrassCpuBuilder,
         };
-        use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
+        use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
+        use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
         use serde::{Deserialize, Serialize};
-        #[cfg(feature = "cuda")]
-        use {
-            openvm_circuit::{
-                arch::DenseRecordArena,
-                openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend},
-                system::cuda::SystemChipInventoryGPU,
-            },
-            openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-        };
-        #[cfg(not(feature = "cuda"))]
-        use {
-            openvm_circuit::{
-                arch::{MatrixRecordArena, VmField},
-                system::SystemChipInventory,
-            },
-            openvm_cpu_backend::{CpuBackend, CpuDevice},
-            openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val},
-        };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
-            #[config(generics = true)]
-            pub weierstrass: Rv32WeierstrassConfig,
+            #[config]
+            pub weierstrass: Rv64WeierstrassConfig,
             #[extension]
             pub sha2: Sha2,
         }
@@ -131,7 +116,7 @@ mod guest_tests {
         impl EcdsaConfig {
             pub fn new(curves: Vec<CurveConfig>) -> Self {
                 Self {
-                    weierstrass: Rv32WeierstrassConfig::new(curves),
+                    weierstrass: Rv64WeierstrassConfig::new(curves),
                     sha2: Default::default(),
                 }
             }
@@ -150,7 +135,6 @@ mod guest_tests {
         #[derive(Clone)]
         pub struct EcdsaBuilder;
 
-        #[cfg(not(feature = "cuda"))]
         impl<E, SC> VmBuilder<E> for EcdsaBuilder
         where
             SC: StarkProtocolConfig,
@@ -160,63 +144,23 @@ mod guest_tests {
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;
-            type RecordArena = MatrixRecordArena<Val<SC>>;
 
             fn create_chip_complex(
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<SC>,
                 device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-            ) -> Result<
-                VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-                ChipInventoryError,
-            > {
+            ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError>
+            {
                 let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-                    &Rv32WeierstrassBuilder,
+                    &Rv64WeierstrassCpuBuilder,
                     &config.weierstrass,
                     circuit,
                     device_ctx,
                 )?;
                 let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<E, _, _>::extend_prover(
-                    &Sha2ProverExt,
-                    &config.sha2,
-                    inventory,
-                )?;
-                Ok(chip_complex)
-            }
-        }
-
-        #[cfg(feature = "cuda")]
-        impl VmBuilder<BabyBearPoseidon2GpuEngine> for EcdsaBuilder {
-            type VmConfig = EcdsaConfig;
-            type SystemChipInventory = SystemChipInventoryGPU;
-            type RecordArena = DenseRecordArena;
-
-            fn create_chip_complex(
-                &self,
-                config: &EcdsaConfig,
-                circuit: AirInventory<BabyBearPoseidon2Config>,
-                device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
-            ) -> Result<
-                VmChipComplex<
-                    BabyBearPoseidon2Config,
-                    Self::RecordArena,
-                    GpuBackend,
-                    Self::SystemChipInventory,
-                >,
-                ChipInventoryError,
-            > {
-                let mut chip_complex =
-                    VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
-                        &Rv32WeierstrassBuilder,
-                        &config.weierstrass,
-                        circuit,
-                        device_ctx,
-                    )?;
-                let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
-                    &Sha2ProverExt,
+                VmProverExtension::<E, _>::extend_prover(
+                    &Sha2CpuProverExt,
                     &config.sha2,
                     inventory,
                 )?;
@@ -233,21 +177,31 @@ mod guest_tests {
             build_example_program_at_path(get_programs_dir!("tests/programs"), "ecdsa", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Sha2TranspilerExtension),
         )?;
-        air_test(EcdsaBuilder, config, openvm_exe);
+        let debug = std::env::var("OPENVM_SKIP_DEBUG") != Ok("1".to_string());
+        air_test_impl::<BabyBearPoseidon2CpuEngine, _>(
+            SystemParams::new_for_testing(22),
+            EcdsaBuilder,
+            config,
+            openvm_exe,
+            Streams::default(),
+            1,
+            debug,
+        )
+        .unwrap();
         Ok(())
     }
 
     #[test]
     fn test_scalar_sqrt() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "scalar_sqrt",
@@ -255,14 +209,14 @@ mod guest_tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 }

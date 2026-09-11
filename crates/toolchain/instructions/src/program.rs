@@ -5,20 +5,43 @@ use std::{
 };
 
 use itertools::Itertools;
-use openvm_stark_backend::p3_field::Field;
 use serde::{de::Deserializer, Deserialize, Serialize, Serializer};
 
 use crate::instruction::{DebugInfo, Instruction};
 
-pub const PC_BITS: usize = 30;
+/// Number of bits of a pc *index* (`pc / DEFAULT_PC_STEP`), the representation of the program
+/// counter used in circuits: trace columns, execution/program bus messages, and public values.
+/// Byte program counters span `PC_IDX_BITS + PC_STEP_BITS = 32` bits, which does not fit in a
+/// 31-bit field element; since instructions are `DEFAULT_PC_STEP`-aligned, circuits track pc
+/// indices.
+pub const PC_IDX_BITS: usize = 30;
 /// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
 /// from the fact that each standard RISC-V instruction is 32-bits = 4 bytes.
 pub const DEFAULT_PC_STEP: u32 = 4;
-pub const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
+/// log2 of [DEFAULT_PC_STEP].
+pub const PC_STEP_BITS: usize = DEFAULT_PC_STEP.trailing_zeros() as usize;
+/// Maximum allowed byte program counter: the last `DEFAULT_PC_STEP`-aligned address in the
+/// 32-bit byte address space.
+pub const MAX_ALLOWED_PC: u32 = u32::MAX - (DEFAULT_PC_STEP - 1);
+
+/// Converts a byte program counter (a multiple of [DEFAULT_PC_STEP]) into the pc index used by
+/// circuits. The index fits in [PC_IDX_BITS] bits, so it fits in a field element even though byte
+/// program counters span the full 32-bit range.
+#[inline(always)]
+pub const fn pc_to_idx(pc: u32) -> u32 {
+    debug_assert!(pc.is_multiple_of(DEFAULT_PC_STEP));
+    pc >> PC_STEP_BITS
+}
+
+/// Converts a pc index (see [pc_to_idx]) back into a byte program counter.
+#[inline(always)]
+pub const fn idx_to_pc(idx: u32) -> u32 {
+    debug_assert!(idx < (1 << PC_IDX_BITS));
+    idx << PC_STEP_BITS
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>"))]
-pub struct Program<F> {
+pub struct Program {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the
@@ -27,7 +50,7 @@ pub struct Program<F> {
         serialize_with = "serialize_instructions_and_debug_infos",
         deserialize_with = "deserialize_instructions_and_debug_infos"
     )]
-    pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
+    pub instructions_and_debug_infos: Vec<Option<(Instruction, Option<DebugInfo>)>>,
     pub pc_base: u32,
 }
 
@@ -37,7 +60,7 @@ pub struct ProgramDebugInfo {
     pc_base: u32,
 }
 
-impl<F: Field> Program<F> {
+impl Program {
     pub fn new_empty(pc_base: u32) -> Self {
         Self {
             instructions_and_debug_infos: vec![],
@@ -45,7 +68,7 @@ impl<F: Field> Program<F> {
         }
     }
 
-    pub fn new_without_debug_infos(instructions: &[Instruction<F>], pc_base: u32) -> Self {
+    pub fn new_without_debug_infos(instructions: &[Instruction], pc_base: u32) -> Self {
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
@@ -56,7 +79,7 @@ impl<F: Field> Program<F> {
     }
 
     pub fn new_without_debug_infos_with_option(
-        instructions: &[Option<Instruction<F>>],
+        instructions: &[Option<Instruction>],
         pc_base: u32,
     ) -> Self {
         Self {
@@ -71,7 +94,7 @@ impl<F: Field> Program<F> {
     /// We assume that pc_start = pc_base = 0 everywhere except the RISC-V programs, until we need
     /// otherwise We use [DEFAULT_PC_STEP] for consistency with RISC-V
     pub fn from_instructions_and_debug_infos(
-        instructions: &[Instruction<F>],
+        instructions: &[Instruction],
         debug_infos: &[Option<DebugInfo>],
     ) -> Self {
         Self {
@@ -95,7 +118,7 @@ impl<F: Field> Program<F> {
         }
     }
 
-    pub fn from_instructions(instructions: &[Instruction<F>]) -> Self {
+    pub fn from_instructions(instructions: &[Instruction]) -> Self {
         Self::new_without_debug_infos(instructions, 0)
     }
 
@@ -107,7 +130,7 @@ impl<F: Field> Program<F> {
         self.instructions_and_debug_infos.is_empty()
     }
 
-    pub fn defined_instructions(&self) -> Vec<Instruction<F>> {
+    pub fn defined_instructions(&self) -> Vec<Instruction> {
         self.instructions_and_debug_infos
             .iter()
             .flatten()
@@ -120,7 +143,7 @@ impl<F: Field> Program<F> {
         self.defined_instructions().len()
     }
 
-    pub fn enumerate_by_pc(&self) -> Vec<(u32, Instruction<F>, Option<DebugInfo>)> {
+    pub fn enumerate_by_pc(&self) -> Vec<(u32, Instruction, Option<DebugInfo>)> {
         self.instructions_and_debug_infos
             .iter()
             .enumerate()
@@ -140,7 +163,7 @@ impl<F: Field> Program<F> {
     pub fn get_instruction_and_debug_info(
         &self,
         index: usize,
-    ) -> Option<&(Instruction<F>, Option<DebugInfo>)> {
+    ) -> Option<&(Instruction, Option<DebugInfo>)> {
         self.instructions_and_debug_infos
             .get(index)
             .and_then(|x| x.as_ref())
@@ -148,24 +171,24 @@ impl<F: Field> Program<F> {
 
     pub fn push_instruction_and_debug_info(
         &mut self,
-        instruction: Instruction<F>,
+        instruction: Instruction,
         debug_info: Option<DebugInfo>,
     ) {
         self.instructions_and_debug_infos
             .push(Some((instruction, debug_info)));
     }
 
-    pub fn push_instruction(&mut self, instruction: Instruction<F>) {
+    pub fn push_instruction(&mut self, instruction: Instruction) {
         self.push_instruction_and_debug_info(instruction, None);
     }
 
-    pub fn append(&mut self, other: Program<F>) {
+    pub fn append(&mut self, other: Program) {
         self.instructions_and_debug_infos
             .extend(other.instructions_and_debug_infos);
     }
 }
 
-impl<F> Program<F> {
+impl Program {
     pub fn debug_infos(&self) -> ProgramDebugInfo {
         let debug_infos = self
             .instructions_and_debug_infos
@@ -179,7 +202,7 @@ impl<F> Program<F> {
     }
 }
 
-impl<F: Field> Display for Program<F> {
+impl Display for Program {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.defined_instructions().iter() {
             let Instruction {
@@ -203,8 +226,8 @@ impl ProgramDebugInfo {
     /// If `pc` is out of bounds.
     pub fn get(&self, pc: u32) -> &Option<DebugInfo> {
         let pc_base = self.pc_base;
-        let pc_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
-        &self.inner[pc_idx]
+        let slot_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
+        &self.inner[slot_idx]
     }
 }
 
@@ -216,7 +239,7 @@ impl Deref for ProgramDebugInfo {
     }
 }
 
-pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
+pub fn display_program_with_pc(program: &Program) {
     for (pc, instruction) in program.defined_instructions().iter().enumerate() {
         let Instruction {
             opcode,
@@ -235,8 +258,8 @@ pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
 // `debug_info` is based on the symbol table of the binary. Usually serializing `debug_info` is not
 // meaningful because the program is executed by another binary. So here we only serialize
 // instructions.
-fn serialize_instructions_and_debug_infos<F: Serialize, S: Serializer>(
-    data: &[Option<(Instruction<F>, Option<DebugInfo>)>],
+fn serialize_instructions_and_debug_infos<S: Serializer>(
+    data: &[Option<(Instruction, Option<DebugInfo>)>],
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     let mut ins_data = Vec::with_capacity(data.len());
@@ -250,12 +273,12 @@ fn serialize_instructions_and_debug_infos<F: Serialize, S: Serializer>(
 }
 
 #[allow(clippy::type_complexity)]
-fn deserialize_instructions_and_debug_infos<'de, F: Deserialize<'de>, D: Deserializer<'de>>(
+fn deserialize_instructions_and_debug_infos<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> Result<Vec<Option<(Instruction<F>, Option<DebugInfo>)>>, D::Error> {
-    let (inst_data, total_len): (Vec<(Instruction<F>, u32)>, u32) =
+) -> Result<Vec<Option<(Instruction, Option<DebugInfo>)>>, D::Error> {
+    let (inst_data, total_len): (Vec<(Instruction, u32)>, u32) =
         Deserialize::deserialize(deserializer)?;
-    let mut ret: Vec<Option<(Instruction<F>, Option<DebugInfo>)>> = Vec::new();
+    let mut ret: Vec<Option<(Instruction, Option<DebugInfo>)>> = Vec::new();
     ret.resize_with(total_len as usize, || None);
     for (inst, i) in inst_data {
         ret[i as usize] = Some((inst, None));
@@ -266,18 +289,24 @@ fn deserialize_instructions_and_debug_infos<'de, F: Deserialize<'de>, D: Deseria
 #[cfg(test)]
 mod tests {
     use itertools::izip;
-    use p3_baby_bear::BabyBear;
 
     use super::*;
-    use crate::VmOpcode;
-
-    type F = BabyBear;
+    use crate::{instruction::InstructionOperand, VmOpcode};
 
     #[test]
     fn test_program_serde() {
-        let mut program = Program::<F>::new_empty(0);
+        let mut program = Program::new_empty(0);
         program.instructions_and_debug_infos.push(Some((
-            Instruction::from_isize(VmOpcode::from_usize(113), 1, 2, 3, 4, 5),
+            Instruction::new(
+                VmOpcode::from_usize(113),
+                InstructionOperand::from_i32(InstructionOperand::MIN),
+                -1i8,
+                0u8,
+                1u8,
+                InstructionOperand::from_i32(InstructionOperand::MAX),
+                -2i8,
+                2u8,
+            ),
             None,
         )));
         program.instructions_and_debug_infos.push(None);
@@ -292,7 +321,7 @@ mod tests {
         )));
         program.instructions_and_debug_infos.push(None);
         let bytes = bitcode::serialize(&program).unwrap();
-        let de_program: Program<F> = bitcode::deserialize(&bytes).unwrap();
+        let de_program: Program = bitcode::deserialize(&bytes).unwrap();
         for (expected_ins, ins) in izip!(
             &program.instructions_and_debug_infos,
             &de_program.instructions_and_debug_infos

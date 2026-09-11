@@ -127,8 +127,13 @@ impl Encoder {
 
     /// Get the point coordinates that correspond to the flag at index flag_idx
     pub fn get_flag_pt(&self, flag_idx: usize) -> Vec<u32> {
+        self.flag_pt(flag_idx).to_vec()
+    }
+
+    /// Borrow the point coordinates that correspond to the flag at index `flag_idx`.
+    pub fn flag_pt(&self, flag_idx: usize) -> &[u32] {
         assert!(flag_idx < self.flag_cnt, "flag index out of range");
-        self.pts[flag_idx + self.reserve_invalid as usize].clone()
+        &self.pts[flag_idx + self.reserve_invalid as usize]
     }
 
     /// Returns an expression that is 1 if the variables encode a valid flag and 0 if they encode

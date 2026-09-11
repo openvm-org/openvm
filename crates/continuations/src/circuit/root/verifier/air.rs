@@ -52,7 +52,7 @@ pub struct RootVerifierPvsCols<F> {
 
     pub program_commit_hash: [F; DIGEST_SIZE],
     pub initial_root_hash: [F; DIGEST_SIZE],
-    pub initial_pc_hash: [F; DIGEST_SIZE],
+    pub initial_pc_idx_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
 
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
@@ -274,8 +274,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * The app_exe_commit is a commit to the app program, initial memory state, and initial
-         * PC. Child public values program_commit, initial_root, and initial_pc are individually
-         * hashed and then permuted together to produce app_exe_commit.
+         * PC index. Child public values program_commit, initial_root, and initial_pc_idx are
+         * individually hashed and then permuted together to produce app_exe_commit.
          */
         self.poseidon2_compress_bus.lookup_key(
             builder,
@@ -305,10 +305,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: pad_slice_to_poseidon2_input(
-                    &[local.child_vm_pvs.initial_pc.into()],
+                    &[local.child_vm_pvs.initial_pc_idx.into()],
                     AB::Expr::ZERO,
                 ),
-                output: local.initial_pc_hash.map(Into::into),
+                output: local.initial_pc_idx_hash.map(Into::into),
             },
             AB::F::ONE,
         );
@@ -330,7 +330,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
                     local.intermediate_exe_commit,
-                    local.initial_pc_hash,
+                    local.initial_pc_idx_hash,
                 )
                 .map(Into::into),
                 output: app_exe_commit.map(Into::into),

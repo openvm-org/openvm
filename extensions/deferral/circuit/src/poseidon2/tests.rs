@@ -11,7 +11,7 @@ use crate::poseidon2::DeferralPoseidon2Chip;
 fn deferral_poseidon2_empty_trace() {
     let chip = DeferralPoseidon2Chip::<BabyBear>::new(Poseidon2Config::default());
     for _ in 0..2 {
-        let ctx: AirProvingContext<CpuBackend<TestSC>> = chip.generate_proving_ctx(());
+        let ctx: AirProvingContext<CpuBackend<TestSC>> = chip.generate_proving_ctx();
         assert_eq!(
             ctx.common_main.height(),
             0,

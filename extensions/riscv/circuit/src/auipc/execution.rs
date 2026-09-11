@@ -1,0 +1,167 @@
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
+
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, riscv::REGISTER_AS};
+use openvm_riscv_transpiler::AuipcOpcode::AUIPC;
+use openvm_stark_backend::p3_field::PrimeField32;
+
+use super::{run_auipc, AuipcExecutor};
+use crate::adapters::byte_ptr_to_u16_ptr_value;
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct AuiPcPreCompute {
+    imm: u32,
+    a: u8,
+}
+
+impl AuipcExecutor {
+    fn pre_compute_impl(
+        &self,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut AuiPcPreCompute,
+    ) -> Result<(), StaticProgramError> {
+        let Instruction { a, c: imm, d, .. } = inst;
+        if d.as_u32() != REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        let imm = imm.as_u32();
+        let data: &mut AuiPcPreCompute = data.borrow_mut();
+        *data = AuiPcPreCompute {
+            imm,
+            a: a.as_u32() as u8,
+        };
+        Ok(())
+    }
+}
+
+impl<F> InterpreterExecutor<F> for AuipcExecutor
+where
+    F: PrimeField32,
+{
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{AUIPC:?}")
+    }
+
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<AuiPcPreCompute>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    #[inline(always)]
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
+        &self,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
+        let data: &mut AuiPcPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl::<_>)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<Handler<Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut AuiPcPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_handler::<_>)
+    }
+}
+
+impl<F> InterpreterMeteredExecutor<F> for AuipcExecutor
+where
+    F: PrimeField32,
+{
+    fn metered_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<AuiPcPreCompute>>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    fn metered_pre_compute<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<AuiPcPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_>)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction,
+        data: &mut [u8],
+    ) -> Result<Handler<Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<AuiPcPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_handler::<_>)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
+    pre_compute: &AuiPcPreCompute,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) {
+    let pc = exec_state.pc();
+    let rd = run_auipc(pc, pre_compute.imm);
+    exec_state.vm_write(
+        REGISTER_AS,
+        byte_ptr_to_u16_ptr_value(pre_compute.a as u32),
+        &rd,
+    );
+
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+}
+
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
+    pre_compute: *const u8,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) {
+    let pre_compute: &AuiPcPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<AuiPcPreCompute>()).borrow();
+    execute_e12_impl(pre_compute, exec_state);
+}
+
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
+    pre_compute: *const u8,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<AuiPcPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AuiPcPreCompute>>())
+            .borrow();
+    exec_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl(&pre_compute.data, exec_state);
+}

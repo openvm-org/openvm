@@ -1,6 +1,8 @@
 mod curve;
 mod final_exp;
 mod line;
+#[cfg(feature = "mcl")]
+mod mcl;
 mod miller_loop;
 
 pub use curve::*;

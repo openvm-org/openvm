@@ -12,27 +12,56 @@ use openvm_stark_backend::{
 use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
 #[derive(Clone, Debug, ColumnsAir)]
-#[columns_via(MemoryMerkleCols<u8, CHUNK>)]
-pub struct MemoryMerkleAir<const CHUNK: usize> {
+#[columns_via(MemoryMerkleCols<u8, DIGEST_WIDTH>)]
+pub struct MemoryMerkleAir<const DIGEST_WIDTH: usize> {
     pub memory_dimensions: MemoryDimensions,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
 }
 
-impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
-impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
+/// Returns the direction and multiplicity of one child interaction.
+///
+/// On initial rows, `mode` is the number of initial claims consumed. On final rows,
+/// mode 0 selects the final state and mode 1 selects the initial state.
+///
+/// +---------+---------------+------------+-----------------+--------------+
+/// | Row     | row direction | mode       | child direction | multiplicity |
+/// +---------+---------------+------------+-----------------+--------------+
+/// | Initial |             1 | 0, 1, or 2 |               1 |        -mode |
+/// | Final   |            -1 |          0 |              -1 |            1 |
+/// | Final   |            -1 |          1 |               1 |            1 |
+/// | Padding |             0 |          0 |               0 |            0 |
+/// +---------+---------------+------------+-----------------+--------------+
+fn child_bus_interaction<AB: InteractionBuilder>(
+    row_direction: AB::Var,
+    mode: AB::Var,
+) -> (AB::Expr, AB::Expr) {
+    let child_direction = row_direction + mode * (AB::Expr::ONE - row_direction);
+
+    // The numerator is -2*mode on initial rows, 2 on final rows, and 0 on padding rows.
+    let multiplicity = (row_direction * (row_direction - AB::Expr::ONE)
+        - mode * (AB::Expr::ONE + row_direction))
+        * AB::Expr::from(AB::F::TWO.inverse());
+
+    (child_direction, multiplicity)
+}
+
+impl<const DIGEST_WIDTH: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<DIGEST_WIDTH> {}
+impl<const DIGEST_WIDTH: usize, F: Field> BaseAir<F> for MemoryMerkleAir<DIGEST_WIDTH> {
     fn width(&self) -> usize {
-        MemoryMerkleCols::<F, CHUNK>::width()
+        MemoryMerkleCols::<F, DIGEST_WIDTH>::width()
     }
 }
-impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, F: Field> BaseAirWithPublicValues<F>
+    for MemoryMerkleAir<DIGEST_WIDTH>
+{
     fn num_public_values(&self) -> usize {
-        MemoryMerklePvs::<F, CHUNK>::width()
+        MemoryMerklePvs::<F, DIGEST_WIDTH>::width()
     }
 }
 
-impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for MemoryMerkleAir<CHUNK>
+impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
+    for MemoryMerkleAir<DIGEST_WIDTH>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -40,8 +69,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             main.row_slice(0).expect("window should have two elements"),
             main.row_slice(1).expect("window should have two elements"),
         );
-        let local: &MemoryMerkleCols<_, CHUNK> = (*local).borrow();
-        let next: &MemoryMerkleCols<_, CHUNK> = (*next).borrow();
+        let local: &MemoryMerkleCols<_, DIGEST_WIDTH> = (*local).borrow();
+        let next: &MemoryMerkleCols<_, DIGEST_WIDTH> = (*next).borrow();
 
         // `expand_direction` should be -1, 0, 1
         builder.assert_eq(
@@ -49,16 +78,19 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
-        builder.assert_bool(local.left_direction_different);
-        builder.assert_bool(local.right_direction_different);
-
-        // if `expand_direction` != -1, then `*_direction_different` should be 0
-        builder
-            .when_ne(local.expand_direction, AB::F::NEG_ONE)
-            .assert_zero(local.left_direction_different);
-        builder
-            .when_ne(local.expand_direction, AB::F::NEG_ONE)
-            .assert_zero(local.right_direction_different);
+        // Child modes depend on `expand_direction`.
+        for m in [local.left_child_mode, local.right_child_mode] {
+            // Initial rows allow modes in {0, 1, 2}.
+            builder.assert_zero(m * (AB::Expr::ONE - m) * (AB::Expr::TWO - m));
+            // Final and padding rows only allow modes in {0, 1}.
+            builder
+                .when_ne(local.expand_direction, AB::Expr::ONE)
+                .assert_zero(m * (AB::Expr::ONE - m));
+            // Padding rows must have mode 0.
+            builder
+                .when(m)
+                .assert_zero(AB::Expr::ONE - local.expand_direction * local.expand_direction);
+        }
 
         // rows should be sorted in descending order
         // independently by `parent_height`, `height_section`, `is_root`
@@ -123,11 +155,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             .assert_eq(local.parent_height * local.parent_height_inv, AB::F::ONE);
 
         // constrain public values
-        let &MemoryMerklePvs::<_, CHUNK> {
+        let &MemoryMerklePvs::<_, DIGEST_WIDTH> {
             initial_root,
             final_root,
         } = builder.public_values().borrow();
-        for i in 0..CHUNK {
+        for i in 0..DIGEST_WIDTH {
             builder
                 .when_first_row()
                 .assert_eq(local.parent_hash[i], initial_root[i]);
@@ -140,11 +172,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
     }
 }
 
-impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &MemoryMerkleCols<AB::Var, CHUNK>,
+        local: &MemoryMerkleCols<AB::Var, DIGEST_WIDTH>,
     ) {
         // interaction does not occur for first two rows;
         // for those, parent hash value comes from public values
@@ -162,23 +194,27 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             (AB::Expr::ONE - local.is_root) * local.expand_direction,
         );
 
+        let (left_direction, left_multiplicity) =
+            child_bus_interaction::<AB>(local.expand_direction, local.left_child_mode);
         self.merkle_bus.interact(
             builder,
             [
-                local.expand_direction + (local.left_direction_different * AB::F::TWO),
+                left_direction,
                 local.parent_height - AB::F::ONE,
                 local.parent_as_label * (AB::Expr::ONE + local.height_section),
                 local.parent_address_label * (AB::Expr::TWO - local.height_section),
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            -local.expand_direction.into(),
+            left_multiplicity,
         );
 
+        let (right_direction, right_multiplicity) =
+            child_bus_interaction::<AB>(local.expand_direction, local.right_child_mode);
         self.merkle_bus.interact(
             builder,
             [
-                local.expand_direction + (local.right_direction_different * AB::F::TWO),
+                right_direction,
                 local.parent_height - AB::F::ONE,
                 (local.parent_as_label * (AB::Expr::ONE + local.height_section))
                     + local.height_section,
@@ -187,7 +223,7 @@ impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            -local.expand_direction.into(),
+            right_multiplicity,
         );
 
         let compress_fields = iter::empty()

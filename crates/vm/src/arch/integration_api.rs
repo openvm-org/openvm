@@ -2,23 +2,16 @@ use std::{array::from_fn, borrow::Borrow, marker::PhantomData};
 
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
+    p3_matrix::Matrix,
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    arch::RowMajorMatrixArena,
-    primitives::Chip,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory, SharedMemoryHelper},
-};
+use crate::system::memory::SharedMemoryHelper;
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -49,8 +42,8 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
         interface: AdapterAirContext<AB::Expr, Self::Interface>,
     );
 
-    /// Return the `from_pc` expression.
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
+    /// Return the expression for the pc index (`pc_to_idx(from_pc)`) of the instruction.
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var;
 }
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
@@ -58,12 +51,12 @@ where
     AB: AirBuilder,
     I: VmAdapterInterface<AB::Expr>,
 {
-    /// Returns `(to_pc, interface)`.
+    /// Returns `(to_pc_idx, interface)`. PC values on the buses are PC indices (see `pc_to_idx`).
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        from_pc: AB::Var,
+        from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
 
     /// The offset the opcodes by this chip start from.
@@ -85,130 +78,19 @@ where
 }
 
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
-    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<T>,
+    /// Circuit PC index after this instruction. Leave as `None` to allow the adapter to choose
+    /// the next index automatically.
+    pub to_pc_idx: Option<T>,
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
 }
 
-/// Helper trait for CPU tracegen.
-pub trait TraceFiller<F>: Send + Sync {
-    /// Populates `trace`. This function will always be called after
-    /// [`PreflightExecutor::execute`](crate::arch::execution::PreflightExecutor::execute), so the
-    /// `trace` should already contain the records necessary to fill in the rest of it.
-    fn fill_trace(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut RowMajorMatrix<F>,
-        rows_used: usize,
-    ) where
-        F: Send + Sync + Clone,
-    {
-        let width = trace.width();
-        trace.values[..rows_used * width]
-            .par_chunks_exact_mut(width)
-            .for_each(|row_slice| {
-                self.fill_trace_row(mem_helper, row_slice);
-            });
-        trace.values[rows_used * width..]
-            .par_chunks_exact_mut(width)
-            .for_each(|row_slice| {
-                self.fill_dummy_trace_row(row_slice);
-            });
-    }
-
-    /// Populates `row_slice`. This function will always be called after
-    /// [`PreflightExecutor::execute`](crate::arch::execution::PreflightExecutor::execute), so the
-    /// `row_slice` should already contain context necessary to fill in the rest of the row.
-    /// This function will be called for each row in the trace which is being used, and for all
-    /// other rows in the trace see `fill_dummy_trace_row`.
-    ///
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
-        unreachable!("fill_trace_row is not implemented")
-    }
-
-    /// Populates `row_slice`. This function will be called on dummy rows.
-    /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
-    ///
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_dummy_trace_row(&self, _row_slice: &mut [F]) {
-        // By default, the row is filled with zeroes
-    }
-
-    /// Returns a list of public values to publish.
-    fn generate_public_values(&self) -> Vec<F> {
-        vec![]
-    }
-}
-
-/// We want a blanket implementation of `Chip<MatrixRecordArena, CpuBackend>` on any struct that
-/// implements [TraceFiller] but due to Rust orphan rules, we need a wrapper struct.
-// @dev: You could make a macro, but it's hard to handle generics in the struct definition.
+/// Couples an instruction-specific trace generator with the shared memory auxiliary-column helper.
 #[derive(derive_new::new)]
 pub struct VmChipWrapper<F, FILLER> {
     pub inner: FILLER,
     pub mem_helper: SharedMemoryHelper<F>,
-}
-
-impl<SC, FILLER, RA> Chip<RA, CpuBackend<SC>> for VmChipWrapper<Val<SC>, FILLER>
-where
-    SC: StarkProtocolConfig,
-    FILLER: TraceFiller<Val<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-{
-    fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let rows_used = arena.trace_offset() / arena.width();
-        let mut trace = arena.into_matrix();
-        let mem_helper = self.mem_helper.as_borrowed();
-        self.inner.fill_trace(&mem_helper, &mut trace, rows_used);
-
-        AirProvingContext::simple(trace, self.inner.generate_public_values())
-    }
-}
-
-/// A helper trait for expressing generic state accesses within the implementation of
-/// [PreflightExecutor](crate::arch::execution::PreflightExecutor). Note that this is only a helper
-/// trait when the same interface of state access is reused or shared by multiple implementations.
-/// It is not required to implement this trait if it is easier to implement the
-/// [PreflightExecutor](crate::arch::execution::PreflightExecutor) trait directly without this
-/// trait.
-pub trait AdapterTraceExecutor<F>: Clone {
-    const WIDTH: usize;
-    type ReadData;
-    type WriteData;
-    // @dev This can either be a &mut _ type or a struct with &mut _ fields.
-    // The latter is helpful if we want to directly write certain values in place into a trace
-    // matrix.
-    type RecordMut<'a>
-    where
-        Self: 'a;
-
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
-
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut Self::RecordMut<'_>,
-    ) -> Self::ReadData;
-
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut Self::RecordMut<'_>,
-    );
-}
-
-// NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
-// `WIDTH`.
-pub trait AdapterTraceFiller<F>: Send + Sync {
-    const WIDTH: usize;
-    /// Post-execution filling of rest of adapter row.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
 
 // ============================== Adapter|Core Air Wrapper ===============================
@@ -271,9 +153,11 @@ where
         let local: &[AB::Var] = (*local).borrow();
         let (local_adapter, local_core) = local.split_at(self.adapter.width());
 
-        let ctx = self
-            .core
-            .eval(builder, local_core, self.adapter.get_from_pc(local_adapter));
+        let ctx = self.core.eval(
+            builder,
+            local_core,
+            self.adapter.get_from_pc_idx(local_adapter),
+        );
         self.adapter.eval(builder, local_adapter, ctx);
     }
 }
@@ -403,7 +287,7 @@ pub struct MinimalInstruction<T> {
     pub opcode: T,
 }
 
-// This ProcessedInstruction is used by rv32_rdwrite
+// This ProcessedInstruction is used by rdwrite
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct ImmInstruction<T> {
@@ -413,7 +297,7 @@ pub struct ImmInstruction<T> {
     pub immediate: T,
 }
 
-// This ProcessedInstruction is used by rv32_jalr
+// This ProcessedInstruction is used by jalr
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct SignedImmInstruction<T> {
@@ -469,7 +353,7 @@ mod conversions {
             >,
         ) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -500,7 +384,7 @@ mod conversions {
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -558,14 +442,22 @@ mod conversions {
                 >,
             >,
         ) -> Self {
-            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            const {
+                assert!(
+                    BASIC_NUM_READS == NUM_READS * BLOCKS_PER_READ,
+                    "BASIC_NUM_READS must equal NUM_READS * BLOCKS_PER_READ"
+                );
+                assert!(
+                    BASIC_NUM_WRITES == BLOCKS_PER_WRITE,
+                    "BASIC_NUM_WRITES must equal BLOCKS_PER_WRITE"
+                );
+            }
             let mut reads_it = ctx.reads.into_iter();
             let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
-            assert_eq!(BASIC_NUM_WRITES, BLOCKS_PER_WRITE);
             let mut writes_it = ctx.writes.into_iter();
             let writes = from_fn(|_| writes_it.next().unwrap());
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads,
                 writes,
                 instruction: ctx.instruction.into(),
@@ -593,21 +485,28 @@ mod conversions {
     {
         /// ## Panics
         /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-        /// This is a runtime assertion until Rust const generics expressions are stabilized.
         fn from(
             ctx: AdapterAirContext<
                 T,
                 BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>> {
-            assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
-            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            const {
+                assert!(
+                    READ_CELLS == NUM_READS * READ_SIZE,
+                    "READ_CELLS must equal NUM_READS * READ_SIZE"
+                );
+                assert!(
+                    WRITE_CELLS == NUM_WRITES * WRITE_SIZE,
+                    "WRITE_CELLS must equal NUM_WRITES * WRITE_SIZE"
+                );
+            }
             let mut reads_it = ctx.reads.into_iter().flatten();
             let reads = from_fn(|_| reads_it.next().unwrap());
             let mut writes_it = ctx.writes.into_iter().flatten();
             let writes = from_fn(|_| writes_it.next().unwrap());
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads,
                 writes,
                 instruction: ctx.instruction,
@@ -633,10 +532,9 @@ mod conversions {
     {
         /// ## Panics
         /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-        /// This is a runtime assertion until Rust const generics expressions are stabilized.
         fn from(
             AdapterAirContext {
-                to_pc,
+                to_pc_idx,
                 reads,
                 writes,
                 instruction,
@@ -645,8 +543,16 @@ mod conversions {
             T,
             BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         > {
-            assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
-            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            const {
+                assert!(
+                    READ_CELLS == NUM_READS * READ_SIZE,
+                    "READ_CELLS must equal NUM_READS * READ_SIZE"
+                );
+                assert!(
+                    WRITE_CELLS == NUM_WRITES * WRITE_SIZE,
+                    "WRITE_CELLS must equal NUM_WRITES * WRITE_SIZE"
+                );
+            }
             let mut reads_it = reads.into_iter();
             let reads: [[T; READ_SIZE]; NUM_READS] =
                 from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
@@ -654,7 +560,7 @@ mod conversions {
             let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
                 from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
             AdapterAirContext {
-                to_pc,
+                to_pc_idx,
                 reads,
                 writes,
                 instruction,
@@ -765,7 +671,7 @@ mod conversions {
             >,
         ) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -791,7 +697,7 @@ mod conversions {
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
@@ -806,7 +712,7 @@ mod conversions {
     {
         fn from(ctx: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads: ctx.reads.to_vec().into(),
                 writes: ctx.writes.to_vec().into(),
                 instruction: ctx.instruction.into(),
@@ -876,11 +782,16 @@ mod conversions {
                 BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
             >,
         ) -> Self {
-            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            const {
+                assert!(
+                    BASIC_NUM_READS == NUM_READS * BLOCKS_PER_READ,
+                    "BASIC_NUM_READS must equal NUM_READS * BLOCKS_PER_READ"
+                );
+            }
             let mut reads_it = ctx.reads.into_iter();
             let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
             AdapterAirContext {
-                to_pc: ctx.to_pc,
+                to_pc_idx: ctx.to_pc_idx,
                 reads,
                 writes: (),
                 instruction: ctx.instruction,

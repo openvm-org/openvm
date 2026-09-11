@@ -1,0 +1,199 @@
+use std::borrow::Borrow;
+
+use openvm_circuit::arch::{AdapterAirContext, VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    encoder::Encoder,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
+use openvm_riscv_transpiler::LoadStoreOpcode::LOADB;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::BaseAir,
+    p3_field::{Field, PrimeCharacteristicRing},
+    BaseAirWithPublicValues,
+};
+
+use crate::adapters::{
+    shift_encoder, LoadByteAdapterFiller, LoadByteInstruction, BYTE_BITS,
+    BYTE_SHIFT_SELECTOR_WIDTH, BYTE_SIGN_BIT,
+};
+
+/// Handles signed byte loads by decomposing the selected u16 cell and sign-extending the chosen
+/// byte.
+#[repr(C)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
+pub struct LoadSignExtendByteCoreCols<T> {
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
+    /// The sign bit that is extended to the remaining cells.
+    pub data_most_sig_bit: T,
+    /// Low byte of the selected memory cell. The high byte is derived in the AIR.
+    pub read_cell_lo_byte: T,
+    pub read_data: [T; BLOCK_FE_WIDTH],
+}
+
+#[derive(Debug, Clone, ColumnsAir)]
+#[columns_via(LoadSignExtendByteCoreCols<u8>)]
+pub struct LoadSignExtendByteCoreAir {
+    pub offset: usize,
+    encoder: Encoder,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    range_bus: VariableRangeCheckerBus,
+}
+
+impl LoadSignExtendByteCoreAir {
+    pub fn new(
+        offset: usize,
+        bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
+    ) -> Self {
+        Self {
+            offset,
+            encoder: shift_encoder(),
+            bitwise_lookup_bus,
+            range_bus,
+        }
+    }
+}
+
+impl<F: Field> BaseAir<F> for LoadSignExtendByteCoreAir {
+    fn width(&self) -> usize {
+        LoadSignExtendByteCoreCols::<F>::width()
+    }
+}
+
+impl<F: Field> BaseAirWithPublicValues<F> for LoadSignExtendByteCoreAir {}
+
+impl<AB, I> VmCoreAir<AB, I> for LoadSignExtendByteCoreAir
+where
+    AB: InteractionBuilder,
+    I: VmAdapterInterface<AB::Expr>,
+    I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
+    I::Writes: From<[AB::Expr; BLOCK_FE_WIDTH]>,
+    I::ProcessedInstruction: From<LoadByteInstruction<AB::Expr>>,
+{
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local_core: &[AB::Var],
+        _from_pc_idx: AB::Var,
+    ) -> AdapterAirContext<AB::Expr, I> {
+        let cols: &LoadSignExtendByteCoreCols<AB::Var> = (*local_core).borrow();
+        self.encoder.eval(builder, &cols.selector);
+        let flags = self.encoder.flags::<AB>(&cols.selector);
+        let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
+
+        builder.assert_bool(cols.data_most_sig_bit);
+
+        // For cell `i`, flags `2i` and `2i + 1` select its low and high byte, respectively.
+        // even_shift_selector = Σᵢ flag[2i].
+        // odd_shift_selector = Σᵢ flag[2i + 1].
+        // even_selected_cell = Σᵢ flag[2i] * read_data[i].
+        // odd_selected_cell = Σᵢ flag[2i + 1] * read_data[i].
+        // Keeping the selections separate makes every flag (degree 2) * cell term degree 3.
+        let (even_shift_selector, odd_shift_selector, even_selected_cell, odd_selected_cell) =
+            flags.chunks_exact(2).enumerate().fold(
+                (
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                ),
+                |(even, odd, even_cell, odd_cell), (cell, flags)| {
+                    let even_flag = flags[0].clone();
+                    let odd_flag = flags[1].clone();
+                    let read_cell = cols.read_data[cell];
+                    (
+                        even + even_flag.clone(),
+                        odd + odd_flag.clone(),
+                        even_cell + even_flag * read_cell,
+                        odd_cell + odd_flag * read_cell,
+                    )
+                },
+            );
+        let inv_2_pow_8 = AB::F::from_u32(1 << BYTE_BITS).inverse();
+        // selected_cell = lo + 2^8 * hi.
+        let selected_cell = even_selected_cell + odd_selected_cell.clone();
+        let read_cell_hi_byte = (selected_cell - cols.read_cell_lo_byte) * inv_2_pow_8;
+        self.bitwise_lookup_bus
+            .send_range(cols.read_cell_lo_byte, read_cell_hi_byte)
+            .eval(builder, is_valid.clone());
+
+        // selected_byte = even_shift_selector * lo
+        //               + (odd_selected_cell - odd_shift_selector * lo) / 2^8.
+        let odd_selected_hi_byte =
+            (odd_selected_cell - odd_shift_selector * cols.read_cell_lo_byte) * inv_2_pow_8;
+        let selected_byte = even_shift_selector * cols.read_cell_lo_byte + odd_selected_hi_byte;
+        // Constrain that data_most_sig_bit matches the selected source byte.
+        self.range_bus
+            .range_check(
+                selected_byte.clone()
+                    - cols.data_most_sig_bit * AB::Expr::from_u32(BYTE_SIGN_BIT as u32),
+                BYTE_BITS - 1,
+            )
+            .eval(builder, is_valid.clone());
+
+        let sign_cell = cols.data_most_sig_bit * AB::Expr::from_u32(u16::MAX as u32);
+        let write_data = std::array::from_fn(|i| {
+            if i == 0 {
+                selected_byte.clone() + cols.data_most_sig_bit * AB::Expr::from_u32(0xff00)
+            } else {
+                sign_cell.clone()
+            }
+        });
+        // load_shift_amount = Σₛ s * flag[s].
+        let load_shift_amount = flags
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
+                acc + flag.clone() * AB::Expr::from_usize(shift)
+            });
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            is_valid.clone() * AB::Expr::from_u8(LOADB as u8),
+        );
+
+        AdapterAirContext {
+            to_pc_idx: None,
+            reads: cols.read_data.map(Into::into).into(),
+            writes: write_data.into(),
+            instruction: LoadByteInstruction {
+                is_valid,
+                opcode: expected_opcode,
+                shift_amount: load_shift_amount,
+            }
+            .into(),
+        }
+    }
+
+    fn start_offset(&self) -> usize {
+        self.offset
+    }
+}
+
+#[derive(Clone)]
+pub struct LoadSignExtendByteFiller<A = LoadByteAdapterFiller> {
+    pub(super) adapter: A,
+    pub offset: usize,
+    pub(super) encoder: Encoder,
+    pub(super) bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
+    pub(super) range_checker_chip: SharedVariableRangeCheckerChip,
+}
+
+impl<A> LoadSignExtendByteFiller<A> {
+    pub fn new(
+        adapter: A,
+        offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<BYTE_BITS>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+    ) -> Self {
+        Self {
+            adapter,
+            offset,
+            encoder: shift_encoder(),
+            bitwise_lookup_chip,
+            range_checker_chip,
+        }
+    }
+}

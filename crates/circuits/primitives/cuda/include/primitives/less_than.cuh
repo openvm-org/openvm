@@ -6,7 +6,7 @@
 inline constexpr size_t AUX_LEN = 2;
 
 template <typename T, size_t AUX_LEN = AUX_LEN> struct LessThanAuxCols {
-    T lower_decomp[AUX_LEN];
+    T diff_decomp[AUX_LEN];
 };
 
 template <typename T, size_t NUM, size_t AUX_LEN = AUX_LEN> struct LessThanArrayAuxCols {
@@ -22,23 +22,23 @@ namespace AssertLessThan {
  *
  * @section Trace Context Parameters
  * @param rc Range checker histogram reference
- * @param max_bits Maximum number of bits the respresntation of x and y can be
+ * @param max_bits Maximum number of bits in the representation of x and y
  * @param x First value to compare (must be strictly less than y)
  * @param y Second value to compare
- * @param lower_decomp_len Number of columns needed to constrain x < y
+ * @param decomp_len Number of columns needed to constrain x < y
  *
  * @section Mutable Column Parameters
- * @param lower_decomp Columns used to constrain x < y
+ * @param diff_decomp Columns used to constrain x < y
  */
 __device__ __forceinline__ void generate_subrow(
     VariableRangeChecker &rc,
     const uint32_t max_bits,
     uint32_t x,
     uint32_t y,
-    const size_t lower_decomp_len,
-    RowSlice lower_decomp
+    const size_t decomp_len,
+    RowSlice diff_decomp
 ) {
-    rc.decompose(y - x - 1, max_bits, lower_decomp, lower_decomp_len);
+    rc.decompose(y - x - 1, max_bits, diff_decomp, decomp_len);
 }
 } // namespace AssertLessThan
 
@@ -48,7 +48,7 @@ namespace IsLessThan {
  *
  * @section Trace Context Parameters
  * @param rc Range checker histogram reference
- * @param max_bits Maximum number of bits the respresntation of x and y can be
+ * @param max_bits Maximum number of bits in the representation of x and y
  * @param x First value to compare
  * @param y Second value to compare
  * @param lower_decomp_len Number of columns needed to constrain out_flag == (x < y)

@@ -1,6 +1,7 @@
+#![cfg(feature = "rvr")]
+
 use std::sync::Arc;
 
-use openvm_circuit::arch::{Arena, DenseRecordArena};
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
@@ -41,13 +42,14 @@ fn test_cuda_deferral_count_tracegen_equivalence() {
     let gpu_chip =
         DeferralCircuitCountChipGpu::new(count, NUM_DEFERRAL_CIRCUITS, device_ctx.clone());
 
-    let cpu_trace = <DeferralCircuitCountChip as Chip<
-        (),
-        CpuBackend<BabyBearPoseidon2Config>,
-    >>::generate_proving_ctx(&cpu_chip, ())
-    .common_main;
+    let cpu_trace =
+        <DeferralCircuitCountChip as Chip<CpuBackend<BabyBearPoseidon2Config>>>::generate_proving_ctx(
+            &cpu_chip,
+        )
+        .common_main;
     let gpu_trace = gpu_chip
-        .generate_proving_ctx(DenseRecordArena::with_capacity(1, 1))
+        .generate_proving_ctx_direct(NUM_DEFERRAL_CIRCUITS.next_power_of_two())
+        .expect("Deferral Count postflight trace generation must succeed")
         .common_main;
 
     let cpu_trace_cm = ColMajorMatrix::from_row_major(&cpu_trace);

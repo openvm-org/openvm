@@ -11,16 +11,18 @@
 //! get around Rust orphan rules.
 use std::{
     any::{type_name, Any},
-    iter::{self, zip},
+    error::Error,
     sync::Arc,
 };
 
 use getset::{CopyGetters, Getters};
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir},
-    AnyChip, Chip, ColumnsAir,
+    Chip, ColumnsAir,
 };
 use openvm_cpu_backend::CpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::GpuBackend;
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::BusIndex,
@@ -31,14 +33,15 @@ use openvm_stark_backend::{
 use rustc_hash::FxHashMap;
 use tracing::info_span;
 
-use super::{GenerationError, PhantomSubExecutor, SystemConfig};
-use crate::{
-    arch::Arena,
-    system::{
-        memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
-        phantom::PhantomExecutor,
-        SystemAirInventory, SystemChipComplex, SystemRecords,
-    },
+#[cfg(feature = "cuda")]
+use super::cuda::postflight::{GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript};
+use super::{GenerationError, PhantomSubExecutor, Postflight, PostflightError, SystemConfig};
+#[cfg(feature = "cuda")]
+use crate::system::cuda::SystemChipInventoryGPU;
+use crate::system::{
+    memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
+    phantom::PhantomExecutor,
+    SystemAirInventory, SystemChipComplex, SystemChipInventory,
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -80,13 +83,13 @@ pub type AirRefWithColumns<SC> = Arc<dyn AnyAirWithColumns<SC>>;
 
 /// Extension of VM execution. Allows registration of custom execution of new instructions by
 /// opcode.
-pub trait VmExecutionExtension<F> {
+pub trait VmExecutionExtension {
     /// Enum of executor variants
     type Executor: AnyEnum;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError>;
 }
 
@@ -95,16 +98,15 @@ pub trait VmCircuitExtension<SC: StarkProtocolConfig> {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
 }
 
-/// Extension of VM trace generation. The generics are `E` for [StarkEngine], `RA` for record arena,
-/// and `EXT` for execution and circuit extension.
+/// Backend-specific trace generation for one VM extension.
 ///
 /// Note that this trait differs from [VmExecutionExtension] and [VmCircuitExtension]. This trait is
 /// meant to be implemented on a separate ZST which may be different for different [ProverBackend]s.
 /// This is done to get around Rust orphan rules.
-pub trait VmProverExtension<E, RA, EXT>
+pub trait VmProverExtension<E, EXT>
 where
     E: StarkEngine,
-    EXT: VmExecutionExtension<Val<E::SC>> + VmCircuitExtension<E::SC>,
+    EXT: VmExecutionExtension + VmCircuitExtension<E::SC>,
 {
     /// The chips added to `inventory` should exactly match the order of AIRs in the
     /// [VmCircuitExtension] implementation of `EXT`.
@@ -115,7 +117,7 @@ where
     fn extend_prover(
         &self,
         extension: &EXT,
-        inventory: &mut ChipInventory<E::SC, RA, E::PB>,
+        inventory: &mut ChipInventory<E::SC, E::PB>,
     ) -> Result<(), ChipInventoryError>;
 }
 
@@ -132,18 +134,16 @@ pub struct ExecutorInventory<E> {
     ext_start: Vec<usize>,
 }
 
-// @dev: We need ExecutorInventoryBuilder separate from ExecutorInventory because of how
-// ExecutorInventory::extend works: we want to build an inventory with some big E3 enum that
-// includes both enum types E1, E2. However the interface for an ExecutionExtension will only know
-// about the enum E2. In order to be able to allow access to the old executors with type E1 without
-// referring to the type E1, we need to create this separate builder struct.
-pub struct ExecutorInventoryBuilder<'a, F, E> {
+// @dev: We need ExecutorInventoryBuilder separate from ExecutorInventory because extension
+// composition builds a combined executor enum while each extension only knows its own executor
+// enum. The builder keeps access to existing executors without naming the final combined enum.
+pub struct ExecutorInventoryBuilder<'a, E> {
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
     /// **before** their dependents.
     old_executors: Vec<&'a dyn AnyEnum>,
     new_inventory: ExecutorInventory<E>,
-    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
+    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>>,
 }
 
 #[derive(Clone, Getters, CopyGetters)]
@@ -164,6 +164,9 @@ pub struct AirInventory<SC: StarkProtocolConfig> {
     ext_start: Vec<usize>,
 
     bus_idx_mgr: BusIndexManager,
+    #[cfg(feature = "metrics")]
+    /// Diagnostic names in bus-index order. These names are not part of the verifying key.
+    bus_names: Vec<&'static str>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -174,8 +177,33 @@ pub struct BusIndexManager {
 
 // @dev: ChipInventory does not have the SystemChipComplex because that is custom depending on `PB`.
 // The full struct with SystemChipComplex is VmChipComplex
+struct InventoryChip<PB: ProverBackend> {
+    value: Box<dyn Any>,
+    constant_trace_height: Option<usize>,
+    postflight_generator: Option<PostflightGenerator<PB>>,
+}
+
+impl<PB: ProverBackend> InventoryChip<PB> {
+    fn new<C: 'static>(value: C, constant_trace_height: Option<usize>) -> Self {
+        Self {
+            value: Box::new(value),
+            constant_trace_height,
+            postflight_generator: None,
+        }
+    }
+
+    fn with_postflight_generator(mut self, generator: PostflightGenerator<PB>) -> Self {
+        self.postflight_generator = Some(generator);
+        self
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self.value.as_ref()
+    }
+}
+
 #[derive(Getters)]
-pub struct ChipInventory<SC, RA, PB>
+pub struct ChipInventory<SC, PB>
 where
     SC: StarkProtocolConfig,
     PB: ProverBackend,
@@ -184,8 +212,7 @@ where
     #[get = "pub"]
     airs: AirInventory<SC>,
     /// Chips that are being built.
-    #[get = "pub"]
-    chips: Vec<Box<dyn AnyChip<RA, PB>>>,
+    chips: Vec<InventoryChip<PB>>,
 
     /// Number of extensions that have chips added, including the current one that is still being
     /// built.
@@ -199,18 +226,44 @@ where
     pub executor_idx_to_insertion_idx: Vec<usize>,
 }
 
+type PostflightGenerator<PB> = Box<
+    dyn for<'a> Fn(
+            &dyn Any,
+            &Postflight<'a, <PB as ProverBackend>::Val>,
+        ) -> Result<AirProvingContext<PB>, PostflightError>
+        + Send
+        + Sync,
+>;
+
+fn erase_postflight_generator<PB, C, G>(generate: G) -> PostflightGenerator<PB>
+where
+    PB: ProverBackend,
+    C: 'static,
+    G: for<'a> Fn(&C, &Postflight<'a, PB::Val>) -> Result<AirProvingContext<PB>, PostflightError>
+        + Send
+        + Sync
+        + 'static,
+{
+    Box::new(move |chip, postflight| {
+        let chip = chip
+            .downcast_ref::<C>()
+            .expect("postflight generator was registered with this concrete chip type");
+        generate(chip, postflight)
+    })
+}
+
 /// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
 /// [AirInventory]. The [VmChipComplex] coordinates the trace generation for all chips in the VM
 /// after construction.
 #[derive(Getters)]
-pub struct VmChipComplex<SC, RA, PB, SCC>
+pub struct VmChipComplex<SC, PB, SCC>
 where
     SC: StarkProtocolConfig,
     PB: ProverBackend,
 {
     /// System chip complex responsible for trace generation of [SystemAirInventory]
     pub system: SCC,
-    pub inventory: ChipInventory<SC, RA, PB>,
+    pub inventory: ChipInventory<SC, PB>,
 }
 
 // ======================= Inventory Function Definitions =============================
@@ -255,24 +308,23 @@ impl<E> ExecutorInventory<E> {
 
     /// Extend the inventory with a new extension.
     /// A new inventory with different type generics is returned with the combined inventory.
-    pub fn extend<F, E3, EXT>(
+    pub fn extend<CombinedE, EXT>(
         self,
         other: &EXT,
-    ) -> Result<ExecutorInventory<E3>, ExecutorInventoryError>
+    ) -> Result<ExecutorInventory<CombinedE>, ExecutorInventoryError>
     where
-        F: 'static,
-        E: Into<E3> + AnyEnum,
-        E3: AnyEnum,
-        EXT: VmExecutionExtension<F>,
-        EXT::Executor: Into<E3>,
+        E: Into<CombinedE> + AnyEnum,
+        CombinedE: AnyEnum,
+        EXT: VmExecutionExtension,
+        EXT::Executor: Into<CombinedE>,
     {
-        let mut builder: ExecutorInventoryBuilder<F, EXT::Executor> = self.builder();
+        let mut builder: ExecutorInventoryBuilder<EXT::Executor> = self.builder();
         other.extend_execution(&mut builder)?;
         let other_inventory = builder.new_inventory;
         let other_phantom_executors = builder.phantom_executors;
         let mut inventory_ext = self.transmute();
         inventory_ext.append(other_inventory.transmute())?;
-        let phantom_chip: &mut PhantomExecutor<F> = inventory_ext
+        let phantom_chip: &mut PhantomExecutor = inventory_ext
             .find_executor_mut()
             .next()
             .expect("system always has phantom chip");
@@ -289,9 +341,8 @@ impl<E> ExecutorInventory<E> {
         Ok(inventory_ext)
     }
 
-    pub fn builder<F, E2>(&self) -> ExecutorInventoryBuilder<'_, F, E2>
+    pub fn builder<NewE>(&self) -> ExecutorInventoryBuilder<'_, NewE>
     where
-        F: 'static,
         E: AnyEnum,
     {
         let old_executors = self.executors.iter().map(|e| e as &dyn AnyEnum).collect();
@@ -302,9 +353,9 @@ impl<E> ExecutorInventory<E> {
         }
     }
 
-    pub fn transmute<E2>(self) -> ExecutorInventory<E2>
+    pub fn transmute<TargetE>(self) -> ExecutorInventory<TargetE>
     where
-        E: Into<E2>,
+        E: Into<TargetE>,
     {
         ExecutorInventory {
             config: self.config,
@@ -370,7 +421,7 @@ impl<E> ExecutorInventory<E> {
     }
 }
 
-impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
+impl<E> ExecutorInventoryBuilder<'_, E> {
     pub fn add_executor(
         &mut self,
         executor: impl Into<E>,
@@ -386,8 +437,7 @@ impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
     ) -> Result<(), ExecutorInventoryError>
     where
         E: AnyEnum,
-        F: 'static,
-        PE: PhantomSubExecutor<F> + 'static,
+        PE: PhantomSubExecutor + 'static,
     {
         let existing = self
             .phantom_executors
@@ -420,12 +470,27 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
         system: SystemAirInventory,
         bus_idx_mgr: BusIndexManager,
     ) -> Self {
+        #[cfg(feature = "metrics")]
+        let bus_names = {
+            let names = vec![
+                "Execution",
+                "Memory",
+                "Program",
+                "VariableRange",
+                "MemoryMerkle",
+                "Poseidon2Compression",
+            ];
+            assert_eq!(names.len(), usize::from(bus_idx_mgr.bus_idx_max));
+            names
+        };
         Self {
             config,
             system,
             ext_start: Vec::new(),
             ext_airs: Vec::new(),
             bus_idx_mgr,
+            #[cfg(feature = "metrics")]
+            bus_names,
         }
     }
 
@@ -435,7 +500,25 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
     }
 
     pub fn new_bus_idx(&mut self) -> BusIndex {
-        self.bus_idx_mgr.new_bus_idx()
+        self.new_bus_idx_named("unnamed")
+    }
+
+    /// Allocates a bus index with a diagnostic name for metrics and tooling.
+    pub fn new_bus_idx_named(&mut self, name: &'static str) -> BusIndex {
+        let idx = self.bus_idx_mgr.new_bus_idx();
+        #[cfg(feature = "metrics")]
+        {
+            debug_assert_eq!(usize::from(idx), self.bus_names.len());
+            self.bus_names.push(name);
+        }
+        #[cfg(not(feature = "metrics"))]
+        let _ = name;
+        idx
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn bus_names(&self) -> &[&'static str] {
+        &self.bus_names
     }
 
     /// Looks through already-defined AIRs to see if there exists any of type `A` by downcasting.
@@ -511,7 +594,7 @@ impl BusIndexManager {
     }
 }
 
-impl<SC, RA, PB> ChipInventory<SC, RA, PB>
+impl<SC, PB> ChipInventory<SC, PB>
 where
     SC: StarkProtocolConfig,
     PB: ProverBackend,
@@ -527,6 +610,10 @@ where
 
     pub fn config(&self) -> &SystemConfig {
         &self.airs.config
+    }
+
+    pub(crate) fn num_chips(&self) -> usize {
+        self.chips.len()
     }
 
     // NOTE[jpw]: this is currently unused, it is for debugging purposes
@@ -570,17 +657,85 @@ where
 
     /// Adds a chip that is not associated with any executor, as defined by the
     /// [VmExecutionExtension] trait.
-    pub fn add_periphery_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
-        self.chips.push(Box::new(chip));
+    pub fn add_periphery_chip<C: Chip<PB> + 'static>(&mut self, chip: C) {
+        let constant_trace_height = chip.constant_trace_height();
+        self.add_periphery_chip_with_height(chip, constant_trace_height);
+    }
+
+    pub fn add_periphery_chip_with_height<C: 'static>(
+        &mut self,
+        chip: C,
+        constant_trace_height: Option<usize>,
+    ) {
+        self.chips
+            .push(InventoryChip::new(chip, constant_trace_height));
     }
 
     /// Adds a chip and associates it to the next executor.
     /// **Caution:** you must add chips in the order matching the order that executors were added in
     /// the [VmExecutionExtension] implementation.
-    pub fn add_executor_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
+    pub fn add_executor_chip<C: 'static>(&mut self, chip: C) {
         tracing::debug!("add_executor_chip: {}", type_name::<C>());
         self.executor_idx_to_insertion_idx.push(self.chips.len());
-        self.chips.push(Box::new(chip));
+        self.chips.push(InventoryChip::new(chip, None));
+    }
+
+    /// Adds a periphery chip with its CPU trace generator over postflight history.
+    pub fn add_periphery_chip_with_tracegen<C, G>(&mut self, chip: C, generate: G)
+    where
+        C: Chip<PB> + 'static,
+        G: for<'a> Fn(
+                &C,
+                &Postflight<'a, PB::Val>,
+            ) -> Result<AirProvingContext<PB>, PostflightError>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let constant_trace_height = chip.constant_trace_height();
+        self.add_periphery_chip_with_height_and_tracegen(chip, constant_trace_height, generate);
+    }
+
+    /// Adds a periphery chip with an explicit trace height and CPU trace generator.
+    pub fn add_periphery_chip_with_height_and_tracegen<C, G>(
+        &mut self,
+        chip: C,
+        constant_trace_height: Option<usize>,
+        generate: G,
+    ) where
+        C: 'static,
+        G: for<'a> Fn(
+                &C,
+                &Postflight<'a, PB::Val>,
+            ) -> Result<AirProvingContext<PB>, PostflightError>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.chips.push(
+            InventoryChip::new(chip, constant_trace_height)
+                .with_postflight_generator(erase_postflight_generator(generate)),
+        );
+    }
+
+    /// Adds an executor chip with its CPU trace generator over postflight history.
+    pub fn add_executor_chip_with_tracegen<C, G>(&mut self, chip: C, generate: G)
+    where
+        C: 'static,
+        G: for<'a> Fn(
+                &C,
+                &Postflight<'a, PB::Val>,
+            ) -> Result<AirProvingContext<PB>, PostflightError>
+            + Send
+            + Sync
+            + 'static,
+    {
+        tracing::debug!("add_executor_chip: {}", type_name::<C>());
+        self.executor_idx_to_insertion_idx.push(self.chips.len());
+        self.chips.push(
+            InventoryChip::new(chip, None)
+                .with_postflight_generator(erase_postflight_generator(generate)),
+        );
     }
 
     /// Returns the mapping from executor index to the AIR index, where AIR index is the index of
@@ -626,14 +781,14 @@ where
             self.chips
                 .iter()
                 .rev()
-                .map(|chip| chip.constant_trace_height()),
+                .map(|chip| chip.constant_trace_height),
         );
         heights
     }
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.
-impl<SC, RA> ChipInventory<SC, RA, CpuBackend<SC>>
+impl<SC> ChipInventory<SC, CpuBackend<SC>>
 where
     SC: StarkProtocolConfig,
 {
@@ -678,103 +833,178 @@ pub enum ChipInventoryError {
     MissingChip { actual: usize, expected: usize },
     #[error("Missing executor chip. Number of executors with associated chips is {actual}, expected number is {expected}")]
     MissingExecutor { actual: usize, expected: usize },
+    #[error("Failed to initialize prover chip `{name}`: {source}")]
+    ProverChipInitialization {
+        name: String,
+        #[source]
+        source: Box<dyn Error + Send + Sync>,
+    },
+}
+
+impl ChipInventoryError {
+    pub fn prover_chip_initialization(
+        name: impl Into<String>,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::ProverChipInitialization {
+            name: name.into(),
+            source: Box::new(source),
+        }
+    }
+}
+
+#[cfg(test)]
+mod chip_inventory_error_tests {
+    use std::{error::Error, io::Error as IoError};
+
+    use super::ChipInventoryError;
+
+    #[test]
+    fn prover_chip_initialization_preserves_source() {
+        let error = ChipInventoryError::prover_chip_initialization(
+            "test chip",
+            IoError::other("setup failed"),
+        );
+        let source = Error::source(&error).unwrap();
+        let source = source.downcast_ref::<IoError>().unwrap();
+        assert_eq!(source.to_string(), "setup failed");
+    }
 }
 
 // ======================= VM Chip Complex Implementation =============================
 
-impl<SC, RA, PB, SCC> VmChipComplex<SC, RA, PB, SCC>
+impl<SC, PB, SCC> VmChipComplex<SC, PB, SCC>
 where
     SC: StarkProtocolConfig,
-    RA: Arena,
     PB: ProverBackend,
-    SCC: SystemChipComplex<RA, PB>,
+    SCC: SystemChipComplex<PB>,
 {
     pub fn system_config(&self) -> &SystemConfig {
         self.inventory.config()
     }
+}
 
-    /// `record_arenas` is expected to have length equal to the number of AIRs in the verifying key
-    /// and in the same order as the AIRs appearing in the verifying key, even though some chips may
-    /// not require a record arena.
-    pub(crate) fn generate_proving_ctx(
+impl<SC> VmChipComplex<SC, CpuBackend<SC>, SystemChipInventory<SC>>
+where
+    SC: StarkProtocolConfig,
+    Val<SC>: super::VmField,
+{
+    /// Generates CPU traces directly from immutable preflight history.
+    pub(crate) fn generate_proving_ctx_from_postflight(
         &mut self,
-        system_records: SystemRecords<PB::Val>,
-        record_arenas: Vec<RA>,
-        // trace_height_constraints: &[LinearConstraint],
-    ) -> Result<ProvingContext<PB>, GenerationError> {
-        // ATTENTION: The order of AIR proving context generation MUST be consistent with
-        // `AirInventory::into_airs`.
+        postflight: &Postflight<'_, Val<SC>>,
+    ) -> Result<ProvingContext<CpuBackend<SC>>, GenerationError> {
+        let sys_ctxs = {
+            let _span = info_span!("system_trace_gen").entered();
+            self.system.generate_proving_ctx_from_postflight(postflight)
+        };
 
-        // Execution has finished at this point.
-        // ASSUMPTION WHICH MUST HOLD: non-system chips do not have a dependency on the system chips
-        // during trace generation. Given this assumption, we can generate trace on the system chips
-        // first.
-        let num_sys_airs = self.system_config().num_airs();
-        let num_airs = num_sys_airs + self.inventory.chips.len();
-        if num_airs != record_arenas.len() {
-            return Err(GenerationError::UnexpectedNumArenas {
-                actual: record_arenas.len(),
-                expected: num_airs,
-            });
+        let mut exec_ctxs = Vec::new();
+        exec_ctxs.resize_with(self.inventory.chips.len(), || None);
+        {
+            let _span = info_span!("executor_trace_gen").entered();
+            for (chain_pos, (insertion_idx, chip)) in
+                self.inventory.chips.iter().enumerate().rev().enumerate()
+            {
+                let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                let _air_span = info_span!("single_trace_gen", air = air_name).entered();
+                let generator = chip.postflight_generator.as_ref().ok_or_else(|| {
+                    GenerationError::ExtensionTracegen(format!(
+                        "AIR {air_name} has no postflight trace generator"
+                    ))
+                })?;
+                exec_ctxs[chain_pos] = Some(
+                    generator(chip.as_any(), postflight)
+                        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?,
+                );
+            }
         }
-        let mut _record_arenas = record_arenas;
-        let record_arenas = _record_arenas.split_off(num_sys_airs);
-        let sys_record_arenas = _record_arenas;
 
-        // First go through all system chips
-        // Then go through all other chips in inventory in **reverse** order they were added (to
-        // resolve dependencies)
-        //
-        // Perf[jpw]: currently we call tracegen on each chip **serially** (although tracegen per
-        // chip is parallelized). We could introduce more parallelism, while potentially increasing
-        // the peak memory usage, by keeping a dependency tree and generating traces at the same
-        // layer of the tree in parallel.
-        let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = iter::empty()
-            .chain(info_span!("system_trace_gen").in_scope(|| {
-                self.system
-                    .generate_proving_ctx(system_records, sys_record_arenas)
-            }))
-            .chain(
-                zip(self.inventory.chips.iter().enumerate().rev(), record_arenas).map(
-                    |((insertion_idx, chip), records)| {
-                        // Only create a span if record is not empty:
-                        let _span = (!records.is_empty()).then(|| {
-                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                            info_span!("single_trace_gen", air = air_name).entered()
-                        });
-                        #[cfg(feature = "metrics")]
-                        if let Some(allocated_bytes) = (!records.is_empty())
-                            .then(|| records.allocated_bytes())
-                            .flatten()
-                        {
-                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                            let labels = [
-                                ("air_name", air_name.to_string()),
-                                ("air_id", (num_sys_airs + insertion_idx).to_string()),
-                            ];
-                            metrics::counter!("trace_gen.record_arena_bytes", &labels)
-                                .absolute(allocated_bytes as u64);
-                        }
-                        chip.generate_proving_ctx(records)
-                    },
-                ),
-            )
+        let ctx_without_empties = sys_ctxs
+            .into_iter()
+            .chain(exec_ctxs.into_iter().map(|ctx| ctx.unwrap()))
             .enumerate()
             .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
             .collect();
+        Ok(ProvingContext::new(ctx_without_empties))
+    }
+}
 
+#[cfg(feature = "cuda")]
+impl<SC> VmChipComplex<SC, GpuBackend, SystemChipInventoryGPU>
+where
+    SC: StarkProtocolConfig,
+{
+    /// Generates a complete GPU proving context from one preflight segment.
+    pub(crate) fn generate_proving_ctx_from_postflight(
+        &mut self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+        mut generate_extension: impl FnMut(
+            &dyn Any,
+        )
+            -> Result<AirProvingContext<GpuBackend>, GenerationError>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError> {
+        let num_ext_airs = self.inventory.chips.len();
+        let air_names = self
+            .inventory
+            .airs
+            .ext_airs
+            .iter()
+            .map(|air| air.name().to_string())
+            .collect::<Vec<_>>();
+        let mut exec_ctxs = Vec::new();
+        exec_ctxs.resize_with(num_ext_airs, || None);
+
+        // System connector and Merkle requests must be generated first.
+        // Extension chips then run in reverse insertion order so shared
+        // periphery chips are generated after their consumers.
+        let sys_ctxs = {
+            let _span = info_span!("system_trace_gen").entered();
+            self.system
+                .generate_proving_ctx_from_postflight(program, transcript, replay_plan)
+                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
+        };
+        debug_assert_eq!(sys_ctxs.len(), self.system_config().num_airs());
+        {
+            let _span = info_span!("executor_trace_gen").entered();
+            for (chain_pos, (insertion_idx, chip)) in
+                self.inventory.chips.iter().enumerate().rev().enumerate()
+            {
+                let _air_span =
+                    info_span!("single_trace_gen", air = air_names[insertion_idx]).entered();
+                exec_ctxs[chain_pos] = Some(generate_extension(chip.as_any()).map_err(
+                    |error| match error {
+                        GenerationError::ExtensionTracegen(message) => {
+                            GenerationError::ExtensionTracegen(format!(
+                                "AIR `{}`: {message}",
+                                air_names[insertion_idx]
+                            ))
+                        }
+                        error => error,
+                    },
+                )?);
+            }
+        }
+        let ctx_without_empties = sys_ctxs
+            .into_iter()
+            .chain(exec_ctxs.into_iter().map(|ctx| ctx.unwrap()))
+            .enumerate()
+            .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
+            .collect();
         Ok(ProvingContext::new(ctx_without_empties))
     }
 }
 
 // ============ Blanket implementation of VM extension traits for Option<E> ===========
 
-impl<F, EXT: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<EXT> {
+impl<EXT: VmExecutionExtension> VmExecutionExtension for Option<EXT> {
     type Executor = EXT::Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         if let Some(extension) = self {
             extension.extend_execution(inventory)
@@ -901,5 +1131,17 @@ mod tests {
         assert_eq!(port.memory_bridge.range_bus().index(), 3);
         assert_eq!(system.memory.interface.boundary.merkle_bus.index, 4);
         assert_eq!(system.memory.interface.boundary.compression_bus.index, 5);
+        #[cfg(feature = "metrics")]
+        assert_eq!(
+            inventory.bus_names(),
+            [
+                "Execution",
+                "Memory",
+                "Program",
+                "VariableRange",
+                "MemoryMerkle",
+                "Poseidon2Compression",
+            ]
+        );
     }
 }

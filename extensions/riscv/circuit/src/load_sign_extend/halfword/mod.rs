@@ -1,0 +1,35 @@
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
+
+use crate::{
+    adapters::{LoadMultiByteAdapterAir, LoadMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH},
+    load_sign_extend::{
+        common::LoadSignExtendExecutor,
+        core::{LoadSignExtendCoreAir, LoadSignExtendFiller},
+    },
+};
+
+/// Cells overlapped by an odd-shift halfword load.
+pub const LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS: usize =
+    HALFWORD_ACCESS_WIDTH / U16_CELL_SIZE + 1;
+
+pub type LoadSignExtendHalfwordCoreAir =
+    LoadSignExtendCoreAir<HALFWORD_ACCESS_WIDTH, LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS>;
+pub type LoadSignExtendHalfwordFiller = LoadSignExtendFiller<
+    LoadMultiByteAdapterFiller,
+    HALFWORD_ACCESS_WIDTH,
+    LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
+>;
+
+pub type LoadSignExtendHalfwordAir =
+    VmAirWrapper<LoadMultiByteAdapterAir, LoadSignExtendHalfwordCoreAir>;
+pub type LoadSignExtendHalfwordExecutor = LoadSignExtendExecutor<HALFWORD_ACCESS_WIDTH>;
+pub type LoadSignExtendHalfwordChip<F> = VmChipWrapper<F, LoadSignExtendHalfwordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
+#[cfg(test)]
+mod tests;
+pub(crate) mod trace;

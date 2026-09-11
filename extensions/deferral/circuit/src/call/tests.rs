@@ -1,11 +1,15 @@
-use std::{array::from_fn, sync::Arc};
+use std::{
+    array::from_fn,
+    sync::{atomic::Ordering, Arc},
+};
 
 use openvm_circuit::arch::{
     deferral::{DeferralState, InputMapVal},
     testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        memory::{gen_distinct_register_pointers, gen_pointer},
+        TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+    Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,7 +18,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    program::Program,
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
@@ -25,21 +30,19 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
-    super::{DeferralCallAdapterRecord, DeferralCallChipGpu, DeferralCallCoreRecord},
+    super::DeferralCallChipGpu,
     crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
-    openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        DenseRecordArena, EmptyAdapterCoreLayout,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
 };
 
 use super::{
-    DeferralCallAdapterAir, DeferralCallAdapterExecutor, DeferralCallAdapterFiller,
-    DeferralCallAir, DeferralCallChip, DeferralCallCoreAir, DeferralCallCoreFiller,
-    DeferralCallExecutor,
+    accumulator_ptrs, DeferralCallAdapterAir, DeferralCallAdapterFiller, DeferralCallAir,
+    DeferralCallChip, DeferralCallCoreAir, DeferralCallCoreFiller, DeferralCallExecutor,
 };
 use crate::{
     count::{DeferralCircuitCountAir, DeferralCircuitCountBus, DeferralCircuitCountChip},
@@ -48,8 +51,8 @@ use crate::{
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
     utils::{
-        byte_commit_to_f, join_memory_ops, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, join_f_memory_ops, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
 };
@@ -60,16 +63,15 @@ const NUM_DEFERRALS: usize = 4;
 const DEFERRAL_COUNT_BUS: BusIndex = 20;
 const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 
-type Harness<RA> =
-    TestChipHarness<F, DeferralCallExecutor, DeferralCallAir, DeferralCallChip<F>, RA>;
+type Harness = TestChipHarness<F, DeferralCallExecutor, DeferralCallAir, DeferralCallChip<F>>;
 type BitwisePeriphery = (
-    BitwiseOperationLookupAir<RV32_CELL_BITS>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    BitwiseOperationLookupAir<BYTE_BITS>,
+    SharedBitwiseOperationLookupChip<BYTE_BITS>,
 );
 type CountPeriphery = (DeferralCircuitCountAir, Arc<DeferralCircuitCountChip>);
 type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>>);
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness = GpuTestChipHarness<
     F,
     DeferralCallExecutor,
@@ -77,27 +79,19 @@ type GpuHarness = GpuTestChipHarness<
     DeferralCallChipGpu,
     DeferralCallChip<F>,
 >;
-#[cfg(feature = "cuda")]
-type CudaCountPeriphery = (
-    DeferralCircuitCountAir,
-    DeferralCircuitCountChipGpu,
-    DenseRecordArena,
-);
-#[cfg(feature = "cuda")]
-type CudaPoseidon2Periphery = (
-    DeferralPoseidon2Air<F>,
-    DeferralPoseidon2ChipGpu,
-    DenseRecordArena,
-);
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type CudaCountPeriphery = (DeferralCircuitCountAir, DeferralCircuitCountChipGpu);
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type CudaPoseidon2Periphery = (DeferralPoseidon2Air<F>, DeferralPoseidon2ChipGpu);
 
 struct CpuHarnessBundle {
-    harness: Harness<MatrixRecordArena<F>>,
+    harness: Harness,
     bitwise: BitwisePeriphery,
     count: CountPeriphery,
     poseidon2: Poseidon2Periphery,
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 struct CudaHarnessBundle {
     harness: GpuHarness,
     count: CudaCountPeriphery,
@@ -106,7 +100,7 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+    config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
 
@@ -129,30 +123,29 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
 
 fn read_deferral_digest(tester: &mut impl TestBuilder<F>, ptr: usize) -> [F; DIGEST_SIZE] {
     let chunks = from_fn(|chunk_idx| {
-        tester
-            .read::<DEFAULT_BLOCK_SIZE>(DEFERRAL_AS as usize, ptr + chunk_idx * DEFAULT_BLOCK_SIZE)
+        tester.read::<BLOCK_FE_WIDTH>(DEFERRAL_AS as usize, ptr + chunk_idx * BLOCK_FE_WIDTH)
     });
-    join_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(chunks)
+    join_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(chunks)
 }
 
 fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
     tester.streams_mut().deferrals = vec![DeferralState::new(vec![]); num_deferrals];
 }
 
-fn set_and_execute_call<RA, E>(
-    tester: &mut impl TestBuilder<F>,
+fn set_and_execute_call<E, T>(
+    tester: &mut T,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     num_deferrals: usize,
-) where
-    RA: Arena,
-    E: PreflightExecutor<F, RA>,
+) -> Instruction
+where
+    E: Executor<F> + Clone,
+    T: TestBuilder<F>,
 {
-    let rd = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let rs = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let output_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let input_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let [rd, rs] = gen_distinct_register_pointers(rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let input_commit_f: [F; DIGEST_SIZE] =
@@ -169,44 +162,42 @@ fn set_and_execute_call<RA, E>(
         .collect::<Vec<u8>>();
     tester.streams_mut().deferrals[deferral_idx].store_input(input_commit.to_vec(), input_raw);
 
-    tester.write(
-        RV32_REGISTER_AS as usize,
+    tester.write_bytes(
+        REGISTER_AS as usize,
         rd,
-        (output_ptr as u32).to_le_bytes().map(F::from_u8),
+        (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
-        RV32_REGISTER_AS as usize,
+    tester.write_bytes(
+        REGISTER_AS as usize,
         rs,
-        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    for (chunk_idx, chunk) in input_commit.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
-        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
-        tester.write(
-            RV32_MEMORY_AS as usize,
-            input_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
+    for (chunk_idx, chunk) in input_commit.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
+        tester.write_bytes(
+            MEMORY_AS as usize,
+            input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
     }
 
-    let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE;
-    let output_acc_ptr = input_acc_ptr + DIGEST_SIZE;
+    let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx as u32);
+    let input_acc_ptr = input_acc_ptr as usize;
+    let output_acc_ptr = output_acc_ptr as usize;
     let old_input_acc = read_deferral_digest(tester, input_acc_ptr);
     let old_output_acc = read_deferral_digest(tester, output_acc_ptr);
 
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(
-            DeferralOpcode::CALL.global_opcode(),
-            [
-                rd,
-                rs,
-                deferral_idx,
-                RV32_REGISTER_AS as usize,
-                RV32_MEMORY_AS as usize,
-            ],
-        ),
+    let instruction = Instruction::from_usize(
+        DeferralOpcode::CALL.global_opcode(),
+        [
+            rd,
+            rs,
+            deferral_idx,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
+        ],
     );
+    tester.execute(executor, preflight, &instruction);
 
     let (output_commit, output_raw) = {
         let state = &tester.streams_mut().deferrals[deferral_idx];
@@ -220,12 +211,12 @@ fn set_and_execute_call<RA, E>(
 
     let mut output_key = [0u8; OUTPUT_TOTAL_BYTES];
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        let chunk: [F; DEFAULT_BLOCK_SIZE] = tester.read(
-            RV32_MEMORY_AS as usize,
-            output_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
+        let chunk: [F; MEMORY_BLOCK_BYTES] = tester.read_bytes(
+            MEMORY_AS as usize,
+            output_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
         );
-        for i in 0..DEFAULT_BLOCK_SIZE {
-            output_key[chunk_idx * DEFAULT_BLOCK_SIZE + i] = chunk[i].as_canonical_u32() as u8;
+        for i in 0..MEMORY_BLOCK_BYTES {
+            output_key[chunk_idx * MEMORY_BLOCK_BYTES + i] = chunk[i].as_canonical_u32() as u8;
         }
     }
     let output_commit_expected: [u8; COMMIT_NUM_BYTES] = output_commit.clone().try_into().unwrap();
@@ -255,6 +246,7 @@ fn set_and_execute_call<RA, E>(
         new_output_acc, expected_new_output_acc,
         "output accumulator mismatch"
     );
+    instruction
 }
 
 fn create_cpu_harness(
@@ -263,9 +255,7 @@ fn create_cpu_harness(
     fns: Vec<Arc<DeferralFn>>,
 ) -> CpuHarnessBundle {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
@@ -277,14 +267,19 @@ fn create_cpu_harness(
             tester.execution_bridge(),
             tester.memory_bridge(),
             bitwise_bus,
+            tester.range_checker().bus(),
             tester.address_bits(),
         ),
         DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
     );
-    let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
+    let executor = DeferralCallExecutor::new(fns);
     let chip = DeferralCallChip::new(
         DeferralCallCoreFiller::new(
-            DeferralCallAdapterFiller::new(bitwise_chip.clone(), tester.address_bits()),
+            DeferralCallAdapterFiller::new(
+                bitwise_chip.clone(),
+                tester.range_checker(),
+                tester.address_bits(),
+            ),
             count_chip.clone(),
             poseidon2_chip.clone(),
             bitwise_chip.clone(),
@@ -293,7 +288,13 @@ fn create_cpu_harness(
         tester.memory_helper(),
     );
 
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        super::generate_trace_from_postflight,
+    );
     CpuHarnessBundle {
         harness,
         bitwise: (bitwise_chip.air, bitwise_chip),
@@ -305,7 +306,7 @@ fn create_cpu_harness(
     }
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[allow(clippy::type_complexity)]
 fn create_cuda_harness(
     tester: &GpuChipTestBuilder,
@@ -313,9 +314,7 @@ fn create_cuda_harness(
     fns: Vec<Arc<DeferralFn>>,
 ) -> CudaHarnessBundle {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
@@ -327,14 +326,21 @@ fn create_cuda_harness(
             tester.execution_bridge(),
             tester.memory_bridge(),
             bitwise_bus,
+            tester.cpu_range_checker().bus(),
             tester.address_bits(),
         ),
         DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
     );
-    let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
+    let executor = DeferralCallExecutor::new(fns);
     let cpu_chip = DeferralCallChip::new(
         DeferralCallCoreFiller::new(
-            DeferralCallAdapterFiller::new(dummy_bitwise_chip.clone(), tester.address_bits()),
+            DeferralCallAdapterFiller::new(
+                dummy_bitwise_chip.clone(),
+                // Dummy range checker: the GPU kernel already emits the AS-pointer range-check
+                // counts; using the real (hybrid) range checker here would double-count them.
+                dummy_range_checker(tester.cpu_range_checker().bus()),
+                tester.address_bits(),
+            ),
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_bitwise_chip,
@@ -349,8 +355,7 @@ fn create_cuda_harness(
         &device_ctx,
     ));
     count.fill_zero_on(&device_ctx).unwrap();
-    let poseidon2_chip_gpu =
-        DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1, device_ctx.clone());
+    let poseidon2_chip_gpu = DeferralPoseidon2ChipGpu::new(1, device_ctx.clone());
     let gpu_chip = DeferralCallChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
@@ -361,19 +366,25 @@ fn create_cuda_harness(
         poseidon2_chip_gpu.shared_buffer(),
     );
 
-    let harness = GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+    let harness = GpuHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            super::generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(
+                    program,
+                    transcript,
+                    plan,
+                    MAX_INS_CAPACITY,
+                )
+            },
+        );
     CudaHarnessBundle {
         harness,
         count: (
             DeferralCircuitCountAir::new(count_bus, num_deferrals),
             DeferralCircuitCountChipGpu::new(count, num_deferrals, device_ctx),
-            DenseRecordArena::with_byte_capacity(0),
         ),
-        poseidon2: (
-            deferral_poseidon2_air(poseidon2_bus.0),
-            poseidon2_chip_gpu,
-            DenseRecordArena::with_byte_capacity(0),
-        ),
+        poseidon2: (deferral_poseidon2_air(poseidon2_bus.0), poseidon2_chip_gpu),
     }
 }
 
@@ -394,7 +405,7 @@ fn rand_deferral_call_test() {
         set_and_execute_call(
             &mut tester,
             &mut harness.executor,
-            &mut harness.arena,
+            &mut harness.preflight,
             &mut rng,
             NUM_DEFERRALS,
         );
@@ -411,7 +422,73 @@ fn rand_deferral_call_test() {
         .expect("Verification failed");
 }
 
-#[cfg(feature = "cuda")]
+#[test]
+fn postflight_call_trace_rejects_truncated_history_without_mutating_periphery() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
+    let CpuHarnessBundle {
+        mut harness,
+        count,
+        poseidon2,
+        ..
+    } = create_cpu_harness(&tester, NUM_DEFERRALS, deferral_fns(NUM_DEFERRALS));
+    init_streams(&mut tester, NUM_DEFERRALS);
+    let instruction = set_and_execute_call(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        NUM_DEFERRALS,
+    );
+    let from_pc = tester.last_from_pc();
+    let sentinel = instruction.clone();
+    let program = Program::new_without_debug_infos(&[instruction, sentinel], from_pc);
+    let history = &mut harness.preflight.executions[0].history;
+    let memory_config = test_memory_config();
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
+    let actual = super::generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+    assert!(!actual.values.is_empty());
+    drop(postflight);
+
+    let removed = history
+        .memory
+        .accesses
+        .pop()
+        .expect("CALL has timed memory events");
+    if removed.address_space() == DEFERRAL_AS {
+        history
+            .memory
+            .field_values
+            .pop()
+            .expect("deferral memory events have field sidecars");
+    }
+    let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
+    let counts_before = count
+        .1
+        .count
+        .iter()
+        .map(|count| count.load(Ordering::Relaxed))
+        .collect::<Vec<_>>();
+    let poseidon_records_before = poseidon2.1.records.len();
+    let error = super::generate_trace_from_postflight(&harness.chip, &postflight)
+        .expect_err("truncated CALL history must be rejected");
+    assert!(
+        error.to_string().contains("too few memory events")
+            || error.to_string().contains("ended at timestamp")
+    );
+    assert_eq!(
+        counts_before,
+        count
+            .1
+            .count
+            .iter()
+            .map(|count| count.load(Ordering::Relaxed))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(poseidon_records_before, poseidon2.1.records.len());
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_rand_deferral_call_tracegen() {
     let mut rng = create_seeded_rng();
@@ -432,29 +509,24 @@ fn test_cuda_rand_deferral_call_tracegen() {
         set_and_execute_call(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             NUM_DEFERRALS,
         );
     }
 
-    type Record<'a> = (
-        &'a mut DeferralCallAdapterRecord<F>,
-        &'a mut DeferralCallCoreRecord<F>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record<'_>, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, DeferralCallAdapterExecutor>::new(),
-        );
-
+    let mut tester = tester.build().load_gpu_harness(harness);
+    let count_ctx = count
+        .1
+        .generate_proving_ctx_direct(MAX_INS_CAPACITY)
+        .expect("Deferral Count postflight trace generation must succeed");
+    tester = tester.load_air_proving_ctx(Arc::new(count.0), count_ctx);
+    let poseidon2_ctx = poseidon2
+        .1
+        .generate_proving_ctx_direct(MAX_INS_CAPACITY)
+        .expect("Deferral Poseidon2 postflight trace generation must succeed");
     tester
-        .build()
-        .load_gpu_harness(harness)
-        .load(count.0, count.1, count.2)
-        .load(poseidon2.0, poseidon2.1, poseidon2.2)
+        .load_air_proving_ctx(Arc::new(poseidon2.0), poseidon2_ctx)
         .finalize()
         .simple_test()
         .expect("Verification failed");

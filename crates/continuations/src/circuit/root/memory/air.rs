@@ -1,9 +1,8 @@
 use std::borrow::Borrow;
 
-use openvm_circuit::system::memory::{
-    dimensions::MemoryDimensions, merkle::public_values::PUBLIC_VALUES_AS,
-};
+use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper, SubAir};
+use openvm_instructions::PUBLIC_VALUES_AS;
 use openvm_recursion_circuit::bus::Poseidon2CompressBus;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{

@@ -9,21 +9,23 @@ mod tests {
     use hex_literal::hex;
     use num_bigint::BigUint;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::arch::{rvr::PreflightLimits, ExecutionError, VmExecutor};
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG,
+        CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_sdk::StdIn;
     use openvm_sdk_config::{SdkVmBuilder, SdkVmConfig, TranspilerConfig};
-    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-    use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
+    #[cfg(feature = "rvr")]
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
@@ -33,18 +35,19 @@ mod tests {
         k256_sec1_decoding_test_vectors, K256_RECOVERY_TEST_VECTORS, P256_RECOVERY_TEST_VECTORS,
     };
 
+    #[cfg(feature = "rvr")]
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv64weierstrass_config(curves: Vec<CurveConfig>) -> Rv64WeierstrassConfig {
+        let mut config = Rv64WeierstrassConfig::new(curves);
         *config.as_mut() = test_system_config();
         config
     }
 
     #[test]
     fn test_ec() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec",
@@ -53,20 +56,20 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_nonzero_a() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
+        let config = test_rv64weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_nonzero_a",
@@ -75,21 +78,21 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_two_curves() -> Result<()> {
         let config =
-            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+            test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_two_curves",
@@ -98,14 +101,14 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -113,7 +116,7 @@ mod tests {
     fn test_decompress() -> Result<()> {
         use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
 
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(),
+        let config = test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone(),
                 CurveConfig {
                     struct_name: "CurvePoint5mod8".to_string(),
                     modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
@@ -145,10 +148,10 @@ mod tests {
         )?;
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
@@ -166,12 +169,8 @@ mod tests {
         let r_y: [u8; 32] =
             hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
 
-        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y]
-            .concat()
-            .into_iter()
-            .map(PrimeCharacteristicRing::from_u8)
-            .collect();
-        air_test_with_min_segments(Rv32WeierstrassBuilder, config, openvm_exe, vec![coords], 1);
+        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y].concat();
+        air_test_with_min_segments(Rv64WeierstrassBuilder, config, openvm_exe, vec![coords], 1);
         Ok(())
     }
 
@@ -249,16 +248,64 @@ mod tests {
         .unwrap();
         let openvm_exe = VmExe::from_elf(
             elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )
         .unwrap();
         let config =
-            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+            test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_invalid_setup() {
+        let config =
+            test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "invalid_setup",
+            ["k256", "p256"],
+            &NoInitFile,
+        )
+        .unwrap();
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )
+        .unwrap();
+        let executor = VmExecutor::<F, _>::new(config).unwrap();
+        let result = executor.instance(&openvm_exe).unwrap().execute(vec![]);
+
+        match result {
+            Err(ExecutionError::RvrExecution(message)) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            Err(error) => panic!("expected an RVR execution error, got {error}"),
+            Ok(_) => panic!("expected RVR execution to fail"),
+        }
+
+        // The checkpoint API owns its input state and returns neither an execution object nor a
+        // transcript on failure. This exercises that public failure boundary with the same invalid
+        // setup program. Dirty-page state is intentionally private and cannot be observed after the
+        // Consumed state returns `Err`; preflight merges it only on success.
+        let checkpoint = executor.preflight_instance(&openvm_exe).unwrap();
+        let result = checkpoint.execute(vec![], PreflightLimits::new(1_000_000, 1024, 1024));
+        match result {
+            Err(ExecutionError::RvrExecution(message)) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            Err(error) => panic!("expected a checkpoint RVR execution error, got {error}"),
+            Ok(_) => panic!("invalid setup must not return a checkpoint transcript or VM state"),
+        }
     }
 }

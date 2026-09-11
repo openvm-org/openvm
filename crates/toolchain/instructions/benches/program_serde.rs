@@ -1,29 +1,27 @@
-use std::hint::black_box;
+use std::{array, hint::black_box};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use openvm_instructions::{instruction::Instruction, program::Program, VmOpcode};
-use p3_baby_bear::BabyBear;
+use openvm_instructions::{
+    instruction::{Instruction, InstructionOperand},
+    program::Program,
+    VmOpcode,
+};
 use rand::prelude::*;
 
-type F = BabyBear;
-
-fn random_instruction(rng: &mut impl Rng) -> Instruction<F> {
-    Instruction::new(
-        VmOpcode::from_usize(rng.random::<u16>() as usize),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-        rng.random(),
-    )
+fn random_instruction(rng: &mut impl Rng) -> Instruction {
+    let opcode = VmOpcode::from_usize(rng.random::<u16>() as usize);
+    let [a, b, c, d, e, f, g] = array::from_fn(|_| {
+        InstructionOperand::from_i32(
+            rng.random_range(InstructionOperand::MIN..=InstructionOperand::MAX),
+        )
+    });
+    Instruction::new(opcode, a, b, c, d, e, f, g)
 }
 
 fn program_serde_bench(c: &mut Criterion) {
     let mut rng = StdRng::from_seed([42; 32]);
     let instructions: Vec<_> = (0..100_000).map(|_| random_instruction(&mut rng)).collect();
-    let program: Program<F> = Program::from_instructions(&instructions);
+    let program: Program = Program::from_instructions(&instructions);
     c.bench_function("bitcode serialize Program with 100000 instructions", |b| {
         b.iter(|| bitcode::serialize(black_box(&program)))
     });
@@ -31,7 +29,7 @@ fn program_serde_bench(c: &mut Criterion) {
     println!("Result length in bytes: {}", bytes.len());
     c.bench_function(
         "bitcode deserialize Program with 100000 instructions",
-        |b| b.iter(|| bitcode::deserialize::<'_, Program<F>>(black_box(&bytes))),
+        |b| b.iter(|| bitcode::deserialize::<'_, Program>(black_box(&bytes))),
     );
 }
 

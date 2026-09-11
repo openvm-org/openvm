@@ -4,7 +4,7 @@ use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_sdk::{
-    config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
+    config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk,
 };
 use openvm_sdk_config::SdkVmConfig;
 
@@ -235,7 +235,7 @@ impl RunCmd {
 
         let (manifest_path, manifest_dir) =
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
-        let exe: VmExe<F> = read_object_from_file(exe_path)?;
+        let exe: VmExe = read_object_from_file(exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;
 
         let sdk = if matches!(
@@ -269,18 +269,19 @@ impl RunCmd {
 
         match self.run_args.mode {
             ExecutionMode::Pure => {
-                let output = sdk.execute(exe, inputs)?;
+                let output = sdk.compile_and_execute(exe, inputs)?;
                 println!("Execution output: {output:?}");
             }
             ExecutionMode::Meter => {
-                let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
+                let (output, (cost, instret)) =
+                    sdk.compile_and_execute_metered_cost(exe, inputs)?;
                 println!("Execution output: {output:?}");
 
                 println!("Number of instructions executed: {instret}");
                 println!("Total cost: {cost}");
             }
             ExecutionMode::Segment => {
-                let (output, segments) = sdk.execute_metered(exe, inputs)?;
+                let (output, segments) = sdk.compile_and_execute_metered(exe, inputs)?;
                 println!("Execution output: {output:?}");
 
                 let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();

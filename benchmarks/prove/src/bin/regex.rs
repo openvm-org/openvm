@@ -10,7 +10,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/regex/elf/openvm-regex-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     let data = include_str!("../../../guest/regex/regex_email.txt");

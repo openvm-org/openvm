@@ -1,0 +1,16 @@
+[package]
+name = "rvr-openvm-ext-algebra-ffi-common"
+description = "Shared FFI helpers for rvr-openvm-ext-algebra modular and fp2 staticlibs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-platform.workspace = true
+rvr-openvm-ext-ffi-common.workspace = true
+
+halo2curves-axiom.workspace = true
+num-bigint.workspace = true
+num-integer.workspace = true

@@ -15,3 +15,10 @@ pub mod bls12_381;
 pub mod bn254;
 
 pub use openvm_pairing_guest::pairing::PairingCheck;
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[cfg_attr(feature = "rvr-checkpoint-tests", inline(never))]
+#[cfg_attr(not(feature = "rvr-checkpoint-tests"), inline(always))]
+pub(crate) unsafe fn materialize_pairing_hint(ptr: *mut u8, dwords: usize) {
+    openvm_riscv_guest::hint_buffer_chunked(ptr, dwords);
+}

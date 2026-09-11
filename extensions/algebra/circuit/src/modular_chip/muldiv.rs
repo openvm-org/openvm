@@ -1,22 +1,18 @@
 use std::{cell::RefCell, rc::Rc};
 
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
-    FieldExpressionFiller, FieldVariable, SymbolicExpr,
+    FieldExpressionFiller, FieldExpressionProgram, FieldVariable, SymbolicExpr,
 };
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
-};
+use openvm_riscv_adapters::{VecHeapAdapterAir, VecHeapAdapterFiller};
 
 use super::{ModularAir, ModularChip, ModularExecutor};
 use crate::FieldExprVecHeapExecutor;
@@ -25,8 +21,16 @@ pub fn muldiv_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, usize, usize) {
+    let (program, is_mul_flag, is_div_flag) = muldiv_program(config, range_bus.range_max_bits);
+    (FieldExpr::new(program, range_bus), is_mul_flag, is_div_flag)
+}
+
+fn muldiv_program(
+    config: ExprBuilderConfig,
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, usize, usize) {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config, range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
     let x = ExprBuilder::new_input(builder.clone());
     let y = ExprBuilder::new_input(builder.clone());
@@ -58,60 +62,54 @@ pub fn muldiv_expr(
     let builder = (*builder).borrow().clone();
 
     (
-        FieldExpr::new(builder, range_bus, true),
+        FieldExpressionProgram::new(builder, true),
         is_mul_flag,
         is_div_flag,
     )
 }
 
-fn gen_base_expr(
+fn gen_base_program(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-) -> (FieldExpr, Vec<usize>, Vec<usize>) {
-    let (expr, is_mul_flag, is_div_flag) = muldiv_expr(config, range_checker_bus);
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, Vec<usize>, Vec<usize>) {
+    let (program, is_mul_flag, is_div_flag) = muldiv_program(config, range_max_bits);
 
     let local_opcode_idx = vec![
-        Rv32ModularArithmeticOpcode::MUL as usize,
-        Rv32ModularArithmeticOpcode::DIV as usize,
-        Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize,
+        ModularArithmeticOpcode::MUL as usize,
+        ModularArithmeticOpcode::DIV as usize,
+        ModularArithmeticOpcode::SETUP_MULDIV as usize,
     ];
     let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
 
-    (expr, local_opcode_idx, opcode_flag_idx)
+    (program, local_opcode_idx, opcode_flag_idx)
 }
 
-pub fn get_modular_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_muldiv_air<const BLOCKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> ModularAir<BLOCKS, BLOCK_SIZE> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+) -> ModularAir<BLOCKS> {
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_checker_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_checker_bus);
     ModularAir::new(
-        Rv32VecHeapAdapterAir::new(
-            exec_bridge,
-            mem_bridge,
-            bitwise_lookup_bus,
-            pointer_max_bits,
-        ),
+        VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
     )
 }
 
-pub fn get_modular_muldiv_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_muldiv_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-    pointer_max_bits: usize,
+    range_max_bits: usize,
     offset: usize,
-) -> ModularExecutor<BLOCKS, BLOCK_SIZE> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+) -> ModularExecutor<BLOCKS> {
+    let (program, local_opcode_idx, opcode_flag_idx) = gen_base_program(config, range_max_bits);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
-        expr,
+        program,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
@@ -119,17 +117,19 @@ pub fn get_modular_muldiv_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>
     ))
 }
 
-pub fn get_modular_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_muldiv_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pointer_max_bits: usize,
-) -> ModularChip<F, BLOCKS, BLOCK_SIZE> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+) -> ModularChip<F, BLOCKS> {
+    let range_bus = range_checker.bus();
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_bus);
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            VecHeapAdapterFiller::new(pointer_max_bits),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

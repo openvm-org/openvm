@@ -120,6 +120,26 @@ impl LinearMemory for BasicMemory {
         Self { ptr, size, layout }
     }
 
+    fn sparse_clone(&self, ranges: &[(usize, usize)]) -> Self {
+        let cloned = Self::new(self.size);
+        for &(start, end) in ranges {
+            assert!(
+                start <= end && end <= self.size,
+                "sparse clone range out of bounds"
+            );
+            // SAFETY: both allocations are valid for `self.size` bytes and the checked range is
+            // within them. The allocations are distinct.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    self.ptr.as_ptr().add(start),
+                    cloned.ptr.as_ptr().add(start),
+                    end - start,
+                );
+            }
+        }
+        cloned
+    }
+
     fn size(&self) -> usize {
         self.size
     }

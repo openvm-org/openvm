@@ -21,8 +21,8 @@ fn main() -> eyre::Result<()> {
     let ParallelCli { inner, concurrency } = ParallelCli::parse();
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
-        .rv32i(Default::default())
-        .rv32m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .keccak(Default::default())
         .build()
@@ -30,7 +30,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/keccak256_iter/elf/openvm-keccak256-iter-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     let num_keccak_iters: u64 = 1 << 12;

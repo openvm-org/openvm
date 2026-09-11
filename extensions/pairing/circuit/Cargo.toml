@@ -18,17 +18,18 @@ openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bls12_381",
     "bn254",
-    "aot",
-    "blstrs"
+    "blst"
 ] }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
+rvr-openvm-lift = { workspace = true, optional = true }
+rvr-openvm-ext-pairing = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 
@@ -44,26 +45,35 @@ cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-openvm-pairing-guest = { workspace = true }
-
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { path = "../../../crates/circuits/mod-builder", default-features = false, features = ["test-utils"] }
 openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
+rvr-state = { workspace = true }
 openvm-ecc-guest = { path = "../../ecc/guest", default-features = false }
 openvm-pairing-guest = { path = "../guest", default-features = false, features = [
     "halo2curves",
     "bls12_381",
     "bn254",
 ] }
+openvm-riscv-transpiler.workspace = true
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []
-tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "openvm-ecc-circuit/aot", "halo2curves-axiom/asm"]
+test-utils = [
+    "openvm-circuit/test-utils",
+    "openvm-ecc-circuit/test-utils",
+]
+tco = ["openvm-riscv-circuit/tco", "openvm-ecc-circuit/tco"]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-pairing",
+    "openvm-riscv-circuit/rvr",
+    "openvm-algebra-circuit/rvr",
+    "openvm-ecc-circuit/rvr",
+]
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",
@@ -79,5 +89,5 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-algebra-circuit/touchemall",
     "openvm-ecc-circuit/touchemall",
-    "openvm-rv32im-circuit/touchemall",
+    "openvm-riscv-circuit/touchemall",
 ]

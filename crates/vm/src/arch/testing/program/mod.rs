@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, mem::size_of};
 
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, program::pc_to_idx};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
@@ -12,7 +12,7 @@ use openvm_stark_backend::{
 
 use crate::{
     arch::ExecutionState,
-    system::program::{ProgramBus, ProgramExecutionCols},
+    system::program::{trace::instruction_operand_to_field, ProgramBus, ProgramExecutionCols},
 };
 
 pub mod air;
@@ -35,17 +35,18 @@ impl<F: PrimeField32> ProgramTester<F> {
         }
     }
 
-    pub fn execute(&mut self, instruction: &Instruction<F>, initial_state: &ExecutionState<u32>) {
+    /// `initial_state.pc` is a byte pc; the program bus carries pc indices.
+    pub fn execute(&mut self, instruction: &Instruction, initial_state: &ExecutionState<u32>) {
         self.records.push(ProgramExecutionCols {
-            pc: F::from_u32(initial_state.pc),
-            opcode: instruction.opcode.to_field(),
-            a: instruction.a,
-            b: instruction.b,
-            c: instruction.c,
-            d: instruction.d,
-            e: instruction.e,
-            f: instruction.f,
-            g: instruction.g,
+            pc_idx: F::from_u32(pc_to_idx(initial_state.pc)),
+            opcode: F::from_usize(instruction.opcode.as_usize()),
+            a: instruction_operand_to_field(instruction.a),
+            b: instruction_operand_to_field(instruction.b),
+            c: instruction_operand_to_field(instruction.c),
+            d: instruction_operand_to_field(instruction.d),
+            e: instruction_operand_to_field(instruction.e),
+            f: instruction_operand_to_field(instruction.f),
+            g: instruction_operand_to_field(instruction.g),
         });
     }
 }
@@ -56,8 +57,8 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+impl<SC: StarkProtocolConfig> Chip<CpuBackend<SC>> for ProgramTester<Val<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
         let width = Self::width();
         let mut values = Val::<SC>::zero_vec(height * width);

@@ -21,7 +21,8 @@ pub struct ProgramCols<T> {
 #[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
 #[repr(C)]
 pub struct ProgramExecutionCols<T> {
-    pub pc: T,
+    /// Circuit PC index (`byte_pc / DEFAULT_PC_STEP`).
+    pub pc_idx: T,
 
     pub opcode: T,
     pub a: T,

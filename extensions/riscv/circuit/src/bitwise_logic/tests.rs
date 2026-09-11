@@ -1,0 +1,359 @@
+use std::{array, borrow::BorrowMut, sync::Arc};
+
+use openvm_circuit::{
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        ExecutionBridge,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
+};
+use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::BitwiseLogicChipGpu,
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+};
+
+use super::{
+    core::run_bitwise_logic, trace::generate_trace_from_postflight, BitwiseLogicChip,
+    BitwiseLogicCoreAir, BitwiseLogicExecutor,
+};
+use crate::{
+    adapters::{BaseAluRegAdapterAir, BYTE_BITS, REGISTER_NUM_LIMBS},
+    bitwise_logic::BitwiseLogicCoreCols,
+    test_utils::rand_write_register_or_imm,
+    BitwiseLogicAir, BitwiseLogicFiller,
+};
+
+const MAX_INS_CAPACITY: usize = 128;
+type F = BabyBear;
+type Harness = TestChipHarness<F, BitwiseLogicExecutor, BitwiseLogicAir, BitwiseLogicChip<F>>;
+
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (BitwiseLogicAir, BitwiseLogicExecutor, BitwiseLogicChip<F>) {
+    let air = BitwiseLogicAir::new(
+        BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
+        BitwiseLogicCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+    );
+    let executor = BitwiseLogicExecutor::new(BaseAluOpcode::CLASS_OFFSET);
+    let chip = BitwiseLogicChip::new(BitwiseLogicFiller::new(bitwise_chip), memory_helper);
+    (air, executor, chip)
+}
+
+fn create_harness(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        tester.memory_helper(),
+    );
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_INS_CAPACITY,
+        generate_trace_from_postflight,
+    );
+
+    (harness, (bitwise_chip.air, bitwise_chip))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
+    rng: &mut StdRng,
+    opcode: BaseAluOpcode,
+    b: Option<[u8; REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; REGISTER_NUM_LIMBS]>,
+) {
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+
+    let (instruction, rd) =
+        rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
+    tester.execute(executor, preflight, &instruction);
+
+    let a = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(opcode, &b, &c).map(F::from_u8);
+    assert_eq!(a, tester.read_bytes::<REGISTER_NUM_LIMBS>(1, rd))
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[test_case(XOR, 100)]
+#[test_case(OR, 100)]
+#[test_case(AND, 100)]
+fn rand_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    // TODO(AG): make a more meaningful test for memory accesses
+    tester.write_bytes(2, 1024, [F::ONE; 8]);
+    tester.write_bytes(2, 1032, [F::ONE; 8]);
+    let sm_lo: [F; 8] = tester.read_bytes(2, 1024);
+    let sm_hi: [F; 8] = tester.read_bytes(2, 1032);
+    assert_eq!(sm_lo, [F::ONE; 8]);
+    assert_eq!(sm_hi, [F::ONE; 8]);
+
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_bitwise_logic_test(
+    opcode: BaseAluOpcode,
+    prank_a: [u32; REGISTER_NUM_LIMBS],
+    b: [u8; REGISTER_NUM_LIMBS],
+    c: [u8; REGISTER_NUM_LIMBS],
+    prank_opcode_flags: Option<[bool; 3]>,
+    _interaction_error: bool,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).unwrap().to_vec();
+        let cols: &mut BitwiseLogicCoreCols<F, REGISTER_NUM_LIMBS, BYTE_BITS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+        cols.a = prank_a.map(F::from_u32);
+        if let Some(prank_opcode_flags) = prank_opcode_flags {
+            cols.opcode_xor_flag = F::from_bool(prank_opcode_flags[0]);
+            cols.opcode_or_flag = F::from_bool(prank_opcode_flags[1]);
+            cols.opcode_and_flag = F::from_bool(prank_opcode_flags[2]);
+        }
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
+}
+
+#[test]
+fn bitwise_logic_xor_wrong_negative_test() {
+    run_negative_bitwise_logic_test(
+        XOR,
+        [255, 255, 255, 255, 255, 255, 255, 255],
+        [0, 0, 1, 0, 0, 0, 0, 0],
+        [255, 255, 255, 255, 255, 255, 255, 255],
+        None,
+        true,
+    );
+}
+
+#[test]
+fn bitwise_logic_or_wrong_negative_test() {
+    run_negative_bitwise_logic_test(
+        OR,
+        [255, 255, 255, 255, 255, 255, 255, 255],
+        [255, 255, 255, 254, 255, 255, 255, 255],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        true,
+    );
+}
+
+#[test]
+fn bitwise_logic_and_wrong_negative_test() {
+    run_negative_bitwise_logic_test(
+        AND,
+        [255, 255, 255, 255, 255, 255, 255, 255],
+        [0, 0, 1, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        true,
+    );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// SANITY TESTS
+///
+/// Ensure that solve functions produce the correct results.
+///////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+fn run_xor_sanity_test() {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [215, 138, 49, 173, 216, 1, 0, 3];
+    let result = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(XOR, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
+        assert_eq!(z[i], result[i])
+    }
+}
+
+#[test]
+fn run_or_sanity_test() {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [247, 171, 61, 239, 217, 35, 25, 207];
+    let result = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(OR, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
+        assert_eq!(z[i], result[i])
+    }
+}
+
+#[test]
+fn run_and_sanity_test() {
+    let x: [u8; REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; REGISTER_NUM_LIMBS] = [32, 33, 12, 66, 1, 34, 25, 204];
+    let result = run_bitwise_logic::<REGISTER_NUM_LIMBS, BYTE_BITS>(AND, &x, &y);
+    for i in 0..REGISTER_NUM_LIMBS {
+        assert_eq!(z[i], result[i])
+    }
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    BitwiseLogicExecutor,
+    BitwiseLogicAir,
+    BitwiseLogicChipGpu,
+    BitwiseLogicChip<F>,
+>;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = BitwiseLogicChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test_case(BaseAluOpcode::XOR, 100)]
+#[test_case(BaseAluOpcode::OR, 100)]
+#[test_case(BaseAluOpcode::AND, 100)]
+fn test_cuda_rand_bitwise_logic_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let mut harness = create_cuda_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
+    }
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

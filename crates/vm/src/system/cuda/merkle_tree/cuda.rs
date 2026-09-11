@@ -7,8 +7,10 @@ use openvm_cuda_common::{
     error::CudaError,
     stream::{cudaStream_t, GpuDeviceCtx},
 };
+use openvm_instructions::VM_DIGEST_WIDTH;
+use tracing::instrument;
 
-use super::{SharedBuffer, DIGEST_WIDTH, MERKLE_TOUCHED_BLOCK_WIDTH};
+use super::{SharedBuffer, MERKLE_TOUCHED_BLOCK_WIDTH};
 
 pub mod merkle_tree {
     use super::*;
@@ -19,7 +21,20 @@ pub mod merkle_tree {
             size: usize,
             d_tree: *mut std::ffi::c_void,
             tree_offset: usize,
-            addr_space_idx: u32,
+            cell_type: u8,
+            base_height: usize,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _build_sparse_merkle_subtree(
+            d_data: *mut u8,
+            d_tree: *mut std::ffi::c_void,
+            d_labels: *const u32,
+            h_levels: *const usize,
+            base_height: usize,
+            tree_height: usize,
+            cell_type: u8,
+            d_zero_hash: *const std::ffi::c_void,
             stream: cudaStream_t,
         ) -> i32;
 
@@ -57,15 +72,22 @@ pub mod merkle_tree {
             subtree_height: usize,
             child_buf: *mut u32,
             tmp_buf: *mut u32,
+            dirty_buf: *mut u32,
             tmp_storage: *mut u8,
             need_tmp_storage_bytes: usize,
             merkle_trace: *mut u32,
-            trace_height: usize,
+            unpadded_trace_height: usize,
             num_subtrees: usize,
             subtrees: *mut usize,        // is actually H**
             top_roots: *mut u32,         // are actually `H`s
             zero_hashes_end: *const u32, // are actually `H`s
             actual_subtree_heights: *const usize,
+            subtree_indexings: *const u8,
+            subtree_base_heights: *const u8,
+            cell_types: *const u8,
+            initial_data_ptrs: *const usize,
+            sparse_label_ptrs: *const usize,
+            sparse_level_ptrs: *const usize,
             d_poseidon2_raw_buffer: *mut std::ffi::c_void,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
@@ -73,12 +95,42 @@ pub mod merkle_tree {
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn build_sparse_merkle_subtree<T>(
+        d_data: &DeviceBuffer<u8>,
+        d_tree: &DeviceBuffer<T>,
+        d_labels: &DeviceBuffer<u32>,
+        levels: &[[u32; 2]],
+        base_height: usize,
+        tree_height: usize,
+        cell_type: u8,
+        d_zero_hash: &DeviceBuffer<T>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        let levels = levels
+            .iter()
+            .flat_map(|&[start, count]| [start as usize, count as usize])
+            .collect::<Vec<_>>();
+        CudaError::from_result(_build_sparse_merkle_subtree(
+            d_data.as_mut_ptr(),
+            d_tree.as_mut_raw_ptr(),
+            d_labels.as_ptr(),
+            levels.as_ptr(),
+            base_height,
+            tree_height,
+            cell_type,
+            d_zero_hash.as_raw_ptr(),
+            stream,
+        ))
+    }
+
     pub unsafe fn build_merkle_subtree<T>(
         d_data: &DeviceBuffer<u8>,
         size: usize,
         d_tree: &DeviceBuffer<T>,
         tree_offset: usize,
-        addr_space_idx: u32,
+        cell_type: u8,
+        base_height: usize,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_build_merkle_subtree(
@@ -86,7 +138,8 @@ pub mod merkle_tree {
             size,
             d_tree.as_mut_raw_ptr(),
             tree_offset,
-            addr_space_idx,
+            cell_type,
+            base_height,
             stream,
         ))
     }
@@ -152,14 +205,21 @@ pub mod merkle_tree {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(name = "update_merkle_tree", skip_all)]
     pub unsafe fn update_merkle_tree<T>(
         trace: &DeviceMatrix<T>,
         subtree_ptrs: &DeviceBuffer<usize>,
-        top_roots: &DeviceBuffer<[T; DIGEST_WIDTH]>,
-        zero_hash: &DeviceBuffer<[T; DIGEST_WIDTH]>,
+        top_roots: &DeviceBuffer<[T; VM_DIGEST_WIDTH]>,
+        zero_hash: &DeviceBuffer<[T; VM_DIGEST_WIDTH]>,
         touched_blocks: &DeviceBuffer<u32>,
         subtree_height: usize,
         actual_heights: &[usize],
+        subtree_indexings: &[u8],
+        subtree_base_heights: &[u8],
+        cell_types: &[u8],
+        initial_data_ptrs: &[usize],
+        sparse_label_ptrs: &[usize],
+        sparse_level_ptrs: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
         device_ctx: &GpuDeviceCtx,
@@ -167,6 +227,9 @@ pub mod merkle_tree {
         let num_leaves = touched_blocks.len() / MERKLE_TOUCHED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
         let tmp_buffer = DeviceBuffer::<u32>::with_capacity_on(5 * num_leaves, device_ctx);
+        // Per-layer dirty flags / their inclusive prefix sum (layers only shrink, so
+        // `num_leaves` entries suffice).
+        let dirty_buffer = DeviceBuffer::<u32>::with_capacity_on(num_leaves, device_ctx);
         let mut need_tmp_storage_bytes = 0;
         get_prefix_scan_temp_bytes(
             &tmp_buffer,
@@ -176,6 +239,12 @@ pub mod merkle_tree {
         )?;
         let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, device_ctx);
         let actual_heights = actual_heights.to_device_on(device_ctx).unwrap();
+        let subtree_indexings = subtree_indexings.to_device_on(device_ctx).unwrap();
+        let subtree_base_heights = subtree_base_heights.to_device_on(device_ctx).unwrap();
+        let cell_types = cell_types.to_device_on(device_ctx).unwrap();
+        let initial_data_ptrs = initial_data_ptrs.to_device_on(device_ctx).unwrap();
+        let sparse_label_ptrs = sparse_label_ptrs.to_device_on(device_ctx).unwrap();
+        let sparse_level_ptrs = sparse_level_ptrs.to_device_on(device_ctx).unwrap();
         let poseidon2_records = hasher_buffer.records();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
@@ -183,6 +252,7 @@ pub mod merkle_tree {
             subtree_height,
             tmp_buffer.as_mut_ptr(),
             tmp_buffer.as_mut_ptr().add(2 * num_leaves),
+            dirty_buffer.as_mut_ptr(),
             tmp_storage.as_mut_ptr(),
             need_tmp_storage_bytes,
             trace.buffer().as_ptr() as *mut u32,
@@ -192,6 +262,12 @@ pub mod merkle_tree {
             top_roots.as_mut_ptr() as *mut u32,
             zero_hash.as_ptr() as *mut u32,
             actual_heights.as_ptr(),
+            subtree_indexings.as_ptr(),
+            subtree_base_heights.as_ptr(),
+            cell_types.as_ptr(),
+            initial_data_ptrs.as_ptr(),
+            sparse_label_ptrs.as_ptr(),
+            sparse_level_ptrs.as_ptr(),
             poseidon2_records.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.

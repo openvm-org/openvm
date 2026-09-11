@@ -3,12 +3,13 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
-pub mod adapters;
 pub mod call;
 pub mod canonicity;
 pub mod count;
 pub mod output;
 pub mod poseidon2;
+#[cfg(feature = "rvr")]
+pub mod runtime;
 
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda_abi;

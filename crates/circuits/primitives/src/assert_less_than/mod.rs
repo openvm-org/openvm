@@ -47,15 +47,15 @@ impl<T> AssertLessThanIo<T> {
     }
 }
 
-/// These columns are owned by the SubAir. Typically used with `T = AB::Var`.
-/// `AUX_LEN` is the number of AUX columns
-/// we have that AUX_LEN = max_bits.div_ceil(bus.range_max_bits)
+/// Auxiliary columns owned by the SubAir. Typically used with `T = AB::Var`.
+///
+/// `AUX_LEN` must equal `max_bits.div_ceil(bus.range_max_bits)`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug, new)]
 pub struct LessThanAuxCols<T, const AUX_LEN: usize> {
-    // lower_decomp consists of lower decomposed into limbs of size bus.range_max_bits
-    // note: the final limb might have less than bus.range_max_bits bits
-    pub lower_decomp: [T; AUX_LEN],
+    /// The decomposition limbs range checked by the SubAir. The final limb may use fewer bits than
+    /// `bus.range_max_bits`.
+    pub diff_decomp: [T; AUX_LEN],
 }
 
 /// This is intended for use as a **SubAir**, not as a standalone Air.
@@ -103,53 +103,77 @@ impl AssertLtSubAir {
         self.bus.range_max_bits
     }
 
-    /// FOR INTERNAL USE ONLY.
-    /// This AIR is only sound if interactions are enabled
+    /// Reconstructs the value that `diff_decomp` decomposes.
     ///
-    /// Constraints between `io` and `aux` are only enforced when `count != 0`.
-    /// This means `aux` can be all zero independent on what `io` is by setting `count = 0`.
+    /// The returned expression has degree 1.
     #[inline(always)]
-    fn eval_without_range_checks<AB: AirBuilder<Var: Copy>>(
-        &self,
-        builder: &mut AB,
-        io: AssertLessThanIo<AB::Expr>,
-        lower_decomp: &[AB::Var],
-    ) {
-        assert_eq!(lower_decomp.len(), self.decomp_limbs);
-        // this is the desired intermediate value (i.e. y - x - 1)
-        // deg(intermed_val) = deg(io)
-        let intermed_val = io.y - io.x - AB::Expr::ONE;
-
-        // Construct lower from lower_decomp:
-        // - each limb of lower_decomp will be range checked
-        // deg(lower) = 1
-        let lower = lower_decomp
+    fn compose<AB: AirBuilder<Var: Copy>>(&self, diff_decomp: &[AB::Var]) -> AB::Expr {
+        assert_eq!(diff_decomp.len(), self.decomp_limbs);
+        diff_decomp
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
                 acc + val * AB::Expr::from_usize(1 << (i * self.range_max_bits()))
-            });
+            })
+    }
 
-        // constrain that y - x - 1 is equal to the constructed lower value.
+    /// Range checks `diff_decomp` and returns `x = y - 1 - compose(diff_decomp)`.
+    ///
+    /// Since `diff_decomp` is a complete decomposition of `y - x - 1`, the returned expression uses
+    /// `y` and the committed `diff_decomp` columns. It has degree `max(1, deg(y))`.
+    ///
+    /// When `count != 0`, the range checks bound `compose(diff_decomp)` to `[0, 2^max_bits)`, so
+    /// `x < y` holds. Callers use the returned value in their external constraints or interactions
+    /// on enabled rows.
+    #[must_use]
+    #[inline(always)]
+    pub fn eval_derive_x<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        y: AB::Expr,
+        diff_decomp: &[AB::Var],
+        count: impl Into<AB::Expr>,
+    ) -> AB::Expr {
+        self.eval_range_checks(builder, diff_decomp, count);
+        y - AB::Expr::ONE - self.compose::<AB>(diff_decomp)
+    }
+
+    /// Constrains `diff_decomp` to compose to `y - x - 1` when `io.count != 0`.
+    #[inline(always)]
+    fn eval_composition<AB: AirBuilder<Var: Copy>>(
+        &self,
+        builder: &mut AB,
+        io: AssertLessThanIo<AB::Expr>,
+        diff_decomp: &[AB::Var],
+    ) {
+        // this is the desired intermediate value (i.e. y - x - 1)
+        // deg(intermed_val) = deg(io)
+        let intermed_val = io.y - io.x - AB::Expr::ONE;
+
+        // each limb of diff_decomp will be range checked
+        // deg(composed) = 1
+        let composed = self.compose::<AB>(diff_decomp);
+
+        // constrain that y - x - 1 is equal to the composed value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is
         // equivalent to x < y
-        builder.when(io.count).assert_eq(intermed_val, lower);
+        builder.when(io.count).assert_eq(intermed_val, composed);
         // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val),
-        // deg(lower)) since we are constraining count * intermed_val == count * lower
+        // deg(composed)) since we are constraining count * intermed_val == count * composed
     }
 
     #[inline(always)]
     fn eval_range_checks<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        lower_decomp: &[AB::Var],
+        diff_decomp: &[AB::Var],
         count: impl Into<AB::Expr>,
     ) {
         let count = count.into();
         let mut bits_remaining = self.max_bits;
-        // we range check the limbs of the lower_decomp so that we know each element
-        // of lower_decomp has the correct number of bits
-        for limb in lower_decomp {
+        // we range check the limbs of diff_decomp so that we know each element
+        // of diff_decomp has the correct number of bits
+        for limb in diff_decomp {
             // the last limb might have fewer than `bus.range_max_bits` bits
             let range_bits = bits_remaining.min(self.range_max_bits());
             self.bus
@@ -173,14 +197,14 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
     fn eval<'a>(
         &'a self,
         builder: &'a mut AB,
-        (io, lower_decomp): (AssertLessThanIo<AB::Expr>, &'a [AB::Var]),
+        (io, diff_decomp): (AssertLessThanIo<AB::Expr>, &'a [AB::Var]),
     ) where
         AB::Var: 'a,
         AB::Expr: 'a,
     {
         // Note: every AIR that uses this sub-AIR must include the range checks for soundness
-        self.eval_range_checks(builder, lower_decomp, io.count.clone());
-        self.eval_without_range_checks(builder, io, lower_decomp);
+        self.eval_range_checks(builder, diff_decomp, io.count.clone());
+        self.eval_composition(builder, io, diff_decomp);
     }
 }
 
@@ -189,7 +213,7 @@ impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     // x, y are u32 because memory records are storing u32 and there would be needless conversions.
     // It also prevents a F: PrimeField32 trait bound.
     type TraceContext<'a> = (&'a VariableRangeCheckerChip, u32, u32);
-    /// lower_decomp
+    /// diff_decomp
     type ColsMut<'a> = &'a mut [F];
 
     /// Should only be used when `io.count != 0` i.e. only on non-padding rows.
@@ -197,10 +221,10 @@ impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
     fn generate_subrow<'a>(
         &'a self,
         (range_checker, x, y): (&'a VariableRangeCheckerChip, u32, u32),
-        lower_decomp: &'a mut [F],
+        diff_decomp: &'a mut [F],
     ) {
         debug_assert!(x < y, "assert {x} < {y} failed");
-        debug_assert_eq!(lower_decomp.len(), self.decomp_limbs);
+        debug_assert_eq!(diff_decomp.len(), self.decomp_limbs);
         debug_assert!(
             x < (1 << self.max_bits),
             "{x} has more than {} bits",
@@ -213,6 +237,6 @@ impl<F: Field> TraceSubRowGenerator<F> for AssertLtSubAir {
         );
 
         // Note: if x < y then y - x - 1 should already have <= max_bits bits
-        range_checker.decompose(y - x - 1, self.max_bits, lower_decomp);
+        range_checker.decompose(y - x - 1, self.max_bits, diff_decomp);
     }
 }

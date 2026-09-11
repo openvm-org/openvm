@@ -15,8 +15,6 @@ openvm-instructions = { workspace = true }
 openvm-instructions-derive = { workspace = true }
 openvm-transpiler = { workspace = true }
 
-p3-field = { workspace = true }
-
 rrs-lib = { workspace = true }
 eyre = { workspace = true }
 serde = { workspace = true }

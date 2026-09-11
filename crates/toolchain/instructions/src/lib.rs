@@ -3,12 +3,12 @@
 #![allow(non_camel_case_types)]
 
 use openvm_instructions_derive::LocalOpcode;
-use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 pub mod exe;
 pub mod instruction;
+pub mod metering;
 mod phantom;
 pub mod program;
 /// Module with traits and constants for RISC-V instruction definitions for custom OpenVM
@@ -18,7 +18,19 @@ pub mod utils;
 
 pub use phantom::*;
 
+/// Bytes in one u16 memory cell.
+pub const U16_CELL_SIZE: usize = size_of::<u16>();
+/// u16 cells in one memory-bus block.
+pub const BLOCK_FE_WIDTH: usize = 4;
+/// Bytes in one memory-bus block.
+pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
+
+/// Public values address space.
+pub const PUBLIC_VALUES_AS: u32 = 3;
+/// Deferral output address space.
 pub const DEFERRAL_AS: u32 = 4;
+/// Field elements in an OpenVM VM-level digest, including memory roots and commitments.
+pub const VM_DIGEST_WIDTH: usize = 8;
 
 pub trait LocalOpcode {
     const CLASS_OFFSET: usize;
@@ -55,11 +67,6 @@ impl VmOpcode {
     /// Create a new [VmOpcode] from a usize
     pub const fn from_usize(value: usize) -> Self {
         Self(value)
-    }
-
-    /// Convert the VmOpcode into a field element
-    pub fn to_field<F: Field>(&self) -> F {
-        F::from_usize(self.as_usize())
     }
 }
 

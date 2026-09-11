@@ -156,8 +156,8 @@ crate_features() {
 ERRORS=0
 
 # --- Step 1: Format check ---
-info "Step 1/3: cargo +nightly fmt --all -- --check"
-if cargo +nightly fmt --all -- --check; then
+info "Step 1/3: cargo +nightly-2026-09-10 fmt --all -- --check"
+if cargo +nightly-2026-09-10 fmt --all -- --check; then
     pass "formatting"
 else
     fail "formatting"
@@ -209,7 +209,7 @@ for i in "${!CRATE_NAMES[@]}"; do
             heavy=1
             echo -n "(heavy) "
         fi
-        args=(nextest run --cargo-profile=fast -p "$name")
+        args=(nextest run --cargo-profile=fast --no-tests=pass -p "$name")
         [ -n "$feats" ] && args+=(--features "$feats")
         [ "$heavy" -eq 1 ] && args+=(--profile=heavy)
         [ "$name" = "cargo-openvm" ] && args+=(--test-threads=1)

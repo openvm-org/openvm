@@ -1,7 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
+use openvm_cuda_common::{
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
+    stream::cudaStream_t,
+};
 
 pub mod count {
     use super::*;
@@ -150,162 +154,278 @@ pub mod call {
 
     #[allow(clippy::too_many_arguments)]
     extern "C" {
-        fn _deferral_call_tracegen(
+        fn _deferral_call_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
-            d_records: *const u8,
-            num_records: usize,
+            instructions: DeviceBufferView,
+            pc_base: u32,
+            program: DeviceBufferView,
+            memory: DeviceBufferView,
+            seeds: DeviceBufferView,
+            field_values: DeviceBufferView,
+            field_seeds: DeviceBufferView,
+            predecessors: DeviceBufferView,
+            steps: DeviceBufferView,
+            step_start: usize,
+            num_steps: usize,
+            expected_opcode: u32,
+            register_as: u32,
+            memory_as: u32,
+            deferral_as: u32,
+            byte_pointer_bits: u32,
             d_count: *mut u32,
             num_def_circuits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             timestamp_max_bits: u32,
             d_bitwise: *mut u32,
-            bitwise_num_bits: u32,
             d_poseidon2_records: *mut F,
             d_poseidon2_counts: *mut DeferralPoseidon2Count,
             d_poseidon2_idx: *mut u32,
             poseidon2_capacity: usize,
             address_bits: usize,
+            error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
+    pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         width: usize,
-        d_records: &DeviceBuffer<u8>,
-        num_records: usize,
+        instructions: DeviceBufferView,
+        pc_base: u32,
+        program: DeviceBufferView,
+        memory: DeviceBufferView,
+        seeds: DeviceBufferView,
+        field_values: DeviceBufferView,
+        field_seeds: DeviceBufferView,
+        predecessors: DeviceBufferView,
+        steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        expected_opcode: u32,
+        register_as: u32,
+        memory_as: u32,
+        deferral_as: u32,
+        byte_pointer_bits: u32,
         d_count: &DeviceBuffer<u32>,
         num_def_circuits: usize,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
         d_bitwise: &DeviceBuffer<F>,
-        bitwise_num_bits: u32,
         d_poseidon2_records: &DeviceBuffer<F>,
         d_poseidon2_counts: &DeviceBuffer<DeferralPoseidon2Count>,
         d_poseidon2_idx: &DeviceBuffer<u32>,
         poseidon2_capacity: usize,
         address_bits: usize,
+        error: *mut u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_deferral_call_tracegen(
+        CudaError::from_result(_deferral_call_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            num_records,
+            instructions,
+            pc_base,
+            program,
+            memory,
+            seeds,
+            field_values,
+            field_seeds,
+            predecessors,
+            steps,
+            step_start,
+            num_steps,
+            expected_opcode,
+            register_as,
+            memory_as,
+            deferral_as,
+            byte_pointer_bits,
             d_count.as_mut_ptr(),
             num_def_circuits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
             d_bitwise.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             d_poseidon2_records.as_mut_ptr(),
             d_poseidon2_counts.as_mut_ptr(),
             d_poseidon2_idx.as_mut_ptr(),
             poseidon2_capacity,
             address_bits,
+            error,
             stream,
         ))
     }
 }
 
 pub mod output {
-    use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-
     use super::*;
     use crate::cuda_abi::poseidon2::DeferralPoseidon2Count;
 
-    pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * 4;
-
     #[repr(C)]
     #[derive(Debug, Clone, Copy)]
-    pub struct DeferralOutputPerCall {
-        pub output_commit: [u8; COMMIT_NUM_BYTES],
+    pub struct DeferralOutputReplayCall {
+        pub row_start: u32,
+        pub num_rows: u32,
     }
 
-    #[repr(C)]
-    #[derive(Debug, Clone, Copy)]
-    pub struct DeferralOutputPerRow {
-        pub header_offset: u32,
-        pub section_idx: u32,
-        pub call_idx: u32,
-        pub poseidon2_res: [F; DIGEST_SIZE],
-    }
+    const _: () = assert!(std::mem::size_of::<DeferralOutputReplayCall>() == 8);
 
     #[allow(clippy::too_many_arguments)]
     extern "C" {
-        fn _deferral_output_tracegen(
+        fn _deferral_output_replay_count_rows(
+            d_counts: *mut u32,
+            d_instructions: DeviceBufferView,
+            pc_base: u32,
+            d_program: DeviceBufferView,
+            d_memory: DeviceBufferView,
+            d_steps: DeviceBufferView,
+            step_start: usize,
+            num_steps: usize,
+            expected_opcode: u32,
+            register_as: u32,
+            memory_as: u32,
+            num_def_circuits: u32,
+            d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _deferral_output_replay_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
-            d_raw_records: *const u8,
-            d_per_call: *const DeferralOutputPerCall,
-            d_per_row: *const DeferralOutputPerRow,
-            num_valid: usize,
+            d_instructions: DeviceBufferView,
+            pc_base: u32,
+            d_program: DeviceBufferView,
+            d_memory: DeviceBufferView,
+            d_seeds: DeviceBufferView,
+            d_predecessors: DeviceBufferView,
+            d_steps: DeviceBufferView,
+            step_start: usize,
+            num_steps: usize,
+            d_calls: *const DeferralOutputReplayCall,
+            rows_used: usize,
+            expected_opcode: u32,
+            register_as: u32,
+            memory_as: u32,
+            byte_pointer_bits: u32,
             d_count: *mut u32,
             num_def_circuits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
             timestamp_max_bits: u32,
             d_bitwise: *mut u32,
-            bitwise_num_bits: u32,
             address_bits: usize,
             d_poseidon2_records: *mut F,
             d_poseidon2_counts: *mut DeferralPoseidon2Count,
             d_poseidon2_idx: *mut u32,
             poseidon2_capacity: usize,
+            d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
+    pub unsafe fn replay_count_rows(
+        d_counts: &DeviceBuffer<u32>,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program: DeviceBufferView,
+        d_memory: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        expected_opcode: u32,
+        register_as: u32,
+        memory_as: u32,
+        num_def_circuits: u32,
+        d_error: *mut u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_deferral_output_replay_count_rows(
+            d_counts.as_mut_ptr(),
+            d_instructions,
+            pc_base,
+            d_program,
+            d_memory,
+            d_steps,
+            step_start,
+            num_steps,
+            expected_opcode,
+            register_as,
+            memory_as,
+            num_def_circuits,
+            d_error,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn replay_tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         width: usize,
-        d_raw_records: &DeviceBuffer<u8>,
-        d_per_call: &DeviceBuffer<DeferralOutputPerCall>,
-        d_per_row: &DeviceBuffer<DeferralOutputPerRow>,
-        num_valid: usize,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program: DeviceBufferView,
+        d_memory: DeviceBufferView,
+        d_seeds: DeviceBufferView,
+        d_predecessors: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        d_calls: &DeviceBuffer<DeferralOutputReplayCall>,
+        rows_used: usize,
+        expected_opcode: u32,
+        register_as: u32,
+        memory_as: u32,
+        byte_pointer_bits: u32,
         d_count: &DeviceBuffer<u32>,
         num_def_circuits: usize,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
         d_bitwise: &DeviceBuffer<F>,
-        bitwise_num_bits: u32,
         address_bits: usize,
         d_poseidon2_records: &DeviceBuffer<F>,
         d_poseidon2_counts: &DeviceBuffer<DeferralPoseidon2Count>,
         d_poseidon2_idx: &DeviceBuffer<u32>,
-        poseidon2_capacity: usize,
+        d_error: *mut u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_deferral_output_tracegen(
+        CudaError::from_result(_deferral_output_replay_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,
-            d_raw_records.as_ptr(),
-            d_per_call.as_ptr(),
-            d_per_row.as_ptr(),
-            num_valid,
+            d_instructions,
+            pc_base,
+            d_program,
+            d_memory,
+            d_seeds,
+            d_predecessors,
+            d_steps,
+            step_start,
+            num_steps,
+            d_calls.as_ptr(),
+            rows_used,
+            expected_opcode,
+            register_as,
+            memory_as,
+            byte_pointer_bits,
             d_count.as_mut_ptr(),
             num_def_circuits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
             d_bitwise.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
             address_bits,
             d_poseidon2_records.as_mut_ptr(),
             d_poseidon2_counts.as_mut_ptr(),
             d_poseidon2_idx.as_mut_ptr(),
-            poseidon2_capacity,
+            d_poseidon2_records.len(),
+            d_error,
             stream,
         ))
     }

@@ -18,7 +18,7 @@ An OpenVM circuit has two kinds of AIRs:
 - **System AIRs and chips**, which are shared across VM configurations. These include the program
   AIR, the VM connector AIR, the memory boundary and memory Merkle AIRs, the Poseidon2 periphery AIR
   (used for Merkle hashing), and shared lookup AIRs (e.g., range checking).
-- **Instruction executor AIRs and chips**, which constrain opcode families. For example, an RV32
+- **Instruction executor AIRs and chips**, which constrain opcode families. For example, an RV64
   arithmetic AIR may constrain operations such as `add` and `sub`, while precompile AIRs may
   constrain instructions such as SHA256 or Keccak.
 
@@ -35,7 +35,8 @@ AIRs, and global coherence comes from the buses plus the local AIR constraints.
 
 ## Execution flow
 
-An _execution state_ consists of `pc` and `timestamp`.
+A circuit _execution state_ consists of the program counter index
+`pc_idx = pc / DEFAULT_PC_STEP` and `timestamp`.
 
 Although we use sequential language below, a witness (a set of traces) is a static object. The AIR
 constraints and bus balancing conditions are designed so that from any valid witness one can extract
@@ -45,21 +46,21 @@ which such a witness exists.
 
 The connector AIR exposes the initial and final execution states of the segment as public values. On
 the execution bus, the connector sends the initial execution state and receives the final execution
-state. If the segment terminates the whole program, the connector also constrains that `final_pc`
+state. If the segment terminates the whole program, the connector also constrains that `final_pc_idx`
 points to a `TERMINATE` instruction with the declared exit code.
 
 For each instruction it handles, an instruction executor AIR receives an execution state from the
-bus and sends the next execution state back. It also looks up the instruction at that `pc` on the
+bus and sends the next execution state back. It also looks up the instruction at that `pc_idx` on the
 program bus, and the local AIR constraints check the semantics of the opcode family.
 
 Bus balancing forces these interactions to form a chain: the initial state sent by the connector
 is received by some instruction executor trace row, whose post-state is received by another
 instruction executor trace row, and so on, until the final state is received by the connector. The
-program bus pins each step to the instruction committed at that `pc`.
+program bus pins each step to the instruction committed at that `pc_idx`.
 
-The net effect is that a valid witness encodes a chain of instruction executions from `initial_pc`
-to `final_pc`. Large executions may be split into segments; continuations then relate the boundary
-states of adjacent segments. See
+The net effect is that a valid witness encodes a chain of instruction executions from
+`initial_pc_idx` to `final_pc_idx`. Large executions may be split into segments; continuations then
+relate the boundary states of adjacent segments. See
 [Continuations](/specs/architecture/continuations) for full details.
 
 ## Memory flow
@@ -84,7 +85,7 @@ An _instruction executor_ is a chip that packages an instruction-handling AIR to
 execution logic and trace generation.
 
 An instruction executor typically handles a family of related opcodes rather than a single opcode.
-For example, one executor may constrain several RV32 arithmetic operations, while others constrain
+For example, one executor may constrain several RV64 arithmetic operations, while others constrain
 precompile instructions such as SHA256 or Keccak.
 
 Most instruction executors are implemented in two parts:
@@ -116,7 +117,7 @@ instruction execution. See
 ## Global meaning
 
 Local AIR constraints ensure that each individual step is correct (e.g., an arithmetic AIR
-constrains that a destination register receives the correct 32-bit result). The bus interactions
+constrains that a destination register receives the correct result). The bus interactions
 stitch those local constraints into one execution flow and one memory history, anchored by the
 boundary AIRs and the committed program.
 
@@ -134,5 +135,5 @@ At the constraint level, a new instruction executor must:
 - [Ensure memory consistency](/specs/architecture/memory#what-to-take-into-account-when-adding-a-new-chip)
 - Constrain the semantics of every opcode family that your AIR handles.
 - Balance the relevant system buses for each logical instruction execution.
-- Update the execution state correctly, including the `pc` and `timestamp`.
+- Update the execution state correctly, including `pc_idx` and `timestamp`.
 - Preserve the timestamp-growth bound above, even if one logical instruction execution spans multiple trace rows.

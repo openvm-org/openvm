@@ -10,17 +10,18 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
     LocalOpcode,
 };
+use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_block_span};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use super::DeferralOutputExecutor;
+use super::{checked_deferral_index, DeferralOutputExecutor};
 use crate::{
     utils::{
-        join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, join_byte_memory_ops, split_output, DIGEST_BYTE_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     OUTPUT_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
@@ -33,12 +34,28 @@ struct DeferralOutputPrecompute {
     deferral_idx: u32,
 }
 
+#[inline(always)]
+fn checked_output_len(pc: u32, output_len: [u8; 8]) -> Result<u32, ExecutionError> {
+    let output_len =
+        u32::try_from(u64::from_le_bytes(output_len)).map_err(|_| ExecutionError::Fail {
+            pc,
+            msg: "deferral output length exceeds u32",
+        })?;
+    if !output_len.is_multiple_of(DIGEST_SIZE as u32) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "deferral output length must be a whole sponge row",
+        });
+    }
+    Ok(output_len)
+}
+
 impl DeferralOutputExecutor {
     #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut DeferralOutputPrecompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -52,22 +69,26 @@ impl DeferralOutputExecutor {
         } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::OUTPUT as usize
-            || d.as_canonical_u32() != RV32_REGISTER_AS
-            || e.as_canonical_u32() != RV32_MEMORY_AS
+            || d.as_u32() != REGISTER_AS
+            || e.as_u32() != MEMORY_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = DeferralOutputPrecompute {
-            rd_ptr: a.as_canonical_u32(),
-            rs_ptr: b.as_canonical_u32(),
-            deferral_idx: c.as_canonical_u32(),
+            rd_ptr: a.as_u32(),
+            rs_ptr: b.as_u32(),
+            deferral_idx: c.as_u32(),
         };
         Ok(())
     }
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        format!("{:?}", DeferralOpcode::OUTPUT)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<DeferralOutputPrecompute>()
     }
@@ -76,35 +97,32 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut DeferralOutputPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_impl::<_, _>)
+        Ok(execute_e1_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut DeferralOutputPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_handler::<_, _>)
+        Ok(execute_e1_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for DeferralOutputExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
     fn metered_pre_compute_size(&self) -> usize {
@@ -116,16 +134,16 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<DeferralOutputPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_impl::<_, _>)
+        Ok(execute_e2_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -133,86 +151,128 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<DeferralOutputPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_handler::<_, _>)
+        Ok(execute_e2_handler::<_>)
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for DeferralOutputExecutor {}
-
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralOutputPrecompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> u32 {
-    let output_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rs_ptr));
-    let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_read(RV32_MEMORY_AS, input_ptr + (i * DEFAULT_BLOCK_SIZE) as u32)
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<u32, ExecutionError> {
+    let pc = exec_state.pc();
+    let deferral_idx = checked_deferral_index(
+        pc,
+        exec_state.streams.deferrals.len(),
+        pre_compute.deferral_idx,
+    )?;
+    let output_ptr = validate_memory_block_span(
+        pc,
+        bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rd_ptr)),
+        0,
+    )?;
+    let input_ptr = validate_memory_block_span(
+        pc,
+        bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.rs_ptr)),
+        OUTPUT_TOTAL_MEMORY_OPS,
+    )?;
+    let output_key_chunks: [[u8; MEMORY_BLOCK_BYTES]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
+        exec_state.vm_read_bytes(MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
-    let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
+    let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_byte_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
 
-    let output_len_val = u64::from_le_bytes(output_len) as usize;
+    let output_len_val = checked_output_len(pc, output_len)? as usize;
+    validate_memory_block_span(pc, output_ptr, output_len_val / MEMORY_BLOCK_BYTES)?;
 
     // Bytes are sponge-hashed and constrained against output_commit. The
     // sponge rate is DIGEST_SIZE.
     let num_rows = output_len_val / DIGEST_SIZE + 1;
-    debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
-
-    let output_raw = exec_state.streams.deferrals[pre_compute.deferral_idx as usize]
-        .get_output(&output_commit.to_vec())
-        .clone();
-    debug_assert_eq!(output_raw.len(), output_len_val);
+    let output_raw = exec_state.streams.deferrals[deferral_idx]
+        .try_get_output(&output_commit.to_vec())
+        .filter(|output| output.len() == output_len_val)
+        .cloned()
+        .ok_or(ExecutionError::Fail {
+            pc,
+            msg: "deferral output advice is missing or has the wrong length",
+        })?;
 
     for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
         let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-        for chunk_idx in 0..DIGEST_MEMORY_OPS {
-            exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
-                RV32_MEMORY_AS,
-                row_output_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-                &memory_op_chunk(output_chunk, chunk_idx),
+        for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
+            exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
+                MEMORY_AS,
+                row_output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
+                &byte_memory_op_chunk(output_chunk, chunk_idx),
             );
         }
     }
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
-    num_rows as u32
+    Ok(num_rows as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{checked_output_len, DIGEST_SIZE};
+
+    #[test]
+    fn output_length_accepts_u32_boundary_and_rejects_high_word() {
+        let max_aligned = u32::MAX - (DIGEST_SIZE as u32 - 1);
+        assert_eq!(
+            checked_output_len(7, u64::from(max_aligned).to_le_bytes()).unwrap(),
+            max_aligned
+        );
+        let error = checked_output_len(7, (u64::from(u32::MAX) + 1).to_le_bytes()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "execution failed at pc 7, err: deferral output length exceeds u32"
+        );
+    }
+
+    #[test]
+    fn output_length_rejects_partial_sponge_row() {
+        let error = checked_output_len(7, 1u64.to_le_bytes()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "execution failed at pc 7, err: deferral output length must be a whole sponge row"
+        );
+    }
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
     let pre_compute: &DeferralOutputPrecompute =
         from_raw_parts(pre_compute, size_of::<DeferralOutputPrecompute>()).borrow();
-    execute_e12_impl(pre_compute, exec_state);
+    execute_e12_impl(pre_compute, exec_state)?;
+    Ok(())
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<DeferralOutputPrecompute> = from_raw_parts(
         pre_compute,
         size_of::<E2PreCompute<DeferralOutputPrecompute>>(),
     )
     .borrow();
-    let height = execute_e12_impl(&pre_compute.data, exec_state);
+    let height = execute_e12_impl(&pre_compute.data, exec_state)?;
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -224,4 +284,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
         pre_compute.chip_idx as usize + (OUTPUT_AIR_REL_IDX - POSEIDON2_AIR_REL_IDX),
         height,
     );
+    Ok(())
 }

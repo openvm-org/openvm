@@ -287,8 +287,8 @@ fn test_cuda_var_range() {
         Arc::new(VariableRangeCheckerAir::new(bus)),
     ];
     let ctxs = vec![
-        dummy_chip.generate_proving_ctx(()),
-        range_checker.generate_proving_ctx(()),
+        dummy_chip.generate_proving_ctx(),
+        range_checker.generate_proving_ctx(),
     ];
 
     test_gpu_engine_small()
@@ -356,8 +356,8 @@ fn test_cuda_var_range_hybrid() {
     ];
     let ctxs = vec![
         cpu_proving_ctx,
-        gpu_dummy_chip.generate_proving_ctx(()),
-        range_checker.generate_proving_ctx(()),
+        gpu_dummy_chip.generate_proving_ctx(),
+        range_checker.generate_proving_ctx(),
     ];
 
     test_gpu_engine_small()

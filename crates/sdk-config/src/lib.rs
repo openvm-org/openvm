@@ -3,6 +3,8 @@ use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::*;
 use openvm_bigint_transpiler::*;
+#[cfg(not(feature = "cuda"))]
+use openvm_circuit::arch::SegmentProver as VmSegmentProver;
 use openvm_circuit::{
     arch::{instructions::DEFERRAL_AS, *},
     derive::VmConfig,
@@ -17,17 +19,33 @@ use openvm_keccak256_circuit::*;
 use openvm_keccak256_transpiler::*;
 use openvm_pairing_circuit::*;
 use openvm_pairing_transpiler::*;
-use openvm_rv32im_circuit::*;
-use openvm_rv32im_transpiler::*;
+use openvm_riscv_circuit::*;
+use openvm_riscv_transpiler::*;
 use openvm_sha2_circuit::*;
 use openvm_sha2_transpiler::*;
-use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
-use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
 use openvm_transpiler::transpiler::Transpiler;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::RvrExtensions;
 use serde::{Deserialize, Serialize};
 
 pub mod deferral;
 use deferral::DeferralConfig;
+
+#[cfg(feature = "cuda")]
+mod preflight;
+#[cfg(feature = "cuda")]
+mod preflight_driver;
+#[cfg(feature = "cuda")]
+use preflight_driver::PreparedContinuation;
+#[cfg(feature = "cuda")]
+pub use preflight_driver::SegmentProver;
+#[cfg(not(feature = "cuda"))]
+pub type SegmentProver = VmSegmentProver<BabyBearPoseidon2CpuEngine, SdkVmCpuBuilder>;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -39,7 +57,7 @@ cfg_if::cfg_if! {
         };
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
-        use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+        use openvm_riscv_circuit::Rv64ImGpuProverExt;
         use openvm_sha2_circuit::Sha2GpuProverExt;
         pub use SdkVmGpuBuilder as SdkVmBuilder;
     } else {
@@ -62,16 +80,16 @@ struct SdkVmConfigWrapper {
 #[serde(from = "SdkVmConfigWithDefaultDeser")]
 pub struct SdkVmConfig {
     pub system: SdkSystemConfig,
-    pub rv32i: Option<UnitStruct>,
+    pub rv64i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
 
-    /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv32m`
+    /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv64m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
     /// performance.
-    pub rv32m: Option<Rv32M>,
-    /// NOTE: if enabling this together with the [Rv32M] extension, you should set the `rv32m`
+    pub rv64m: Option<Rv64M>,
+    /// NOTE: if enabling this together with the [Rv64M] extension, you should set the `rv64m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
     /// performance.
     pub bigint: Option<Int256>,
@@ -101,8 +119,8 @@ impl SdkVmConfig {
         let bls_config = PairingCurve::Bls12_381.curve_config();
         SdkVmConfig::builder()
             .system(Default::default())
-            .rv32i(Default::default())
-            .rv32m(Default::default())
+            .rv64i(Default::default())
+            .rv64m(Default::default())
             .io(Default::default())
             .keccak(Default::default())
             .sha2(Default::default())
@@ -141,18 +159,18 @@ impl SdkVmConfig {
             .optimize()
     }
 
-    /// Configuration with RISC-V RV32IM and IO VM extensions loaded.
+    /// Configuration with RISC-V RV64IM and IO VM extensions loaded.
     ///
     /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
     ///
     /// ```toml
-    #[doc = include_str!("openvm_riscv32.toml")]
+    #[doc = include_str!("openvm_riscv64.toml")]
     /// ```
-    pub fn riscv32() -> Self {
+    pub fn riscv64() -> Self {
         SdkVmConfig::builder()
             .system(Default::default())
-            .rv32i(Default::default())
-            .rv32m(Default::default())
+            .rv64i(Default::default())
+            .rv64m(Default::default())
             .io(Default::default())
             .build()
             .optimize()
@@ -171,18 +189,18 @@ impl SdkVmConfig {
     }
 }
 
-pub trait TranspilerConfig<F> {
-    fn transpiler(&self) -> Transpiler<F>;
+pub trait TranspilerConfig {
+    fn transpiler(&self) -> Transpiler;
 }
 
-impl TranspilerConfig<F> for SdkVmConfig {
-    fn transpiler(&self) -> Transpiler<F> {
+impl TranspilerConfig for SdkVmConfig {
+    fn transpiler(&self) -> Transpiler {
         let mut transpiler = Transpiler::default();
-        if self.rv32i.is_some() {
-            transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
+        if self.rv64i.is_some() {
+            transpiler = transpiler.with_extension(Rv64ITranspilerExtension);
         }
         if self.io.is_some() {
-            transpiler = transpiler.with_extension(Rv32IoTranspilerExtension);
+            transpiler = transpiler.with_extension(Rv64IoTranspilerExtension);
         }
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
@@ -190,8 +208,8 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.sha2.is_some() {
             transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
-        if self.rv32m.is_some() {
-            transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
+        if self.rv64m.is_some() {
+            transpiler = transpiler.with_extension(Rv64MTranspilerExtension);
         }
         if self.bigint.is_some() {
             transpiler = transpiler.with_extension(Int256TranspilerExtension);
@@ -237,14 +255,14 @@ impl SdkVmConfig {
 
     /// Apply small optimizations to the configuration.
     pub fn apply_optimizations(&mut self) {
-        let rv32m = self.rv32m.as_mut();
+        let rv64m = self.rv64m.as_mut();
         let bigint = self.bigint.as_mut();
-        if let (Some(bigint), Some(rv32m)) = (bigint, rv32m) {
-            rv32m.range_tuple_checker_sizes[0] =
-                rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
-            rv32m.range_tuple_checker_sizes[1] =
-                rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
-            bigint.range_tuple_checker_sizes = rv32m.range_tuple_checker_sizes;
+        if let (Some(bigint), Some(rv64m)) = (bigint, rv64m) {
+            rv64m.range_tuple_checker_sizes[0] =
+                rv64m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+            rv64m.range_tuple_checker_sizes[1] =
+                rv64m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+            bigint.range_tuple_checker_sizes = rv64m.range_tuple_checker_sizes;
         }
 
         const DEFERRAL_AS_USIZE: usize = DEFERRAL_AS as usize;
@@ -264,11 +282,11 @@ impl SdkVmConfig {
     pub fn to_inner(&self) -> SdkVmConfigInner {
         let config = self.clone().optimize();
         let system = config.system.config.clone();
-        let rv32i = config.rv32i.map(|_| Rv32I);
-        let io = config.io.map(|_| Rv32Io);
+        let rv64i = config.rv64i.map(|_| Rv64I);
+        let io = config.io.map(|_| Rv64Io);
         let keccak = config.keccak.map(|_| Keccak256);
         let sha2 = config.sha2.map(|_| Sha2);
-        let rv32m = config.rv32m;
+        let rv64m = config.rv64m;
         let bigint = config.bigint;
         let modular = config.modular.clone();
         let fp2 = config.fp2.clone();
@@ -278,11 +296,11 @@ impl SdkVmConfig {
 
         SdkVmConfigInner {
             system,
-            rv32i,
+            rv64i,
             io,
             keccak,
             sha2,
-            rv32m,
+            rv64m,
             bigint,
             modular,
             fp2,
@@ -303,26 +321,26 @@ pub struct SdkVmCpuBuilder;
 /// Can be obtained via [`SdkVmConfig::to_inner`].
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct SdkVmConfigInner {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
-    #[extension(executor = "Rv32IExecutor")]
-    pub rv32i: Option<Rv32I>,
-    #[extension(executor = "Rv32IoExecutor")]
-    pub io: Option<Rv32Io>,
+    #[extension(executor = "Rv64IExecutor")]
+    pub rv64i: Option<Rv64I>,
+    #[extension(executor = "Rv64IoExecutor")]
+    pub io: Option<Rv64Io>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha2Executor")]
     pub sha2: Option<Sha2>,
 
-    #[extension(executor = "Rv32MExecutor")]
-    pub rv32m: Option<Rv32M>,
+    #[extension(executor = "Rv64MExecutor")]
+    pub rv64m: Option<Rv64M>,
     #[extension(executor = "Int256Executor")]
     pub bigint: Option<Int256>,
     #[extension(executor = "ModularExtensionExecutor")]
     pub modular: Option<ModularExtension>,
     #[extension(executor = "Fp2ExtensionExecutor")]
     pub fp2: Option<Fp2Extension>,
-    #[extension(executor = "PairingExtensionExecutor<F>")]
+    #[extension(executor = "PairingExtensionExecutor")]
     pub pairing: Option<PairingExtension>,
     #[extension(executor = "WeierstrassExtensionExecutor")]
     pub ecc: Option<WeierstrassExtension>,
@@ -332,7 +350,7 @@ pub struct SdkVmConfigInner {
 }
 
 // Generated by macro
-pub type SdkVmConfigExecutor<F> = SdkVmConfigInnerExecutor<F>;
+pub type SdkVmConfigExecutor = SdkVmConfigInnerExecutor;
 
 impl<F: Field> VmExecutionConfig<F> for SdkVmConfig
 where
@@ -344,6 +362,14 @@ where
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
         self.to_inner().create_executors()
+    }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> RvrExtensions
+    where
+        F: PrimeField32,
+    {
+        self.to_inner().create_rvr_extensions(air_idx)
     }
 }
 
@@ -364,17 +390,13 @@ where
 {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let config = config.to_inner();
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
@@ -383,42 +405,38 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        if let Some(rv32i) = &config.rv32i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32i, inventory)?;
+        if let Some(rv64i) = &config.rv64i {
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, rv64i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
         if let Some(sha2) = &config.sha2 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
         }
-        if let Some(rv32m) = &config.rv32m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
+        if let Some(rv64m) = &config.rv64m {
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, rv64m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
-            VmProverExtension::<E, _, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, modular, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
-            VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
         if let Some(ecc) = &config.ecc {
-            VmProverExtension::<E, _, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;
         }
         if let Some(deferral) = &config.deferral {
-            VmProverExtension::<E, _, _>::extend_prover(
-                &DeferralCpuProverExt,
-                deferral,
-                inventory,
-            )?;
+            VmProverExtension::<E, _>::extend_prover(&DeferralCpuProverExt, deferral, inventory)?;
         }
         Ok(chip_complex)
     }
@@ -432,17 +450,13 @@ pub struct SdkVmGpuBuilder;
 impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, GpuBackend, Self::SystemChipInventory>, ChipInventoryError> {
         type E = BabyBearPoseidon2GpuEngine;
 
         let config = config.to_inner();
@@ -453,40 +467,59 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        if let Some(rv32i) = &config.rv32i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32i, inventory)?;
+        if let Some(rv64i) = &config.rv64i {
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, rv64i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
         }
         if let Some(sha2) = &config.sha2 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
         }
-        if let Some(rv32m) = &config.rv32m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32m, inventory)?;
+        if let Some(rv64m) = &config.rv64m {
+            VmProverExtension::<E, _>::extend_prover(&Rv64ImGpuProverExt, rv64m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
-            VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
-            VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
         if let Some(ecc) = &config.ecc {
-            VmProverExtension::<E, _, _>::extend_prover(&EccProverExt, ecc, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&EccProverExt, ecc, inventory)?;
         }
         if let Some(deferral) = &config.deferral {
-            VmProverExtension::<E, _, _>::extend_prover(&DeferralProverExt, deferral, inventory)?;
+            VmProverExtension::<E, _>::extend_prover(&DeferralProverExt, deferral, inventory)?;
         }
         Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl ContinuationProverBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
+    type PreparedContinuation = PreparedContinuation;
+
+    fn prepare_continuation(
+        instance: &VmInstance<BabyBearPoseidon2GpuEngine, Self>,
+    ) -> Result<Self::PreparedContinuation, VirtualMachineError> {
+        PreparedContinuation::new(instance)
+    }
+
+    fn prove_continuation(
+        prepared: &mut Self::PreparedContinuation,
+        instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, Self>,
+        input: Streams,
+    ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
+        prepared.prove(instance, input)
     }
 }
 
@@ -551,14 +584,14 @@ impl From<SystemConfig> for SdkSystemConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct UnitStruct {}
 
-impl From<Rv32I> for UnitStruct {
-    fn from(_: Rv32I) -> Self {
+impl From<Rv64I> for UnitStruct {
+    fn from(_: Rv64I) -> Self {
         UnitStruct {}
     }
 }
 
-impl From<Rv32Io> for UnitStruct {
-    fn from(_: Rv32Io) -> Self {
+impl From<Rv64Io> for UnitStruct {
+    fn from(_: Rv64Io) -> Self {
         UnitStruct {}
     }
 }
@@ -580,12 +613,12 @@ struct SdkVmConfigWithDefaultDeser {
     #[serde(default)]
     pub system: SdkSystemConfig,
 
-    pub rv32i: Option<UnitStruct>,
+    pub rv64i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha2: Option<UnitStruct>,
 
-    pub rv32m: Option<Rv32M>,
+    pub rv64m: Option<Rv64M>,
     pub bigint: Option<Int256>,
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
@@ -599,11 +632,11 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
     fn from(config: SdkVmConfigWithDefaultDeser) -> Self {
         let ret = Self {
             system: config.system,
-            rv32i: config.rv32i,
+            rv64i: config.rv64i,
             io: config.io,
             keccak: config.keccak,
             sha2: config.sha2,
-            rv32m: config.rv32m,
+            rv64m: config.rv64m,
             bigint: config.bigint,
             modular: config.modular,
             fp2: config.fp2,

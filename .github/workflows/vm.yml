@@ -8,6 +8,7 @@ on:
     branches: ["**"]
     paths:
       - "crates/circuits/**"
+      - "crates/rvr/**"
       - "crates/toolchain/instructions/**"
       - "crates/toolchain/platform/**"
       - "crates/vm/**"
@@ -57,6 +58,13 @@ jobs:
       - name: Run vm crate tests with basic memory
         working-directory: crates/vm
         run: cargo nextest run --cargo-profile=fast --features parallel,basic-memory
+
+      - name: Run rvr crate tests
+        run: cargo nextest run --cargo-profile=fast -p rvr-openvm-ir -p rvr-openvm-lift -p rvr-openvm -p rvr-state --no-tests=pass
+
+      - name: Run vm rvr backend tests
+        working-directory: crates/vm
+        run: cargo nextest run --cargo-profile=fast --features parallel,rvr -E 'test(/^arch::rvr::/)'
 
       - name: sccache stats
         if: always()

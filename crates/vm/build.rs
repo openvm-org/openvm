@@ -19,8 +19,18 @@ fn main() {
 
         builder
             .clone()
+            .include("cuda/rvr/include")
+            .watch("cuda/rvr/include")
             .library_name("tracegen_gpu_system")
-            .files_from_glob("cuda/src/system/**/*.cu")
+            .files([
+                "cuda/src/system/boundary.cu",
+                "cuda/src/system/inventory.cu",
+                "cuda/src/system/memory/merkle_tree.cu",
+                "cuda/src/system/phantom.cu",
+                "cuda/src/system/poseidon2.cu",
+                "cuda/src/system/program.cu",
+                "cuda/src/system/postflight.cu",
+            ])
             .build();
 
         #[cfg(any(test, feature = "test-utils"))]

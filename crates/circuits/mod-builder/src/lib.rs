@@ -1,5 +1,7 @@
 mod builder;
 mod core_chip;
+#[cfg(feature = "cuda")]
+pub mod device_program;
 mod field_variable;
 mod symbolic_expr;
 

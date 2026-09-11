@@ -1,10 +1,13 @@
-use std::sync::Arc;
+use std::{
+    ffi::c_void,
+    mem::size_of,
+    sync::{Arc, Mutex},
+};
 
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::Chip;
+use openvm_circuit::arch::cuda::postflight::GpuPostflightError;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
-    copy::{MemCopyD2H, MemCopyH2D},
+    copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     stream::GpuDeviceCtx,
 };
@@ -16,83 +19,172 @@ use crate::{
     poseidon2::DeferralPoseidon2Cols,
 };
 
-#[derive(Clone)]
-pub struct DeferralPoseidon2SharedBuffer {
-    pub records: Arc<DeviceBuffer<F>>,
-    pub counts: Arc<DeviceBuffer<DeferralPoseidon2Count>>,
-    pub idx: Arc<DeviceBuffer<u32>>,
+pub(crate) struct DeferralPoseidon2ProducerBuffer {
+    pub(crate) records: DeviceBuffer<F>,
+    pub(crate) counts: DeviceBuffer<DeferralPoseidon2Count>,
+    pub(crate) idx: DeviceBuffer<u32>,
+    pub(crate) expected_records: usize,
+}
+
+impl DeferralPoseidon2ProducerBuffer {
+    pub(crate) fn new(expected_records: usize, device_ctx: &GpuDeviceCtx) -> Self {
+        assert!(expected_records > 0);
+        let idx = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        idx.fill_zero_on(device_ctx).unwrap();
+        Self {
+            records: DeviceBuffer::<F>::with_capacity_on(
+                expected_records * DIGEST_SIZE * 2,
+                device_ctx,
+            ),
+            counts: DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(
+                expected_records,
+                device_ctx,
+            ),
+            idx,
+            expected_records,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct DeferralPoseidon2SharedBuffer {
+    producers: Arc<Mutex<Vec<DeferralPoseidon2ProducerBuffer>>>,
+}
+
+impl DeferralPoseidon2SharedBuffer {
+    pub(crate) fn push(&self, buffer: DeferralPoseidon2ProducerBuffer) {
+        self.producers.lock().unwrap().push(buffer);
+    }
 }
 
 pub struct DeferralPoseidon2ChipGpu {
     pub device_ctx: GpuDeviceCtx,
-    pub records: Arc<DeviceBuffer<F>>,
-    pub counts: Arc<DeviceBuffer<DeferralPoseidon2Count>>,
-    pub idx: Arc<DeviceBuffer<u32>>,
+    pub(crate) shared: DeferralPoseidon2SharedBuffer,
     pub sbox_registers: usize,
 }
 
 impl DeferralPoseidon2ChipGpu {
-    /// Creates a new deferral Poseidon2 chip configured for `max_trace_height` records. Each
-    /// Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, and a buffer of that
-    /// size is allocated.
-    pub fn new(max_trace_height: usize, sbox_registers: usize, device_ctx: GpuDeviceCtx) -> Self {
-        let max_num_records = max_trace_height.next_power_of_two();
-        let max_record_buf_size = max_num_records * (DIGEST_SIZE * 2);
-
-        let idx = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, &device_ctx));
-        idx.fill_zero_on(&device_ctx).unwrap();
-
+    pub fn new(sbox_registers: usize, device_ctx: GpuDeviceCtx) -> Self {
         Self {
-            device_ctx: device_ctx.clone(),
-            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(
-                max_record_buf_size,
-                &device_ctx,
-            )),
-            counts: Arc::new(DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(
-                max_num_records,
-                &device_ctx,
-            )),
-            idx,
+            device_ctx,
+            shared: DeferralPoseidon2SharedBuffer::default(),
             sbox_registers,
         }
     }
 
-    pub fn shared_buffer(&self) -> DeferralPoseidon2SharedBuffer {
-        DeferralPoseidon2SharedBuffer {
-            records: self.records.clone(),
-            counts: self.counts.clone(),
-            idx: self.idx.clone(),
-        }
+    pub(crate) fn shared_buffer(&self) -> DeferralPoseidon2SharedBuffer {
+        self.shared.clone()
     }
 
     pub fn trace_width() -> usize {
         DeferralPoseidon2Cols::<F>::width()
     }
-}
 
-impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
-    fn generate_proving_ctx(&self, _: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let mut num_records = self.idx.to_host_on(&self.device_ctx).unwrap()[0] as usize;
-        if num_records == 0 {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+    fn generate_proving_ctx_checked(
+        &self,
+        max_trace_height: usize,
+    ) -> Result<AirProvingContext<GpuBackend>, String> {
+        let mut producer_guard = self.shared.producers.lock().unwrap();
+        let mut num_records = 0usize;
+        for producer in producer_guard.iter() {
+            let actual = producer
+                .idx
+                .to_host_on(&self.device_ctx)
+                .map_err(|error| error.to_string())?[0] as usize;
+            if actual != producer.expected_records {
+                return Err(format!(
+                    "Deferral Poseidon2 producer emitted {actual} records, expected {}",
+                    producer.expected_records
+                ));
+            }
+            num_records = num_records
+                .checked_add(actual)
+                .ok_or_else(|| "Deferral Poseidon2 producer record count overflow".to_string())?;
         }
+        if num_records == 0 {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
+
+        // Bound every potentially large allocation before consuming producer
+        // ownership. The deduplicated trace cannot exceed this raw upper bound.
+        let upper_trace_height = num_records
+            .checked_next_power_of_two()
+            .ok_or_else(|| "Deferral Poseidon2 padded trace height overflow".to_string())?;
+        if upper_trace_height > max_trace_height {
+            return Err(format!(
+                "Deferral Poseidon2 padded trace height {upper_trace_height} exceeds segment limit {max_trace_height}"
+            ));
+        }
+        num_records
+            .checked_mul(DIGEST_SIZE * 2)
+            .and_then(|elements| elements.checked_mul(size_of::<F>()))
+            .ok_or_else(|| "Deferral Poseidon2 record allocation overflow".to_string())?;
+        num_records
+            .checked_mul(size_of::<DeferralPoseidon2Count>())
+            .ok_or_else(|| "Deferral Poseidon2 count allocation overflow".to_string())?;
+        upper_trace_height
+            .checked_mul(Self::trace_width())
+            .and_then(|elements| elements.checked_mul(size_of::<F>()))
+            .ok_or_else(|| "Deferral Poseidon2 trace allocation overflow".to_string())?;
+
+        let mut producers = std::mem::take(&mut *producer_guard);
+        drop(producer_guard);
+        let (records, counts) = if producers.len() == 1 {
+            let producer = producers.pop().unwrap();
+            (producer.records, producer.counts)
+        } else {
+            let records = DeviceBuffer::<F>::with_capacity_on(
+                num_records * DIGEST_SIZE * 2,
+                &self.device_ctx,
+            );
+            let counts = DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(
+                num_records,
+                &self.device_ctx,
+            );
+            let mut offset = 0usize;
+            for producer in &producers {
+                let record_elements = producer.expected_records * DIGEST_SIZE * 2;
+                unsafe {
+                    cuda_memcpy_on::<true, true>(
+                        records.as_mut_ptr().add(offset * DIGEST_SIZE * 2) as *mut c_void,
+                        producer.records.as_ptr() as *mut c_void,
+                        record_elements * size_of::<F>(),
+                        &self.device_ctx,
+                    )
+                    .map_err(|error| error.to_string())?;
+                    cuda_memcpy_on::<true, true>(
+                        counts.as_mut_ptr().add(offset) as *mut c_void,
+                        producer.counts.as_ptr() as *mut c_void,
+                        producer.expected_records * size_of::<DeferralPoseidon2Count>(),
+                        &self.device_ctx,
+                    )
+                    .map_err(|error| error.to_string())?;
+                }
+                offset += producer.expected_records;
+            }
+            // Buffer drops enqueue stream-ordered frees after these copies.
+            drop(producers);
+            (records, counts)
+        };
 
         let dedup_records =
             DeviceBuffer::<F>::with_capacity_on(num_records * DIGEST_SIZE * 2, &self.device_ctx);
         let dedup_counts =
             DeviceBuffer::<DeferralPoseidon2Count>::with_capacity_on(num_records, &self.device_ctx);
         unsafe {
-            let d_num_records = [num_records].to_device_on(&self.device_ctx).unwrap();
+            let d_num_records = [num_records]
+                .to_device_on(&self.device_ctx)
+                .map_err(|error| error.to_string())?;
             let mut temp_bytes = 0;
             poseidon2::deduplicate_records_get_temp_bytes(
-                &self.records,
-                &self.counts,
+                &records,
+                &counts,
                 num_records,
                 &d_num_records,
                 &mut temp_bytes,
                 self.device_ctx.stream.as_raw(),
             )
-            .expect("Failed to get deferral poseidon2 temp bytes");
+            .map_err(|error| error.to_string())?;
 
             let d_temp_storage = if temp_bytes == 0 {
                 DeviceBuffer::<u8>::new()
@@ -101,8 +193,8 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
             };
 
             poseidon2::deduplicate_records(
-                &self.records,
-                &self.counts,
+                &records,
+                &counts,
                 &dedup_records,
                 &dedup_counts,
                 num_records,
@@ -111,16 +203,28 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 temp_bytes,
                 self.device_ctx.stream.as_raw(),
             )
-            .expect("Failed to deduplicate deferral poseidon2 records");
+            .map_err(|error| error.to_string())?;
 
             num_records = *d_num_records
                 .to_host_on(&self.device_ctx)
-                .unwrap()
+                .map_err(|error| error.to_string())?
                 .first()
-                .unwrap();
+                .ok_or_else(|| "Deferral Poseidon2 dedup count is missing".to_string())?;
         }
+        // The D2H dedup count fences the sort/reduce stream. Release the raw
+        // combined producers before allocating the final trace; only compact
+        // deduplicated inputs remain live through tracegen.
+        drop(records);
+        drop(counts);
 
-        let trace_height = next_power_of_two_or_zero(num_records);
+        let trace_height = num_records
+            .checked_next_power_of_two()
+            .ok_or_else(|| "Deferral Poseidon2 deduplicated trace height overflow".to_string())?;
+        if trace_height > max_trace_height {
+            return Err(format!(
+                "Deferral Poseidon2 deduplicated trace height {trace_height} exceeds segment limit {max_trace_height}"
+            ));
+        }
         let trace = DeviceMatrix::<F>::with_capacity_on(
             trace_height,
             Self::trace_width(),
@@ -138,13 +242,17 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralPoseidon2ChipGpu {
                 self.sbox_registers,
                 self.device_ctx.stream.as_raw(),
             )
-            .expect("Failed to generate deferral poseidon2 trace");
+            .map_err(|error| error.to_string())?;
         }
 
-        self.idx
-            .fill_zero_on(&self.device_ctx)
-            .expect("Failed to reset deferral poseidon2 record index");
+        Ok(AirProvingContext::simple_no_pis(trace))
+    }
 
-        AirProvingContext::simple_no_pis(trace)
+    pub fn generate_proving_ctx_direct(
+        &self,
+        max_trace_height: usize,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        self.generate_proving_ctx_checked(max_trace_height)
+            .map_err(GpuPostflightError::InvalidTranscript)
     }
 }

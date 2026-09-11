@@ -6,6 +6,7 @@ use std::{
 };
 
 use openvm_circuit_primitives::Chip;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -31,7 +32,8 @@ use crate::{
                 MemoryMerkleChip, MemoryMerkleCols, MerkleTree,
             },
             online::{GuestMemory, LinearMemory},
-            AddressMap, MemoryImage,
+            persistent::DirtyLeaves,
+            ptr_bits_from_address_height, AddressMap, MemoryImage,
         },
         poseidon2::Poseidon2PeripheryChip,
     },
@@ -40,7 +42,6 @@ use crate::{
 
 mod util;
 
-const CHUNK: usize = 8;
 const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
 type F = BabyBear;
 
@@ -63,9 +64,9 @@ fn test(
                 initial_memory.get_f::<F>(address_space as u32, pointer as u32)
                     != final_memory.get_f(address_space as u32, pointer as u32)
             } {
-                let label = (pointer / CHUNK) as u32;
+                let label = (pointer / VM_DIGEST_WIDTH) as u32;
                 assert!(address_space - (ADDR_SPACE_OFFSET as usize) < (1 << addr_space_height));
-                assert!(pointer < (CHUNK << address_height));
+                assert!(pointer < (VM_DIGEST_WIDTH << address_height));
                 assert!(touched_labels.contains(&(address_space as u32, label)));
             }
         }
@@ -77,24 +78,42 @@ fn test(
         MerkleTree::from_memory(final_memory, &memory_dimensions, &hash_test_chip);
 
     let mut chip =
-        MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
-    let final_partition: BTreeMap<_, [F; CHUNK]> =
-        memory_to_vec_partition::<F, CHUNK>(final_memory, &memory_dimensions)
+        MemoryMerkleChip::<VM_DIGEST_WIDTH, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
+    let final_partition: BTreeMap<_, [F; VM_DIGEST_WIDTH]> =
+        memory_to_vec_partition::<F, VM_DIGEST_WIDTH>(final_memory, &memory_dimensions)
             .into_iter()
             .map(|(idx, values)| {
                 let address_space =
                     (idx >> memory_dimensions.address_height) as u32 + ADDR_SPACE_OFFSET;
                 let label = (idx & ((1 << memory_dimensions.address_height) - 1)) as u32;
-                ((address_space, label * (CHUNK as u32)), values)
+                ((address_space, label * (VM_DIGEST_WIDTH as u32)), values)
             })
             .collect();
-    let final_partition = final_partition
+    let final_partition: BTreeMap<_, _> = final_partition
         .into_iter()
         .filter(|((address_space, pointer), _)| {
-            touched_labels.contains(&(*address_space, pointer / CHUNK as u32))
+            touched_labels.contains(&(*address_space, pointer / VM_DIGEST_WIDTH as u32))
         })
         .collect();
-    chip.finalize(initial_memory, &final_partition, &hash_test_chip);
+    // Dirtiness is per *write* and the test scenario defines its write pattern here:
+    // exactly the touched leaves whose values changed are treated as written (the
+    // minimal valid dirty set; any superset would also be sound).
+    let dirty_leaves: DirtyLeaves = final_partition
+        .iter()
+        .filter(|((address_space, pointer), values)| {
+            let init_values: [F; VM_DIGEST_WIDTH] = array::from_fn(|i| unsafe {
+                initial_memory.get_f::<F>(*address_space, *pointer + i as u32)
+            });
+            init_values != **values
+        })
+        .map(|(&key, _)| key)
+        .collect();
+    chip.finalize(
+        initial_memory,
+        &final_partition,
+        &dirty_leaves,
+        &hash_test_chip,
+    );
 
     assert_eq!(
         chip.final_state.as_ref().unwrap().final_root,
@@ -102,14 +121,15 @@ fn test(
     );
     let chip_api = chip.generate_proving_ctx();
 
-    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
+    let dummy_interaction_air =
+        DummyInteractionAir::new(4 + VM_DIGEST_WIDTH, true, merkle_bus.index);
     let mut dummy_interaction_trace_rows = vec![];
     let mut interaction = |interaction_type: PermutationInteractionType,
                            is_compress: bool,
                            height: usize,
                            as_label: u32,
                            address_label: u32,
-                           hash: [BabyBear; CHUNK]| {
+                           hash: [BabyBear; VM_DIGEST_WIDTH]| {
         let expand_direction = if is_compress {
             BabyBear::NEG_ONE
         } else {
@@ -131,7 +151,10 @@ fn test(
     for (address_space, address_label) in touched_labels {
         let initial_values = unsafe {
             array::from_fn(|i| {
-                initial_memory.get((address_space, address_label * CHUNK as u32 + i as u32))
+                initial_memory.get((
+                    address_space,
+                    address_label * VM_DIGEST_WIDTH as u32 + i as u32,
+                ))
             })
         };
         let as_label = address_space - ADDR_SPACE_OFFSET;
@@ -143,17 +166,20 @@ fn test(
             address_label,
             initial_values,
         );
-        let final_values = *final_partition
-            .get(&(address_space, address_label * (CHUNK as u32)))
-            .unwrap();
-        interaction(
-            PermutationInteractionType::Send,
-            true,
-            0,
-            as_label,
-            address_label,
-            final_values,
-        );
+        let leaf_ptr = address_label * (VM_DIGEST_WIDTH as u32);
+        let final_values = *final_partition.get(&(address_space, leaf_ptr)).unwrap();
+        // Like the real boundary chip, the dummy references a leaf's final state only
+        // when the leaf is dirty (the final-claim multiplicity is `is_dirty`).
+        if dirty_leaves.contains(&(address_space, leaf_ptr)) {
+            interaction(
+                PermutationInteractionType::Send,
+                true,
+                0,
+                as_label,
+                address_label,
+                final_values,
+            );
+        }
     }
 
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
@@ -200,15 +226,15 @@ fn random_test(
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
-                layout: MemoryCellType::F { size: 4 },
+                num_cells: VM_DIGEST_WIDTH << height,
+                layout: MemoryCellType::FIELD32,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
-                layout: MemoryCellType::F { size: 4 },
+                num_cells: VM_DIGEST_WIDTH << height,
+                layout: MemoryCellType::FIELD32,
             },
         ],
-        height + 3,
+        ptr_bits_from_address_height(height),
         20,
         17,
     );
@@ -222,7 +248,7 @@ fn random_test(
     while num_initial_addresses != 0 || num_touched_addresses != 0 {
         let address_space = (next_u32() & 1) + 1;
         let label = next_u32() % (1 << height);
-        let pointer = label * CHUNK as u32 + (next_u32() % CHUNK as u32);
+        let pointer = label * VM_DIGEST_WIDTH as u32 + (next_u32() % VM_DIGEST_WIDTH as u32);
 
         if seen.insert(pointer) {
             let is_initial = next_u32() & 1 == 0;
@@ -289,15 +315,15 @@ fn expand_test_no_accesses() {
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
-                layout: MemoryCellType::F { size: 4 },
+                num_cells: VM_DIGEST_WIDTH << height,
+                layout: MemoryCellType::FIELD32,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
-                layout: MemoryCellType::F { size: 4 },
+                num_cells: VM_DIGEST_WIDTH << height,
+                layout: MemoryCellType::FIELD32,
             },
         ],
-        height + 3,
+        ptr_bits_from_address_height(height),
         20,
         17,
     );
@@ -305,13 +331,18 @@ fn expand_test_no_accesses() {
 
     let memory = AddressMap::from_mem_config(&mem_config);
 
-    let mut chip: MemoryMerkleChip<CHUNK, _> = MemoryMerkleChip::new(
+    let mut chip: MemoryMerkleChip<VM_DIGEST_WIDTH, _> = MemoryMerkleChip::new(
         md,
         PermutationCheckBus::new(MEMORY_MERKLE_BUS),
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    chip.finalize(
+        &memory,
+        &BTreeMap::new(),
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let trace = chip.generate_proving_ctx();
     test_cpu_engine()
         .run_test(
@@ -334,15 +365,15 @@ fn expand_test_negative() {
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
-                layout: MemoryCellType::F { size: 4 },
+                num_cells: VM_DIGEST_WIDTH << height,
+                layout: MemoryCellType::FIELD32,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
-                layout: MemoryCellType::F { size: 4 },
+                num_cells: VM_DIGEST_WIDTH << height,
+                layout: MemoryCellType::FIELD32,
             },
         ],
-        height + 3,
+        ptr_bits_from_address_height(height),
         20,
         17,
     );
@@ -350,20 +381,25 @@ fn expand_test_negative() {
 
     let memory = AddressMap::from_mem_config(&mem_config);
 
-    let mut chip: MemoryMerkleChip<CHUNK, _> = MemoryMerkleChip::new(
+    let mut chip: MemoryMerkleChip<VM_DIGEST_WIDTH, _> = MemoryMerkleChip::new(
         md,
         PermutationCheckBus::new(MEMORY_MERKLE_BUS),
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    chip.finalize(
+        &memory,
+        &BTreeMap::new(),
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let mut chip_ctx = chip.generate_proving_ctx();
     {
         for row in chip_ctx.common_main.rows_mut() {
-            let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
+            let row: &mut MemoryMerkleCols<_, VM_DIGEST_WIDTH> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {
-                row.left_direction_different = BabyBear::ZERO;
-                row.right_direction_different = BabyBear::ZERO;
+                row.left_child_mode = BabyBear::ZERO;
+                row.right_child_mode = BabyBear::ZERO;
             }
         }
     }
@@ -377,11 +413,9 @@ fn expand_test_negative() {
 }
 
 const BELOW_LEAF_PATH_LEN: usize = 31;
-const COUNTEREXAMPLE_ADDRESS_HEIGHT: usize = 26;
-const COUNTEREXAMPLE_OVERALL_HEIGHT: usize = 29;
 const COUNTEREXAMPLE_TRACE_HEIGHT: usize = 256;
 
-fn counterexample_digest(seed: u32) -> [BabyBear; CHUNK] {
+fn counterexample_digest(seed: u32) -> [BabyBear; VM_DIGEST_WIDTH] {
     array::from_fn(|i| BabyBear::from_u32(seed.wrapping_add(17 * i as u32)))
 }
 
@@ -401,24 +435,38 @@ fn final_direction_different(direction: BabyBear, child_has_expansion: bool) -> 
     }
 }
 
+/// The merged `*_child_mode` value for these hand-built fixtures. They reference each
+/// touched child exactly once, so an initial row's mode is always 1. A final row uses
+/// mode 1 for an initial child state and mode 0 for a final child state. Padding uses 0.
+fn child_mode(direction: BabyBear, child_has_expansion: bool) -> BabyBear {
+    if direction == BabyBear::ONE {
+        BabyBear::ONE
+    } else {
+        final_direction_different(direction, child_has_expansion)
+    }
+}
+
 fn build_below_leaf_swap_subtree(
     hasher: &Poseidon2PeripheryChip<BabyBear>,
     direction: BabyBear,
-    alpha_digest: [BabyBear; CHUNK],
-    beta_digest: [BabyBear; CHUNK],
+    alpha_digest: [BabyBear; VM_DIGEST_WIDTH],
+    beta_digest: [BabyBear; VM_DIGEST_WIDTH],
     swap_digests: bool,
-) -> ([BabyBear; CHUNK], Vec<MemoryMerkleCols<BabyBear, CHUNK>>) {
+) -> (
+    [BabyBear; VM_DIGEST_WIDTH],
+    Vec<MemoryMerkleCols<BabyBear, VM_DIGEST_WIDTH>>,
+) {
     #[allow(clippy::too_many_arguments)]
     fn rec(
         hasher: &Poseidon2PeripheryChip<BabyBear>,
-        rows: &mut Vec<MemoryMerkleCols<BabyBear, CHUNK>>,
+        rows: &mut Vec<MemoryMerkleCols<BabyBear, VM_DIGEST_WIDTH>>,
         direction: BabyBear,
-        alpha_digest: [BabyBear; CHUNK],
-        beta_digest: [BabyBear; CHUNK],
+        alpha_digest: [BabyBear; VM_DIGEST_WIDTH],
+        beta_digest: [BabyBear; VM_DIGEST_WIDTH],
         swap_digests: bool,
         depth: usize,
         prefix: u32,
-    ) -> [BabyBear; CHUNK] {
+    ) -> [BabyBear; VM_DIGEST_WIDTH] {
         let alpha_path = 0;
         let beta_path = BabyBear::ORDER_U32;
 
@@ -497,11 +545,11 @@ fn build_below_leaf_swap_subtree(
             parent_hash,
             left_child_hash,
             right_child_hash,
-            left_direction_different: final_direction_different(
+            left_child_mode: child_mode(
                 direction,
                 left_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
-            right_direction_different: final_direction_different(
+            right_child_mode: child_mode(
                 direction,
                 right_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
@@ -525,10 +573,10 @@ fn build_below_leaf_swap_subtree(
 }
 
 fn counterexample_zero_node_hash(
-    hasher: &impl Hasher<CHUNK, BabyBear>,
+    hasher: &impl Hasher<VM_DIGEST_WIDTH, BabyBear>,
     height: usize,
-) -> [BabyBear; CHUNK] {
-    let mut hash = hasher.hash(&[BabyBear::ZERO; CHUNK]);
+) -> [BabyBear; VM_DIGEST_WIDTH] {
+    let mut hash = hasher.hash(&[BabyBear::ZERO; VM_DIGEST_WIDTH]);
     for _ in 0..height {
         hash = hasher.compress(&hash, &hash);
     }
@@ -555,8 +603,8 @@ fn counterexample_parent_labels(
 #[derive(Clone, Copy)]
 struct CounterexampleLeafUpdate {
     index: u64,
-    initial_hash: [BabyBear; CHUNK],
-    final_hash: [BabyBear; CHUNK],
+    initial_hash: [BabyBear; VM_DIGEST_WIDTH],
+    final_hash: [BabyBear; VM_DIGEST_WIDTH],
 }
 
 fn build_counterexample_canonical_rows(
@@ -564,9 +612,9 @@ fn build_counterexample_canonical_rows(
     memory_dimensions: MemoryDimensions,
     leaf_updates: &[CounterexampleLeafUpdate],
 ) -> (
-    [BabyBear; CHUNK],
-    [BabyBear; CHUNK],
-    Vec<MemoryMerkleCols<BabyBear, CHUNK>>,
+    [BabyBear; VM_DIGEST_WIDTH],
+    [BabyBear; VM_DIGEST_WIDTH],
+    Vec<MemoryMerkleCols<BabyBear, VM_DIGEST_WIDTH>>,
 ) {
     let mut current = BTreeMap::new();
     for update in leaf_updates {
@@ -625,8 +673,8 @@ fn build_counterexample_canonical_rows(
                 parent_hash: initial_hash,
                 left_child_hash: left_initial_hash,
                 right_child_hash: right_initial_hash,
-                left_direction_different: BabyBear::ZERO,
-                right_direction_different: BabyBear::ZERO,
+                left_child_mode: BabyBear::ONE,
+                right_child_mode: BabyBear::ONE,
             });
             rows_by_height[height].push(MemoryMerkleCols {
                 expand_direction: BabyBear::NEG_ONE,
@@ -639,8 +687,8 @@ fn build_counterexample_canonical_rows(
                 parent_hash: final_hash,
                 left_child_hash: left_final_hash,
                 right_child_hash: right_final_hash,
-                left_direction_different: BabyBear::from_bool(!left_changed),
-                right_direction_different: BabyBear::from_bool(!right_changed),
+                left_child_mode: BabyBear::from_bool(!left_changed),
+                right_child_mode: BabyBear::from_bool(!right_changed),
             });
 
             next.insert(parent_prefix, (initial_hash, final_hash));
@@ -666,9 +714,12 @@ fn build_hidden_leaf_expansion_row(
     direction: BabyBear,
     address_space_label: u32,
     leaf_label: u32,
-    below_leaf_root: [BabyBear; CHUNK],
-    unchanged_sibling_hash: [BabyBear; CHUNK],
-) -> ([BabyBear; CHUNK], MemoryMerkleCols<BabyBear, CHUNK>) {
+    below_leaf_root: [BabyBear; VM_DIGEST_WIDTH],
+    unchanged_sibling_hash: [BabyBear; VM_DIGEST_WIDTH],
+) -> (
+    [BabyBear; VM_DIGEST_WIDTH],
+    MemoryMerkleCols<BabyBear, VM_DIGEST_WIDTH>,
+) {
     let parent_hash = hasher.compress_and_record(&below_leaf_root, &unchanged_sibling_hash);
     (
         parent_hash,
@@ -683,8 +734,8 @@ fn build_hidden_leaf_expansion_row(
             parent_hash,
             left_child_hash: below_leaf_root,
             right_child_hash: unchanged_sibling_hash,
-            left_direction_different: final_direction_different(direction, true),
-            right_direction_different: final_direction_different(direction, false),
+            left_child_mode: child_mode(direction, true),
+            right_child_mode: child_mode(direction, false),
         },
     )
 }
@@ -741,7 +792,7 @@ fn build_below_leaf_swap_fraud_merkle(
         ADDR_SPACE_OFFSET + hidden_address_space_label,
         hidden_leaf_label,
     ));
-    let hidden_unchanged_sibling_hash = [BabyBear::ZERO; CHUNK];
+    let hidden_unchanged_sibling_hash = [BabyBear::ZERO; VM_DIGEST_WIDTH];
     let (initial_hidden_leaf_hash, initial_hidden_leaf_row) = build_hidden_leaf_expansion_row(
         &poseidon2_chip,
         BabyBear::ONE,
@@ -809,15 +860,15 @@ fn build_below_leaf_swap_fraud_merkle(
             is_root: BabyBear::ZERO,
             parent_as_label: BabyBear::ZERO,
             parent_address_label: BabyBear::ZERO,
-            parent_hash: [BabyBear::ZERO; CHUNK],
-            left_child_hash: [BabyBear::ZERO; CHUNK],
-            right_child_hash: [BabyBear::ZERO; CHUNK],
-            left_direction_different: BabyBear::ZERO,
-            right_direction_different: BabyBear::ZERO,
+            parent_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
+            left_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
+            right_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
+            left_child_mode: BabyBear::ZERO,
+            right_child_mode: BabyBear::ZERO,
         });
     }
 
-    let merkle_width = MemoryMerkleCols::<BabyBear, CHUNK>::width();
+    let merkle_width = MemoryMerkleCols::<BabyBear, VM_DIGEST_WIDTH>::width();
     let mut merkle_trace = BabyBear::zero_vec(merkle_width * trace_height);
     for (trace_row, row) in merkle_trace.chunks_exact_mut(merkle_width).zip(rows) {
         *trace_row.borrow_mut() = row;
@@ -855,7 +906,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     };
 
     use crate::{
-        arch::{PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmState},
+        arch::{PostflightTracegen, Streams, SystemConfig, VirtualMachine, VmState},
         system::{
             memory::{online::GuestMemory, AddressMap},
             SystemCpuBuilder,
@@ -863,17 +914,9 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     };
 
     let vm_config = SystemConfig::default();
-    // The default config has exactly the Merkle dimensions the counterexample
-    // is built for.
+    // Build the counterexample for the active default config; CUDA and CPU
+    // proving configs can use different memory dimensions.
     let memory_dimensions = vm_config.memory_config.memory_dimensions();
-    assert_eq!(
-        memory_dimensions.address_height,
-        COUNTEREXAMPLE_ADDRESS_HEIGHT
-    );
-    assert_eq!(
-        memory_dimensions.overall_height(),
-        COUNTEREXAMPLE_OVERALL_HEIGHT
-    );
 
     let engine = test_cpu_engine();
     let (mut vm, pk) =
@@ -892,7 +935,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     // context. It touches no memory, so the boundary AIR is empty and the
     // merkle/compression/memory buses are left to {merkle, poseidon2}, which we
     // overwrite below.
-    let program = Program::from_instructions(&[Instruction::<BabyBear>::from_isize(
+    let program = Program::from_instructions(&[Instruction::from_isize(
         TERMINATE.global_opcode(),
         0,
         0,
@@ -900,22 +943,18 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         0,
         0,
     )]);
-    let vm_exe: VmExe<BabyBear> = program.into();
-    let max_trace_heights = vec![0; vk.inner.per_air.len()];
+    let vm_exe: VmExe = program.into();
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
     let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
-    let mut interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
-    let PreflightExecutionOutput {
-        system_records,
-        record_arenas,
-        ..
-    } = vm
-        .execute_preflight(&mut interpreter, from_state, None, &max_trace_heights)
+    let interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
+    let output = interpreter
+        .execute_preflight_from_state(from_state, None)
         .unwrap();
+    let prepared = SystemCpuBuilder::prepare_postflight(&vm, &vm_exe.program).unwrap();
     let mut ctx = vm
-        .generate_proving_ctx(system_records, record_arenas)
+        .generate_proving_ctx(&vm_exe.program, &prepared, &output)
         .unwrap();
 
     // Overwrite the merkle + poseidon2 contexts with the fraudulent ones.
@@ -930,7 +969,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         AirProvingContext::simple(merkle_trace, merkle_pvs),
     ));
     ctx.per_trace
-        .push((poseidon2_air_id, poseidon2_chip.generate_proving_ctx(())));
+        .push((poseidon2_air_id, poseidon2_chip.generate_proving_ctx()));
     ctx.per_trace.sort_by_key(|(id, _)| *id);
 
     let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
@@ -956,11 +995,11 @@ fn expand_test_label_rebinding_attack() {
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: VM_DIGEST_WIDTH << height,
                 layout: MemoryCellType::field32(),
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: VM_DIGEST_WIDTH << height,
                 layout: MemoryCellType::field32(),
             },
         ],
@@ -972,28 +1011,40 @@ fn expand_test_label_rebinding_attack() {
 
     let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
     unsafe {
-        memory.write(1, fake_label * CHUNK as u32, [BabyBear::from_u8(69)]);
+        memory.write(
+            1,
+            fake_label * VM_DIGEST_WIDTH as u32,
+            [BabyBear::from_u8(69)],
+        );
     }
 
     let touched_labels_for_chip = BTreeSet::from([(1u32, fake_label)]);
     let touched_labels_for_dummy = BTreeSet::from([(1u32, claimed_label)]);
 
-    let final_partition_for_chip: BTreeMap<_, [BabyBear; CHUNK]> =
-        memory_to_vec_partition::<BabyBear, CHUNK>(&memory.memory, &md)
+    let final_partition_for_chip: BTreeMap<_, [BabyBear; VM_DIGEST_WIDTH]> =
+        memory_to_vec_partition::<BabyBear, VM_DIGEST_WIDTH>(&memory.memory, &md)
             .into_iter()
             .map(|(idx, values)| {
                 let address_space = (idx >> md.address_height) as u32 + ADDR_SPACE_OFFSET;
                 let label = (idx & ((1 << md.address_height) - 1)) as u32;
-                ((address_space, label * (CHUNK as u32)), values)
+                ((address_space, label * (VM_DIGEST_WIDTH as u32)), values)
             })
             .filter(|((address_space, pointer), _)| {
-                touched_labels_for_chip.contains(&(*address_space, pointer / CHUNK as u32))
+                touched_labels_for_chip
+                    .contains(&(*address_space, pointer / VM_DIGEST_WIDTH as u32))
             })
             .collect();
 
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
-    let mut chip = MemoryMerkleChip::<CHUNK, _>::new(md, merkle_bus, COMPRESSION_BUS);
-    chip.finalize(&memory.memory, &final_partition_for_chip, &hash_test_chip);
+    let mut chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, _>::new(md, merkle_bus, COMPRESSION_BUS);
+    // The touched leaf's final values equal its initial ones (the write happened before
+    // the initial snapshot), so no leaf is dirty.
+    chip.finalize(
+        &memory.memory,
+        &final_partition_for_chip,
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let mut chip_ctx = chip.generate_proving_ctx();
 
     {
@@ -1018,7 +1069,7 @@ fn expand_test_label_rebinding_attack() {
         }
 
         for row in chip_ctx.common_main.rows_mut() {
-            let row: &mut MemoryMerkleCols<BabyBear, CHUNK> = row.borrow_mut();
+            let row: &mut MemoryMerkleCols<BabyBear, VM_DIGEST_WIDTH> = row.borrow_mut();
             if row.expand_direction == BabyBear::ZERO {
                 continue;
             }
@@ -1027,14 +1078,15 @@ fn expand_test_label_rebinding_attack() {
         }
     }
 
-    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
+    let dummy_interaction_air =
+        DummyInteractionAir::new(4 + VM_DIGEST_WIDTH, true, merkle_bus.index);
     let mut dummy_interaction_trace_rows = vec![];
     let mut interaction = |interaction_type: PermutationInteractionType,
                            is_compress: bool,
                            height: usize,
                            as_label: u32,
                            address_label: u32,
-                           hash: [BabyBear; CHUNK]| {
+                           hash: [BabyBear; VM_DIGEST_WIDTH]| {
         let expand_direction = if is_compress {
             BabyBear::NEG_ONE
         } else {
@@ -1056,9 +1108,10 @@ fn expand_test_label_rebinding_attack() {
     for (address_space, address_label) in touched_labels_for_dummy {
         let values = unsafe {
             array::from_fn(|i| {
-                memory
-                    .memory
-                    .get((address_space, fake_label * CHUNK as u32 + i as u32))
+                memory.memory.get((
+                    address_space,
+                    fake_label * VM_DIGEST_WIDTH as u32 + i as u32,
+                ))
             })
         };
         let as_label = address_space - ADDR_SPACE_OFFSET;
@@ -1070,14 +1123,8 @@ fn expand_test_label_rebinding_attack() {
             address_label,
             values,
         );
-        interaction(
-            PermutationInteractionType::Send,
-            true,
-            0,
-            as_label,
-            address_label,
-            values,
-        );
+        // No final-state claim: the leaf is touched but clean, and a real boundary row
+        // would have `is_dirty = 0`.
     }
 
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))

@@ -10,7 +10,7 @@ fn main() -> eyre::Result<()> {
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/fibonacci/elf/openvm-fibonacci-program.elf"),
-        MEM_SIZE as u32,
+        MEM_SIZE as u64,
     )?;
 
     let n = 800_000u64;

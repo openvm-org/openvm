@@ -1,0 +1,11 @@
+[package]
+name = "rvr-openvm-build"
+description = "Build and toolchain helpers for rvr-openvm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]

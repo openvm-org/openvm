@@ -1,0 +1,43 @@
+use openvm_circuit::arch::BLOCK_FE_WIDTH;
+use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
+
+use crate::adapters::{
+    bytes_to_u16_block, u16_block_to_bytes, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
+    HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
+};
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct StoreExecutor<const STORE_WIDTH: usize> {
+    pub offset: usize,
+}
+
+/// Returns the two block values supplied to the adapter for a store at any byte offset. The
+/// adapter writes the second block only when the access crosses the first one.
+pub(crate) fn store_write_data(
+    opcode: LoadStoreOpcode,
+    read_data: [u16; BLOCK_FE_WIDTH],
+    prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
+    byte_shift: usize,
+) -> [[u16; BLOCK_FE_WIDTH]; 2] {
+    debug_assert!(byte_shift < 2 * BLOCK_FE_WIDTH);
+    let width = store_width_for_opcode(opcode);
+    let mut bytes = [0u8; 4 * BLOCK_FE_WIDTH];
+    bytes[..2 * BLOCK_FE_WIDTH].copy_from_slice(&u16_block_to_bytes(prev_data[0]));
+    bytes[2 * BLOCK_FE_WIDTH..].copy_from_slice(&u16_block_to_bytes(prev_data[1]));
+    let value = u16_block_to_bytes(read_data);
+    bytes[byte_shift..byte_shift + width].copy_from_slice(&value[..width]);
+    [
+        bytes_to_u16_block(bytes[..2 * BLOCK_FE_WIDTH].try_into().unwrap()),
+        bytes_to_u16_block(bytes[2 * BLOCK_FE_WIDTH..].try_into().unwrap()),
+    ]
+}
+
+pub(crate) fn store_width_for_opcode(opcode: LoadStoreOpcode) -> usize {
+    match opcode {
+        STORED => DOUBLEWORD_ACCESS_WIDTH,
+        STOREW => WORD_ACCESS_WIDTH,
+        STOREH => HALFWORD_ACCESS_WIDTH,
+        STOREB => BYTE_ACCESS_WIDTH,
+        _ => unreachable!("unsupported store opcode: {opcode:?}"),
+    }
+}

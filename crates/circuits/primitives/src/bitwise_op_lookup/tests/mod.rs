@@ -282,8 +282,8 @@ fn test_cuda_bitwise_op_lookup() {
             BitwiseOperationLookupBus::new(0),
         )),
     ];
-    let dummy_ctx = dummy_chip.generate_proving_ctx(());
-    let bitwise_ctx = bitwise.generate_proving_ctx(());
+    let dummy_ctx = dummy_chip.generate_proving_ctx();
+    let bitwise_ctx = bitwise.generate_proving_ctx();
     let ctxs = vec![dummy_ctx, bitwise_ctx];
 
     test_gpu_engine_small()
@@ -363,8 +363,8 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
     ];
     let ctxs = vec![
         cpu_proving_ctx,
-        gpu_dummy_chip.generate_proving_ctx(()),
-        bitwise.generate_proving_ctx(()),
+        gpu_dummy_chip.generate_proving_ctx(),
+        bitwise.generate_proving_ctx(),
     ];
 
     test_gpu_engine_small()

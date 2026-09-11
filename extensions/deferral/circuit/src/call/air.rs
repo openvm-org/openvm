@@ -4,23 +4,26 @@ use itertools::{izip, Itertools as _};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        VmAdapterInterface, VmCoreAir, DEFAULT_BLOCK_SIZE,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir, StructReflection,
-    StructReflectionHelper,
+    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus, ColumnsAir,
+    StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
+};
+use openvm_riscv_circuit::adapters::{
+    eval_byte_ptr_limbs_to_block_index, expand_to_register, pack_u8_ptr_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -31,13 +34,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
+use super::NUM_ACCUMULATORS_PER_IDX;
 use crate::{
     canonicity::{CanonicityAuxCols, CanonicitySubAir},
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_MEMORY_OPS,
-        COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES,
+        byte_commit_to_f, combine_output, split_byte_memory_ops, split_f_memory_ops,
+        COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES,
         OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
@@ -77,8 +81,8 @@ pub struct DeferralCallCoreCols<T> {
     pub reads: DeferralCallReads<T, T>,
     pub writes: DeferralCallWrites<T, T>,
 
-    pub input_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
-    pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub input_commit_canonicity_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
+    pub output_commit_canonicity_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
@@ -109,7 +113,7 @@ where
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
-        _from_pc: AB::Var,
+        _from_pc_idx: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &DeferralCallCoreCols<_> = local_core.borrow();
         builder.assert_bool(cols.is_valid);
@@ -118,7 +122,7 @@ where
         // F_NUM_BYTES bytes uniquely represents an element of F.
         let input_commit_rcs = izip!(
             cols.reads.input_commit.chunks_exact(F_NUM_BYTES),
-            cols.input_commit_lt_aux
+            cols.input_commit_canonicity_aux
         )
         .map(|(bytes, aux)| {
             CanonicitySubAir.assert_canonicity(builder, bytes, &aux, cols.is_valid.into())
@@ -127,7 +131,7 @@ where
 
         let output_commit_rcs = izip!(
             cols.writes.output_commit.chunks_exact(F_NUM_BYTES),
-            cols.output_commit_lt_aux
+            cols.output_commit_canonicity_aux
         )
         .map(|(bytes, aux)| {
             CanonicitySubAir.assert_canonicity(builder, bytes, &aux, cols.is_valid.into())
@@ -145,7 +149,12 @@ where
                 .eval(builder, cols.is_valid);
         }
 
-        // Range check the bytes that we write to RV32 heap memory.
+        // Range check heap byte decompositions used by canonicity and packed memory ops.
+        for bytes in cols.reads.input_commit.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, cols.is_valid);
+        }
         for bytes in cols.writes.output_commit.chunks_exact(2) {
             self.bitwise_bus
                 .send_range(bytes[0], bytes[1])
@@ -185,7 +194,7 @@ where
             .eval(builder, cols.is_valid);
 
         AdapterAirContext {
-            to_pc: None,
+            to_pc_idx: None,
             reads: DeferralCallReads {
                 input_commit: cols.reads.input_commit.map(Into::into),
                 old_input_acc: cols.reads.old_input_acc.map(Into::into),
@@ -231,21 +240,22 @@ pub struct DeferralCallAdapterCols<T> {
     pub rs_ptr: T,
 
     // Heap pointers and aux columns
-    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rd_val: [T; WORD_NUM_LIMBS],
+    pub rs_val: [T; WORD_NUM_LIMBS],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
-    // Read auxiliary columns
+    // Heap commit reads use byte chunks; accumulator reads use DEFERRAL_AS
+    // cell chunks.
     pub input_commit_aux: [MemoryReadAuxCols<T>; COMMIT_MEMORY_OPS],
-    pub old_input_acc_aux: [MemoryReadAuxCols<T>; DIGEST_MEMORY_OPS],
-    pub old_output_acc_aux: [MemoryReadAuxCols<T>; DIGEST_MEMORY_OPS],
+    pub old_input_acc_aux: [MemoryReadAuxCols<T>; DIGEST_F_MEMORY_OPS],
+    pub old_output_acc_aux: [MemoryReadAuxCols<T>; DIGEST_F_MEMORY_OPS],
 
-    // Write auxiliary columns
-    pub output_commit_and_len_aux:
-        [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+    // Heap output writes use byte chunks; accumulator writes use DEFERRAL_AS
+    // cell chunks.
+    pub output_commit_and_len_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -254,6 +264,7 @@ pub struct DeferralCallAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub bitwise_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub address_bits: usize,
 }
 
@@ -280,16 +291,21 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Operands a and b are RV32 register pointers. Their values are read first
+        // Operands a and b are register pointers. Their values are read first
         // to get heap pointers for output write and input commit read respectively.
-        let d = AB::Expr::from_u32(RV32_REGISTER_AS);
-        let e = AB::Expr::from_u32(RV32_MEMORY_AS);
+        let d = AB::Expr::from_u32(REGISTER_AS);
+        let e = AB::Expr::from_u32(MEMORY_AS);
 
-        // Heap pointers are first read from their respective registers.
+        // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
+        let rd_full = expand_to_register(&cols.rd_val);
+        let rs_full = expand_to_register(&cols.rs_val);
+
+        // Heap pointers are first read from their respective registers. Register byte pointers are
+        // small: `ptr / 2` in the low cell limb, high cell limb zero.
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), cols.rd_ptr),
-                cols.rd_val,
+                MemoryAddress::new(d.clone(), reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.rd_ptr)),
+                pack_u8_block::<AB>(&rd_full),
                 timestamp_pp(),
                 &cols.rd_aux,
             )
@@ -297,8 +313,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), cols.rs_ptr),
-                cols.rs_val,
+                MemoryAddress::new(d.clone(), reg_byte_ptr_to_cell_ptr_limbs::<AB>(cols.rs_ptr)),
+                pack_u8_block::<AB>(&rs_full),
                 timestamp_pp(),
                 &cols.rs_aux,
             )
@@ -308,29 +324,64 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // access is in [0, 2^address_bits). The memory merkle argument ensures
         // that each read/write pointer is less than 2^addr_bits, and this range
         // check ensures the accesses don't wrap around P.
-        debug_assert!(RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS >= self.address_bits);
-        let limb_shift =
-            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
+        debug_assert!(BYTE_BITS * WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift = AB::F::from_usize(1 << (BYTE_BITS * WORD_NUM_LIMBS - self.address_bits));
 
         self.bitwise_bus
             .send_range(
-                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
-                cols.rs_val[RV32_REGISTER_NUM_LIMBS - 1] * limb_shift,
+                cols.rd_val[WORD_NUM_LIMBS - 1] * limb_shift,
+                cols.rs_val[WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
+        for val in [&cols.rd_val, &cols.rs_val] {
+            for bytes in val.chunks_exact(2) {
+                self.bitwise_bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
+        }
+
+        // Convert the heap `input`/`output` base *byte* pointers (read from registers) into the
+        // bus addresses of their first heap blocks, enforcing eight-byte alignment.
+        let input_base = MemoryAddress::new(
+            e.clone(),
+            eval_byte_ptr_limbs_to_block_index::<AB>(
+                builder,
+                self.range_bus,
+                pack_u8_ptr_limbs(&cols.rs_val),
+                self.address_bits,
+                ctx.instruction.is_valid.clone(),
+            ),
+        );
+        let output_base = MemoryAddress::new(
+            e.clone(),
+            eval_byte_ptr_limbs_to_block_index::<AB>(
+                builder,
+                self.range_bus,
+                pack_u8_ptr_limbs(&cols.rd_val),
+                self.address_bits,
+                ctx.instruction.is_valid.clone(),
+            ),
+        );
 
         // Accumulators are read then updated in the deferral address space,
         // using deferral_idx (instruction immediate / operand c) to determine
         // the accumulator memory address.
-        let input_ptr = bytes_to_f(&cols.rs_val);
-        let output_ptr = bytes_to_f(&cols.rd_val);
-
         let deferral_idx = ctx.instruction.immediate;
         let deferral_as = AB::Expr::from_u32(DEFERRAL_AS);
 
-        let digest_size = AB::F::from_usize(DIGEST_SIZE);
-        let input_acc_ptr = deferral_idx.clone() * AB::Expr::TWO * digest_size;
-        let output_acc_ptr = input_acc_ptr.clone() + digest_size;
+        // Accumulator cell pointers are bounded below 2^16 (the count bus constrains
+        // `deferral_idx < MAX_DEF_CIRCUITS`; see the static assert in `super`), so — unlike the
+        // heap pointers — they need no limb decomposition, range checks, or carries.
+        let acc_base_ptr =
+            deferral_idx.clone() * AB::Expr::from_usize(NUM_ACCUMULATORS_PER_IDX * DIGEST_SIZE);
+        let accumulator_address = |offset: usize| {
+            MemoryAddress::new(
+                deferral_as.clone(),
+                (acc_base_ptr.clone() + AB::Expr::from_usize(offset))
+                    * AB::F::from_usize(BLOCK_FE_WIDTH).inverse(),
+            )
+        };
 
         let DeferralCallReads {
             input_commit,
@@ -347,7 +398,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // Constrain output_len to be under 2^address_bits also.
         self.bitwise_bus
             .send_range(
-                output_len[RV32_REGISTER_NUM_LIMBS - 1].clone() * limb_shift,
+                output_len[F_NUM_BYTES - 1].clone() * limb_shift,
                 AB::Expr::ZERO,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
@@ -361,19 +412,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         });
 
         let input_commit_chunks =
-            split_memory_ops::<_, COMMIT_NUM_BYTES, COMMIT_MEMORY_OPS>(input_commit);
-        for (chunk_idx, (data, aux)) in input_commit_chunks
-            .into_iter()
-            .zip(&cols.input_commit_aux)
-            .enumerate()
+            split_byte_memory_ops::<_, COMMIT_NUM_BYTES, COMMIT_MEMORY_OPS>(input_commit);
+        for (chunk_idx, (data, aux)) in
+            izip!(input_commit_chunks, &cols.input_commit_aux).enumerate()
         {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
-                    ),
-                    data,
+                    input_base.offset_blocks(chunk_idx),
+                    pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -381,7 +427,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let old_input_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(old_input_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_input_acc);
         for (chunk_idx, (data, aux)) in old_input_acc_chunks
             .into_iter()
             .zip(&cols.old_input_acc_aux)
@@ -389,11 +435,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        deferral_as.clone(),
-                        input_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
-                    ),
+                    accumulator_address(chunk_idx * BLOCK_FE_WIDTH),
                     data,
                     timestamp_pp(),
                     aux,
@@ -402,7 +444,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let old_output_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(old_output_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_output_acc);
         for (chunk_idx, (data, aux)) in old_output_acc_chunks
             .into_iter()
             .zip(&cols.old_output_acc_aux)
@@ -410,11 +452,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        deferral_as.clone(),
-                        output_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
-                    ),
+                    accumulator_address(DIGEST_SIZE + chunk_idx * BLOCK_FE_WIDTH),
                     data,
                     timestamp_pp(),
                     aux,
@@ -424,21 +462,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         let output_commit_and_len = combine_output(output_commit, output_len_full);
         let output_commit_and_len_chunks =
-            split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
+            split_byte_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );
-        for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
-            .into_iter()
-            .zip(&cols.output_commit_and_len_aux)
-            .enumerate()
+        for (chunk_idx, (data, aux)) in izip!(
+            output_commit_and_len_chunks,
+            &cols.output_commit_and_len_aux
+        )
+        .enumerate()
         {
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        e.clone(),
-                        output_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
-                    ),
-                    data,
+                    output_base.offset_blocks(chunk_idx),
+                    pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -446,7 +482,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let new_input_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(new_input_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_input_acc);
         for (chunk_idx, (data, aux)) in new_input_acc_chunks
             .into_iter()
             .zip(&cols.new_input_acc_aux)
@@ -454,11 +490,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         {
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        deferral_as.clone(),
-                        input_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
-                    ),
+                    accumulator_address(chunk_idx * BLOCK_FE_WIDTH),
                     data,
                     timestamp_pp(),
                     aux,
@@ -467,7 +499,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let new_output_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(new_output_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_output_acc);
         for (chunk_idx, (data, aux)) in new_output_acc_chunks
             .into_iter()
             .zip(&cols.new_output_acc_aux)
@@ -475,11 +507,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         {
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        deferral_as.clone(),
-                        output_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
-                    ),
+                    accumulator_address(DIGEST_SIZE + chunk_idx * BLOCK_FE_WIDTH),
                     data,
                     timestamp_pp(),
                     aux,
@@ -488,7 +516,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         self.execution_bridge
-            .execute_and_increment_or_set_pc(
+            .execute_and_increment_or_set_pc_idx(
                 ctx.instruction.opcode,
                 [
                     cols.rd_ptr.into(),
@@ -499,12 +527,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 ],
                 cols.from_state,
                 AB::Expr::from_usize(timestamp_delta),
-                (DEFAULT_PC_STEP, ctx.to_pc),
+                (1, ctx.to_pc_idx),
             )
             .eval(builder, ctx.instruction.is_valid);
     }
 
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
+    fn get_from_pc_idx(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &DeferralCallAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }

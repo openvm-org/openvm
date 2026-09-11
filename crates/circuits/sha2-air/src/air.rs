@@ -2,8 +2,8 @@ use std::{iter::once, marker::PhantomData};
 
 use ndarray::s;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, ColumnsAir,
-    SubAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select,
+    var_range::VariableRangeCheckerBus, ColumnsAir, SubAir, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -25,6 +25,8 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    /// Range checker bus for digest-row `final_hash` limbs.
+    pub range_bus: VariableRangeCheckerBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
     pub private_bus: PermutationCheckBus,
@@ -36,9 +38,14 @@ pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
 impl<C: Sha2BlockHasherSubairConfig> ColumnsAir for Sha2BlockHasherSubAir<C> {}
 
 impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
-    pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, private_bus_idx: BusIndex) -> Self {
+    pub fn new(
+        bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
+        private_bus_idx: BusIndex,
+    ) -> Self {
         Self {
             bitwise_lookup_bus,
+            range_bus,
             row_idx_encoder: Encoder::new(C::ROWS_PER_BLOCK + 1, 2, false), /* + 1 for dummy
                                                                              *   (padding) rows */
             private_bus: PermutationCheckBus::new(private_bus_idx),
@@ -174,13 +181,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                         1,
                     )
                 };
-                let final_hash_limb = compose::<AB::Expr>(
-                    next.final_hash
-                        .slice(s![i, j * 2..(j + 1) * 2])
-                        .as_slice()
-                        .unwrap(),
-                    8,
-                );
+                let final_hash_limb: AB::Expr = next.final_hash[[i, j]].into();
 
                 carry = AB::Expr::from(AB::F::from_u32(1 << 16).inverse())
                     * (next.prev_hash[[i, j]] + work_var_limb + carry - final_hash_limb);
@@ -188,11 +189,10 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                     .when(*next.flags.is_digest_row)
                     .assert_bool(carry.clone());
             }
-            // constrain the final hash limbs two at a time since we can do two checks per
-            // interaction
-            for chunk in next.final_hash.row(i).as_slice().unwrap().chunks(2) {
-                self.bitwise_lookup_bus
-                    .send_range(chunk[0], chunk[1])
+            // Range-check final-hash limbs for the digest-row addition.
+            for j in 0..C::WORD_U16S {
+                self.range_bus
+                    .range_check(next.final_hash[[i, j]], U16_BITS)
                     .eval(builder, *next.flags.is_digest_row);
             }
         }

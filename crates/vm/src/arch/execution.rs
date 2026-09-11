@@ -1,8 +1,6 @@
 use openvm_circuit_primitives::{AlignedBytesBorrow, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
-};
+use openvm_instructions::{instruction::Instruction, PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_field::PrimeCharacteristicRing,
@@ -14,17 +12,30 @@ use thiserror::Error;
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
-#[cfg(feature = "aot")]
-use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError, MatrixRecordArena},
-    system::{
-        memory::online::{GuestMemory, TracingMemory},
-        program::ProgramBus,
-    },
+    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError},
+    system::{memory::online::GuestMemory, program::ProgramBus},
 };
+
+/// The reason an execution call returned, together with its mode-specific output.
+#[must_use]
+pub enum ExecutionOutcome<T> {
+    /// The program terminated successfully.
+    Terminated(T),
+    /// Execution stopped at a mode-specific boundary and can be resumed.
+    Suspended(T),
+}
+
+impl<T> ExecutionOutcome<T> {
+    /// Consume the outcome and return its inner value, regardless of why execution stopped.
+    pub fn into_inner(self) -> T {
+        match self {
+            Self::Terminated(output) | Self::Suspended(output) => output,
+        }
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
@@ -40,11 +51,11 @@ pub enum ExecutionError {
     HintOutOfBounds { pc: u32 },
     #[error("at pc {pc}, hint buffer num_words is zero")]
     HintBufferZeroWords { pc: u32 },
-    #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_WORDS {max_hint_buffer_words}")]
+    #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_DWORDS {max_hint_buffer_words}")]
     HintBufferTooLarge {
         pc: u32,
-        num_words: u32,
-        max_hint_buffer_words: u32,
+        num_words: u64,
+        max_hint_buffer_words: u64,
     },
     #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
     PublicValueIndexOutOfBounds {
@@ -78,10 +89,17 @@ pub enum ExecutionError {
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
     #[error("instruction counter overflow: {instret} + {num_insns} > u64::MAX")]
     InstretOverflow { instret: u64, num_insns: u64 },
+    #[error("preflight retired {actual} instructions, expected exactly {expected}")]
+    RetiredInstructionCountMismatch { expected: u64, actual: u64 },
+    #[error("preflight emitted {actual} replay values, expected exactly {expected}")]
+    PreflightReplayValueCountMismatch { expected: u64, actual: u64 },
     #[error("inventory error: {0}")]
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
     Static(#[from] StaticProgramError),
+    #[cfg(feature = "rvr")]
+    #[error("rvr execution failed: {0}")]
+    RvrExecution(String),
 }
 
 /// Errors in the program that can be statically analyzed before runtime.
@@ -95,36 +113,16 @@ pub enum StaticProgramError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
-    #[error("Failed to create temporary file: {err}")]
-    FailToCreateTemporaryFile { err: String },
-    #[error("Failed to write into temporary file: {err}")]
-    FailToWriteTemporaryFile { err: String },
     #[error("Failed to generate dynamic library: {err}")]
     FailToGenerateDynamicLibrary { err: String },
-}
-
-#[cfg(feature = "aot")]
-#[derive(Error, Debug)]
-pub enum AotError {
-    #[error("AOT compilation not supported for this opcode")]
-    NotSupported,
-
-    #[error("No executor found for opcode {0}")]
-    NoExecutorFound(VmOpcode),
-
-    #[error("Invalid instruction format")]
-    InvalidInstruction,
-
-    #[error("Other AOT error: {0}")]
-    Other(String),
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute,
 /// arg, exec_state)`. The `pre_compute: *const u8` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
-pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+pub type ExecuteFunc<CTX> =
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -133,25 +131,27 @@ pub type ExecuteFunc<F, CTX> =
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
 #[cfg(feature = "tco")]
-pub type Handler<F, CTX> = unsafe fn(
-    interpreter: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+pub type Handler<CTX> = unsafe fn(
+    interpreter: &InterpretedInstance<'_, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 );
 
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
-// @dev: In the codebase this is sometimes referred to as (E1).
 pub trait InterpreterExecutor<F> {
+    /// Returns the display name for an absolute opcode supported by this executor.
+    fn get_opcode_name(&self, opcode: usize) -> String;
+
     fn pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 
@@ -163,48 +163,19 @@ pub trait InterpreterExecutor<F> {
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 }
 
-#[cfg(feature = "aot")]
-pub trait AotExecutor<F> {
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        false
-    }
-
-    /*
-    Function: Generate x86 assembly for the given RV32 instruction, and transfer control to the next RV32 instruction
-
-    Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
-    - instruction: the instruction to be executed
-
-    Postcondition:
-    - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
-    */
-    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
-        unimplemented!()
-    }
-    // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
-}
-#[cfg(feature = "aot")]
-pub trait Executor<F>: InterpreterExecutor<F> + AotExecutor<F> {}
-#[cfg(feature = "aot")]
-impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> + AotExecutor<F> {}
-
-#[cfg(not(feature = "aot"))]
 pub trait Executor<F>: InterpreterExecutor<F> {}
-#[cfg(not(feature = "aot"))]
 impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
-// @dev: In the codebase this is sometimes referred to as (E2).
 pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
@@ -213,9 +184,9 @@ pub trait InterpreterMeteredExecutor<F> {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 
@@ -229,69 +200,26 @@ pub trait InterpreterMeteredExecutor<F> {
         &self,
         air_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 }
 
-#[cfg(feature = "aot")]
-pub trait AotMeteredExecutor<F> {
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        false
-    }
-
-    fn generate_x86_metered_asm(
-        &self,
-        _inst: &Instruction<F>,
-        _pc: u32,
-        _chip_idx: usize,
-        _config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        unimplemented!()
-    }
-}
-
-#[cfg(feature = "aot")]
-pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
-#[cfg(feature = "aot")]
-impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
-
-#[cfg(not(feature = "aot"))]
 pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
-#[cfg(not(feature = "aot"))]
 impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 
-/// Trait for preflight execution via a host interpreter. The trait methods allow execution of
-/// instructions via enum dispatch within an interpreter. This execution is specialized to record
-/// "records" of execution which will be ingested later for trace matrix generation. The records are
-/// stored in a record arena, which is provided in the [VmStateMut] argument.
-// NOTE: In the codebase this is sometimes referred to as (E3).
-pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
-    /// Runtime execution of the instruction, if the instruction is owned by the
-    /// current instance. May internally store records of this call for later trace generation.
-    fn execute(
-        &self,
-        state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>;
-
-    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
-    /// if it is a supported opcode by the present executor.
-    fn get_opcode_name(&self, opcode: usize) -> String;
-}
-
 /// Global VM state accessible during instruction execution.
-/// The state is generic in guest memory `MEM` and additional record arena `RA`.
+/// The state is generic in guest memory `MEM` and execution context `CTX`.
 /// The host state is execution context specific.
 #[derive(derive_new::new)]
-pub struct VmStateMut<'a, F, MEM, RA> {
+pub struct VmStateMut<'a, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
-    pub streams: &'a mut Streams<F>,
+    pub streams: &'a mut Streams,
     pub rng: &'a mut StdRng,
-    pub ctx: &'a mut RA,
+    pub ctx: &'a mut CTX,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,
 }
@@ -309,6 +237,11 @@ pub struct E2PreCompute<DATA> {
 #[derive(
     Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, StructReflection, Serialize, Deserialize,
 )]
+/// An execution state shared by runtime and circuit code.
+///
+/// In runtime and replay code, `pc` is an architectural byte address. In AIR columns and bus
+/// messages, `pc` is the circuit pc index returned by `pc_to_idx`. The field keeps the generic
+/// name because this type is used at both boundaries.
 pub struct ExecutionState<T> {
     pub pc: T,
     pub timestamp: T,
@@ -347,7 +280,7 @@ pub struct ExecutionBridgeInteractor<AB: InteractionBuilder> {
     to_state: ExecutionState<AB::Expr>,
 }
 
-pub enum PcIncOrSet<T> {
+pub enum PcIdxIncOrSet<T> {
     Inc(T),
     Set(T),
 }
@@ -384,7 +317,7 @@ impl<T> ExecutionState<T> {
 
 impl ExecutionBus {
     /// Caller must constrain that `enabled` is boolean.
-    pub fn execute_and_increment_pc<AB: InteractionBuilder>(
+    pub fn execute_and_increment_pc_idx<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         enabled: impl Into<AB::Expr>,
@@ -428,27 +361,29 @@ impl ExecutionBridge {
         }
     }
 
-    /// If `to_pc` is `Some`, then `pc_inc` is ignored and the `to_state` uses `to_pc`. Otherwise
-    /// `to_pc = from_pc + pc_inc`.
-    pub fn execute_and_increment_or_set_pc<AB: InteractionBuilder>(
+    /// If `to_pc_idx` is `Some`, then `pc_idx_inc` is ignored and `to_state` uses `to_pc_idx`.
+    /// Otherwise `to_pc_idx = from_pc_idx + pc_idx_inc`.
+    pub fn execute_and_increment_or_set_pc_idx<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
         from_state: ExecutionState<impl Into<AB::Expr> + Clone>,
         timestamp_change: impl Into<AB::Expr>,
-        pc_kind: impl Into<PcIncOrSet<AB::Expr>>,
+        pc_idx_kind: impl Into<PcIdxIncOrSet<AB::Expr>>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: match pc_kind.into() {
-                PcIncOrSet::Set(to_pc) => to_pc,
-                PcIncOrSet::Inc(pc_inc) => from_state.pc.clone().into() + pc_inc,
+            pc: match pc_idx_kind.into() {
+                PcIdxIncOrSet::Set(to_pc_idx) => to_pc_idx,
+                PcIdxIncOrSet::Inc(pc_idx_inc) => from_state.pc.clone().into() + pc_idx_inc,
             },
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
     }
 
-    pub fn execute_and_increment_pc<AB: InteractionBuilder>(
+    /// The `pc` in [ExecutionState] is a pc index (see `pc_to_idx`), so advancing to the next
+    /// instruction increments it by one.
+    pub fn execute_and_increment_pc_idx<AB: InteractionBuilder>(
         &self,
         opcode: impl Into<AB::Expr>,
         operands: impl IntoIterator<Item = impl Into<AB::Expr>>,
@@ -456,7 +391,7 @@ impl ExecutionBridge {
         timestamp_change: impl Into<AB::Expr>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + AB::Expr::from_u32(DEFAULT_PC_STEP),
+            pc: from_state.pc.clone().into() + AB::Expr::ONE,
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -499,29 +434,29 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
     }
 }
 
-impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
-    fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
-        match to_pc {
-            None => PcIncOrSet::Inc(T::from_u32(pc_inc)),
-            Some(to_pc) => PcIncOrSet::Set(to_pc),
+impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIdxIncOrSet<T> {
+    fn from((pc_idx_inc, to_pc_idx): (u32, Option<T>)) -> Self {
+        match to_pc_idx {
+            None => PcIdxIncOrSet::Inc(T::from_u32(pc_idx_inc)),
+            Some(to_pc_idx) => PcIdxIncOrSet::Set(to_pc_idx),
         }
     }
 }
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
 /// However they all have no AIR constraints besides advancing the pc by
-/// [DEFAULT_PC_STEP].
+/// [`DEFAULT_PC_STEP`](openvm_instructions::program::DEFAULT_PC_STEP) bytes (one pc index).
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///
 /// Phantom sub-instructions are only allowed to use operands
-/// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+/// `a,b`, the phantom discriminant in `c`, and `c_upper` in `d`.
 #[allow(clippy::too_many_arguments)]
-pub trait PhantomSubExecutor<F>: Send + Sync {
+pub trait PhantomSubExecutor: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
-        streams: &mut Streams<F>,
+        streams: &mut Streams,
         rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
         a: u32,

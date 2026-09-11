@@ -54,11 +54,11 @@ num_cells = 0
 [app_vm_config.system.config.memory_config.addr_spaces.layout.F]
 size = 4
 
-[app_vm_config.rv32i]
+[app_vm_config.rv64i]
 
 [app_vm_config.io]
 
-[app_vm_config.rv32m]
+[app_vm_config.rv64m]
 range_tuple_checker_sizes = [256, 2048]
 
 [[app_vm_config.deferral.circuits]]

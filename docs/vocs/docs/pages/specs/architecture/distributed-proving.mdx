@@ -11,7 +11,7 @@ We give an overview of the distributed proving architecture and then provide fur
 Given a zkVM program with unbounded runtime size, we first perform _metered execution_ to segment the execution into _segments_ on a dedicated CPU machine.
 Minimal boundary metadata about each segment is sent to a dedicated machine to generate the App proof of that segment. The app proofs are proven in parallel on distributed prover machines. We will refer to each prover machine as consisting of a host and device, where the host consists of the CPU and RAM, and the device may be the multi-core CPU or the GPU depending on the proving backend.
 
-For each segment, we re-execute via _pure execution_ on the host CPU to recover the starting VM state at the beginning of the segment. Then the host performs _preflight execution_ up to the segment end, storing records of the execution into in-memory buffers. During _trace generation_, these buffers are copied to device memory and transformed on device into _trace matrices_ that match the specifications of the zkVM circuit frontend. Execution is serial, while trace generation is massively parallelized. The STARK backend then generates a cryptographic proof from the trace matrices, on device.
+For each segment, we re-execute via _pure execution_ on the host CPU to recover the starting VM state at the beginning of the segment. The host then performs _preflight execution_ up to the segment end, appending a program log and a timed memory log. _Postflight_ validates these logs and derives immutable memory chronology and opcode indexes. During _trace generation_, each chip replays its indexed instructions into _trace matrices_ that match the zkVM circuit frontend. Preflight execution is serial, while postflight and trace generation can use the proving device. The STARK backend then generates a cryptographic proof from the trace matrices on device.
 
 The above process generates all segment App proofs in parallel. After the App proofs are generated, they are _aggregated_ into a single proof via the aggregation tree described in the [continuation design](/specs/architecture/continuations). Each layer of the aggregation tree is proven in parallel, where each aggregation proof is treated as a single segment proof.
 
@@ -32,14 +32,18 @@ We will have three modes of execution:
 - **Pure** execution. This is "normal" VM execution, currently implemented via an interpreter, where execution starts from a specified VM state and executes either a specific number of instructions or until program termination. Pure execution only needs to output the end VM state when execution stops.
 - **Metered** execution. This is pure execution that additionally measures weighted functions of instruction counts and guest memory usage in order to determine where to [segment](/specs/architecture/continuations) the program execution. The segmentation criteria are designed to account for estimated prover device memory usage and security constraints dependent on the proof system's prime field. The output of metered execution is the sequence of segments together with segmentation-related metadata about the segment boundaries.
 - **Preflight** execution. This is a special logging execution that records the minimal execution trace such that subsequent [trace generation](#trace-generation) may be done in parallel without reliance on the VM state.
-    - The logging is done by writing _records_ to in-memory buffers referred to as _record arenas_. During trace generation, these buffers are designed to be transferred to device memory for hardware acceleration purposes.
+    - The execution context maintains normal read/write guest memory while appending generic
+      program and memory logs. It does not construct chip-specific witness records.
 
 All modes of execution are inherently serial and performed on a CPU.
 
 ## Trace Generation
 
 Trace generation is the first point in the proving process where computation occurs on device with hardware acceleration.
-For a given segment, the preflight execution records contain all the data necessary to generate the trace matrices corresponding to all chips in the zkVM circuit. The records are stored in memory buffers called _record arenas_, where the buffer memory layout is optimized based on the device type. The records are transported from host to device memory. Then the trace matrices are generated from the records by utilizing as much parallelism as possible. In particular, trace generation for the execution records of different instructions is parallelized and does not need to be done in the order they were executed.
+For a given segment, preflight history contains the program order and timed memory values needed to
+replay every instruction. Postflight derives read-only memory chronology and opcode indexes from
+that history. The program, history, and indexes are transferred to device memory, where trace
+generation re-executes independent rows in parallel without mutable VM memory.
 
 The output of trace generation is an ordered list of trace matrices corresponding to the zkVM circuit's chips. The trace matrices are fully on-device and never leave device memory.
 

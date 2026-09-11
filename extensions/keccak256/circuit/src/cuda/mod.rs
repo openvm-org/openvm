@@ -1,23 +1,29 @@
-use std::{
-    mem::size_of,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
+use openvm_circuit::{
+    arch::cuda::postflight::{
+        GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+    },
+    utils::next_power_of_two_or_zero,
+};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_instructions::{
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
+    LocalOpcode,
+};
+use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
 
 use crate::{
-    keccakf_op::{columns::NUM_KECCAKF_OP_COLS, trace::KeccakfRecord, NUM_OP_ROWS_PER_INS},
+    keccakf_op::{columns::NUM_KECCAKF_OP_COLS, NUM_OP_ROWS_PER_INS},
     keccakf_perm::NUM_KECCAKF_PERM_COLS,
-    xorin::{columns::NUM_XORIN_VM_COLS, trace::XorinVmRecordHeader},
+    xorin::columns::NUM_XORIN_VM_COLS,
 };
 
 mod cuda_abi;
@@ -27,116 +33,128 @@ mod cuda_abi;
 #[derive(new)]
 pub struct XorinVmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<XorinVmRecordHeader>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let trace_width = NUM_XORIN_VM_COLS;
-        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+impl XorinVmChipGpu {
+    pub fn generate_proving_ctx_from_postflight(
+        &self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let step_range = replay_plan.opcode_range(XorinOpcode::XORIN.global_opcode());
+        if step_range.is_empty() {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-
+        let trace_height = next_power_of_two_or_zero(step_range.len());
+        let d_trace =
+            DeviceMatrix::<F>::with_capacity_on(trace_height, NUM_XORIN_VM_COLS, device_ctx);
         unsafe {
-            cuda_abi::xorin::tracegen(
+            cuda_abi::xorin::replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
-                &d_records,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                transcript.error_ptr(),
+                XorinOpcode::XORIN.global_opcode().as_usize() as u32,
+                REGISTER_AS,
+                MEMORY_AS,
+                self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
-                self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
                 device_ctx.stream.as_raw(),
-            )
-            .unwrap();
+            )?;
         }
-
-        AirProvingContext::simple_no_pis(d_trace)
+        Ok(AirProvingContext::simple_no_pis(d_trace))
     }
 }
 
 // ========================== Shared state for KeccakfOp <-> KeccakfPerm ==========================
 
-/// Shared state to pass records from KeccakfOpChipGpu to KeccakfPermChipGpu
-/// The OpChip generates first and stores the device buffer, then PermChip takes it.
+/// Replay handoff from the Keccak operation trace to its permutation trace.
 #[derive(Default)]
-pub struct SharedKeccakfRecords {
-    /// Device buffer containing records (set by OpChip, consumed by PermChip)
-    pub d_records: Option<DeviceBuffer<u8>>,
-    /// Number of records
-    pub num_records: usize,
+pub struct SharedKeccakfState {
+    /// Twenty-five preimage words per active KECCAKF.
+    /// The permutation chip takes this buffer, so it cannot survive trace generation.
+    pub d_replay_preimages: Option<DeviceBuffer<u64>>,
+    pub num_replay_steps: usize,
 }
 
-pub type SharedKeccakfRecordsGpu = Arc<Mutex<SharedKeccakfRecords>>;
+pub type SharedKeccakfStateGpu = Arc<Mutex<SharedKeccakfState>>;
 
 // ========================== KeccakfOpChipGpu ==========================
 
 #[derive(new)]
 pub struct KeccakfOpChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
-    pub shared_records: SharedKeccakfRecordsGpu,
+    pub shared_state: SharedKeccakfStateGpu,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<KeccakfRecord>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            // Store empty state for PermChip
-            let mut shared = self.shared_records.lock().unwrap();
-            shared.d_records = None;
-            shared.num_records = 0;
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let num_records = records.len() / RECORD_SIZE;
-        let trace_width = NUM_KECCAKF_OP_COLS;
-        let trace_height = next_power_of_two_or_zero(num_records * NUM_OP_ROWS_PER_INS);
+impl KeccakfOpChipGpu {
+    pub fn generate_proving_ctx_from_postflight(
+        &self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
         let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let step_range = replay_plan.opcode_range(KeccakfOpcode::KECCAKF.global_opcode());
+        if step_range.is_empty() {
+            let mut shared = self.shared_state.lock().unwrap();
+            shared.d_replay_preimages = None;
+            shared.num_replay_steps = 0;
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
 
-        // Transfer records to GPU
-        let d_records = records.to_device_on(device_ctx).unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-
+        let trace_height = next_power_of_two_or_zero(step_range.len() * NUM_OP_ROWS_PER_INS);
+        let d_trace =
+            DeviceMatrix::<F>::with_capacity_on(trace_height, NUM_KECCAKF_OP_COLS, device_ctx);
+        let d_preimages = DeviceBuffer::<u64>::with_capacity_on(step_range.len() * 25, device_ctx);
         unsafe {
-            cuda_abi::keccakf_op::tracegen(
+            cuda_abi::keccakf_op::replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
-                &d_records,
-                &self.range_checker.count,
-                &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                &d_preimages,
+                transcript.error_ptr(),
+                KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
+                REGISTER_AS,
+                MEMORY_AS,
                 self.pointer_max_bits as u32,
+                &self.range_checker.count,
                 self.timestamp_max_bits,
                 device_ctx.stream.as_raw(),
-            )
-            .unwrap();
+            )?;
         }
-
-        // Store records in shared state for PermChip
-        {
-            let mut shared = self.shared_records.lock().unwrap();
-            shared.d_records = Some(d_records);
-            shared.num_records = num_records;
-        }
-
-        AirProvingContext::simple_no_pis(d_trace)
+        let mut shared = self.shared_state.lock().unwrap();
+        shared.d_replay_preimages = Some(d_preimages);
+        shared.num_replay_steps = step_range.len();
+        Ok(AirProvingContext::simple_no_pis(d_trace))
     }
 }
 
@@ -144,52 +162,130 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
 
 #[derive(new)]
 pub struct KeccakfPermChipGpu {
-    pub shared_records: SharedKeccakfRecordsGpu,
+    pub shared_state: SharedKeccakfStateGpu,
     pub device_ctx: GpuDeviceCtx,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
-    fn generate_proving_ctx(&self, _arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        // Take records from shared state (set by OpChip)
-        let (d_records, num_records) = {
-            let mut shared = self.shared_records.lock().unwrap();
-            (shared.d_records.take(), shared.num_records)
+impl KeccakfPermChipGpu {
+    pub fn generate_proving_ctx_from_postflight(
+        &self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        program.ensure_replay_inputs(transcript, replay_plan, &self.device_ctx)?;
+        let step_range = replay_plan.opcode_range(KeccakfOpcode::KECCAKF.global_opcode());
+        let (d_preimages, num_replay_steps) = {
+            let mut shared = self.shared_state.lock().unwrap();
+            (shared.d_replay_preimages.take(), shared.num_replay_steps)
         };
-
-        let Some(d_records) = d_records else {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        };
-
-        if num_records == 0 {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        if step_range.is_empty() {
+            if d_preimages.is_some() || num_replay_steps != 0 {
+                return Err(GpuPostflightError::InvalidTranscript(
+                    "Keccak replay state exists without executed KECCAKF".to_string(),
+                ));
+            }
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
+        let d_preimages = d_preimages.ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "KeccakfPerm replay ran before KeccakfOp replay".to_string(),
+            )
+        })?;
+        if num_replay_steps != step_range.len() || d_preimages.len() != step_range.len() * 25 {
+            return Err(GpuPostflightError::InvalidTranscript(
+                "Keccak replay preimage handoff has the wrong length".to_string(),
+            ));
         }
 
-        let trace_width = NUM_KECCAKF_PERM_COLS;
-        let trace_height = next_power_of_two_or_zero(num_records * NUM_ROUNDS);
-
-        let d_trace =
-            DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, &self.device_ctx);
-        // Scratch buffer for two-phase tracegen: 25 u64 lanes per round per permutation.
-        // 24 rounds * 25 lanes * 8 bytes = 4800 bytes/perm, vs 24 * 2634 * 4 = 252864 bytes/perm
-        // for the trace matrix (~1.9% overhead).
-        let blocks_to_fill = trace_height.div_ceil(NUM_ROUNDS);
-        let d_round_states = DeviceBuffer::<u64>::with_capacity_on(
-            blocks_to_fill * NUM_ROUNDS * 25,
+        let trace_height = next_power_of_two_or_zero(step_range.len() * NUM_ROUNDS);
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(
+            trace_height,
+            NUM_KECCAKF_PERM_COLS,
             &self.device_ctx,
         );
-
+        let padded_permutations = trace_height.div_ceil(NUM_ROUNDS);
+        let d_round_states = DeviceBuffer::<u64>::with_capacity_on(
+            padded_permutations * NUM_ROUNDS * 25,
+            &self.device_ctx,
+        );
         unsafe {
-            cuda_abi::keccakf_perm::tracegen(
+            cuda_abi::keccakf_perm::replay_tracegen(
                 d_trace.buffer(),
                 trace_height,
-                &d_records,
-                num_records,
+                transcript.program_log(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                &d_preimages,
                 &d_round_states,
+                transcript.error_ptr(),
                 self.device_ctx.stream.as_raw(),
+            )?;
+        }
+        // Both replay-only buffers are dropped here, after their kernels have been
+        // enqueued on the owning stream and before proving starts.
+        drop(d_round_states);
+        drop(d_preimages);
+        Ok(AirProvingContext::simple_no_pis(d_trace))
+    }
+}
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests {
+    use openvm_circuit::utils::test_gpu_engine;
+    use openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        d_buffer::DeviceBuffer,
+    };
+    use openvm_stark_backend::StarkEngine;
+    use rvr_state::PreflightProgramEvent;
+
+    use super::*;
+    use crate::KECCAK_WIDTH_U64S;
+
+    #[test]
+    fn keccakf_permutation_replay_rejects_wrapped_program_index() {
+        let engine = test_gpu_engine();
+        let device_ctx = &engine.device().device_ctx;
+        let height = 32usize;
+        let program = [
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 27,
+            },
+        ]
+        .to_device_on(device_ctx)
+        .unwrap();
+        let steps = [[u32::MAX, 0u32]].to_device_on(device_ctx).unwrap();
+        let preimages = [0u64; KECCAK_WIDTH_U64S].to_device_on(device_ctx).unwrap();
+        let blocks_to_fill = height.div_ceil(NUM_ROUNDS);
+        let round_states = DeviceBuffer::<u64>::with_capacity_on(
+            blocks_to_fill * NUM_ROUNDS * KECCAK_WIDTH_U64S,
+            device_ctx,
+        );
+        let trace = DeviceBuffer::<F>::with_capacity_on(height * NUM_KECCAKF_PERM_COLS, device_ctx);
+        let error = [0u32].to_device_on(device_ctx).unwrap();
+
+        unsafe {
+            cuda_abi::keccakf_perm::replay_tracegen(
+                &trace,
+                height,
+                program.view(),
+                steps.view(),
+                0,
+                1,
+                &preimages,
+                &round_states,
+                error.as_mut_ptr(),
+                device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
-
-        AirProvingContext::simple_no_pis(d_trace)
+        assert_eq!(error.to_host_on(device_ctx).unwrap()[0], 821);
     }
 }

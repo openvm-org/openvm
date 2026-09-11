@@ -12,12 +12,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{MEMORY_AS, REGISTER_AS},
 };
+use openvm_keccak256_transpiler::XorinOpcode;
+use openvm_riscv_circuit::adapters::{bytes_to_u32, validate_memory_byte_span};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
-use crate::KECCAK_WORD_SIZE;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -28,10 +29,10 @@ struct XorinPreCompute {
 }
 
 impl XorinVmExecutor {
-    fn pre_compute_impl<F: PrimeField32>(
+    fn pre_compute_impl(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut XorinPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
@@ -44,15 +45,15 @@ impl XorinVmExecutor {
             ..
         } = inst;
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+        let e_u32 = e.as_u32();
+        if d.as_u32() != REGISTER_AS || e_u32 != MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = XorinPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
+            a: a.as_u32() as u8,
+            b: b.as_u32() as u8,
+            c: c.as_u32() as u8,
         };
 
         Ok(())
@@ -60,6 +61,10 @@ impl XorinVmExecutor {
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", XorinOpcode::XORIN)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<XorinPreCompute>()
     }
@@ -68,35 +73,32 @@ impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut XorinPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_impl::<_, _>)
+        Ok(execute_e1_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut XorinPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler)
+        Ok(execute_e1_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for XorinVmExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
@@ -108,16 +110,16 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<XorinPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl::<_, _>)
+        Ok(execute_e2_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -125,97 +127,101 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
         &self,
         chip_idx: usize,
         pc: u32,
-        inst: &Instruction<F>,
+        inst: &Instruction,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<XorinPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler)
+        Ok(execute_e2_handler::<_>)
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for XorinVmExecutor {}
-
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
     let pre_compute: &XorinPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<XorinPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, true>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, true>(pre_compute, exec_state)
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &XorinPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
-    let buffer = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-    let input = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let length = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
-    let buffer_u32 = u32::from_le_bytes(buffer);
-    let input_u32 = u32::from_le_bytes(input);
-    let length_u32 = u32::from_le_bytes(length);
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
+    let buffer_u32 = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.a as u32));
+    let input_u32 = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32));
+    let length_u32 = bytes_to_u32(exec_state.vm_read_bytes(REGISTER_AS, pre_compute.c as u32));
+    debug_assert!(
+        (length_u32 as usize).is_multiple_of(MEMORY_BLOCK_BYTES),
+        "xorin length must be {}-byte aligned",
+        MEMORY_BLOCK_BYTES
+    );
 
-    // SAFETY: RV32_MEMORY_AS is memory address space of type u8
-    let num_reads = (length_u32 as usize).div_ceil(KECCAK_WORD_SIZE);
+    // SAFETY: MEMORY_AS supports byte-view reads.
+    let num_reads = (length_u32 as usize).div_ceil(MEMORY_BLOCK_BYTES);
+    let accessed_bytes = num_reads * MEMORY_BLOCK_BYTES;
+    validate_memory_byte_span(pc, buffer_u32, accessed_bytes)?;
+    validate_memory_byte_span(pc, input_u32, accessed_bytes)?;
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
-                buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
+                MEMORY_AS,
+                buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
         .collect();
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
-                input_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
+                MEMORY_AS,
+                input_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
         .collect();
 
     let mut output_bytes = buffer_bytes;
-    for i in 0..output_bytes.len() {
+    // Only XOR the active bytes (first length_u32 bytes).
+    for i in 0..(length_u32 as usize) {
         output_bytes[i] ^= input_bytes[i];
     }
 
-    // Write XOR result back to the buffer memory in KECCAK_WORD_SIZE chunks.
-    // Note: this means output_bytes has to be multiple of KECCAK_WORD_SIZE
-    // Todo: recheck the above condition is okay
-    for (i, chunk) in output_bytes.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-        let chunk: [u8; KECCAK_WORD_SIZE] = chunk.try_into().unwrap();
-        exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
-            RV32_MEMORY_AS,
-            buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
+    // Write XOR result back to the buffer memory in 8-byte blocks.
+    // Note: this means output_bytes length is a multiple of MEMORY_BLOCK_BYTES
+    for (i, chunk) in output_bytes.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
+        exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
+            MEMORY_AS,
+            buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             &chunk,
         );
     }
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<XorinPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<XorinPreCompute>>())
             .borrow();
-    execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, false>(&pre_compute.data, exec_state)?;
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
+    Ok(())
 }

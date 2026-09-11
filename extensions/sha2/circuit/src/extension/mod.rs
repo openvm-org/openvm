@@ -1,31 +1,37 @@
-use std::{
-    result::Result,
-    sync::{Arc, Mutex},
-};
+use std::{result::Result, sync::Arc};
 
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
-        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
-        VmExecutionExtension, VmField, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, SystemConfig,
+        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, VmConfig};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::LocalOpcode;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+use openvm_sha2_transpiler::Sha2Opcode;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{prover::AirProvingContext, StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_sha2::Sha2Extension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::{Sha2BlockHasherChip, Sha2BlockHasherVmAir, Sha2MainAir, Sha2MainChip, Sha2VmExecutor};
@@ -35,65 +41,61 @@ cfg_if::cfg_if! {
         mod cuda;
         pub use self::cuda::*;
         pub use self::cuda::Sha2GpuProverExt as Sha2ProverExt;
-        pub use self::cuda::Sha2Rv32GpuBuilder as Sha2Rv32Builder;
+        pub use self::cuda::Sha2Rv64GpuBuilder as Sha2Rv64Builder;
     } else {
         pub use self::Sha2CpuProverExt as Sha2ProverExt;
-        pub use self::Sha2Rv32CpuBuilder as Sha2Rv32Builder;
+        pub use self::Sha2Rv64CpuBuilder as Sha2Rv64Builder;
     }
 }
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Sha2Rv32Config {
-    #[config(executor = "SystemExecutor<F>")]
+pub struct Sha2Rv64Config {
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv32I,
+    pub rv64i: Rv64I,
     #[extension]
-    pub rv32m: Rv32M,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: Rv32Io,
+    pub io: Rv64Io,
     #[extension]
     pub sha2: Sha2,
 }
 
-impl Default for Sha2Rv32Config {
+impl Default for Sha2Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             sha2: Sha2,
         }
     }
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Sha2Rv32Config {}
+impl InitFileGenerator for Sha2Rv64Config {}
 
 #[derive(Clone)]
-pub struct Sha2Rv32CpuBuilder;
+pub struct Sha2Rv64CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Sha2Rv32CpuBuilder
+impl<E, SC> VmBuilder<E> for Sha2Rv64CpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Sha2Rv32Config;
+    type VmConfig = Sha2Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        config: &Sha2Rv32Config,
+        config: &Sha2Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
-    ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-        ChipInventoryError,
-    > {
+    ) -> Result<VmChipComplex<SC, E::PB, Self::SystemChipInventory>, ChipInventoryError> {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
             &SystemCpuBuilder,
             &config.system,
@@ -101,10 +103,10 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
     }
 }
@@ -113,35 +115,36 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha2;
 
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for Sha2 {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
+        let ext = Sha2Extension::new(ctx).expect("failed to construct rvr Sha2Extension");
+        extensions.register_lifter(ext);
+    }
+}
+
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor)]
 pub enum Sha2Executor {
     Sha256(Sha2VmExecutor<Sha256Config>),
     Sha512(Sha2VmExecutor<Sha512Config>),
 }
 
-impl<F> VmExecutionExtension<F> for Sha2 {
+impl VmExecutionExtension for Sha2 {
     type Executor = Sha2Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Sha2Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Sha2Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let sha256_executor =
-            Sha2VmExecutor::<Sha256Config>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
-        inventory.add_executor(sha256_executor, [Rv32Sha2Opcode::SHA256.global_opcode()])?;
+            Sha2VmExecutor::<Sha256Config>::new(Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
+        inventory.add_executor(sha256_executor, [Sha2Opcode::SHA256.global_opcode()])?;
 
         let sha512_executor =
-            Sha2VmExecutor::<Sha512Config>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
-        inventory.add_executor(sha512_executor, [Rv32Sha2Opcode::SHA512.global_opcode()])?;
+            Sha2VmExecutor::<Sha512Config>::new(Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
+        inventory.add_executor(sha512_executor, [Sha2Opcode::SHA512.global_opcode()])?;
 
         Ok(())
     }
@@ -154,43 +157,55 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             if let Some(air) = existing_air {
                 air.bus
             } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let bus =
+                    BitwiseOperationLookupBus::new(inventory.new_bus_idx_named("BitwiseLookup"));
                 let air = BitwiseOperationLookupAir::<8>::new(bus);
                 inventory.add_air(air);
                 air.bus
             }
         };
 
+        // Range checker for block-hasher digest limbs.
+        let range_bus = inventory.range_checker().bus;
+
         // this bus will be used for communication between the block hasher chip and the main chip
-        let sha2_bus_index = inventory.new_bus_idx();
+        let sha2_bus_index = inventory.new_bus_idx_named("Sha2Block");
         // the sha2 subair needs its own bus for self-interactions
-        let subair_bus_index = inventory.new_bus_idx();
+        let subair_bus_index = inventory.new_bus_idx_named("Sha2SubAir");
 
         // SHA-256
-        let sha256_block_hasher_air =
-            Sha2BlockHasherVmAir::<Sha256Config>::new(bitwise_lu, subair_bus_index, sha2_bus_index);
+        let sha256_block_hasher_air = Sha2BlockHasherVmAir::<Sha256Config>::new(
+            bitwise_lu,
+            range_bus,
+            subair_bus_index,
+            sha2_bus_index,
+        );
         inventory.add_air(sha256_block_hasher_air);
 
         let sha256_main_air = Sha2MainAir::<Sha256Config>::new(
             inventory.system().port(),
-            bitwise_lu,
-            inventory.pointer_max_bits(),
+            range_bus,
+            to_byte_ptr_bits(inventory.pointer_max_bits()),
             sha2_bus_index,
-            Rv32Sha2Opcode::CLASS_OFFSET,
+            Sha2Opcode::CLASS_OFFSET,
         );
         inventory.add_air(sha256_main_air);
 
         // SHA-512
-        let sha512_block_hasher_air =
-            Sha2BlockHasherVmAir::<Sha512Config>::new(bitwise_lu, subair_bus_index, sha2_bus_index);
+        let sha512_block_hasher_air = Sha2BlockHasherVmAir::<Sha512Config>::new(
+            bitwise_lu,
+            range_bus,
+            subair_bus_index,
+            sha2_bus_index,
+        );
         inventory.add_air(sha512_block_hasher_air);
 
         let sha512_main_air = Sha2MainAir::<Sha512Config>::new(
             inventory.system().port(),
-            bitwise_lu,
-            inventory.pointer_max_bits(),
+            range_bus,
+            to_byte_ptr_bits(inventory.pointer_max_bits()),
             sha2_bus_index,
-            Rv32Sha2Opcode::CLASS_OFFSET,
+            Sha2Opcode::CLASS_OFFSET,
         );
         inventory.add_air(sha512_main_air);
 
@@ -201,23 +216,22 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
 pub struct Sha2CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Sha2> for Sha2CpuProverExt
+impl<E, SC> VmProverExtension<E, Sha2> for Sha2CpuProverExt
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>> + Send + Sync + 'static,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Sha2,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<SC, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory
@@ -228,56 +242,72 @@ where
             } else {
                 let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
                 let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
+                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
+                    Ok(chip.generate_proving_ctx())
+                });
                 chip
             }
         };
 
-        // We must add each block hasher chip before the main chip to ensure that main chip does its
-        // tracegen first, because the main chip will pass the records to the block hasher chip
-        // after its tracegen is done.
-
         // SHA-256
         inventory.next_air::<Sha2BlockHasherVmAir<Sha256Config>>()?;
-        // shared records between the main chip and the block hasher chip
-        let records = Arc::new(Mutex::new(None));
         let sha256_block_hasher_chip = Sha2BlockHasherChip::<Val<SC>, Sha256Config>::new(
             bitwise_lu.clone(),
-            pointer_max_bits,
+            range_checker.clone(),
+            byte_ptr_max_bits,
             mem_helper.clone(),
-            records.clone(),
         );
-        inventory.add_periphery_chip(sha256_block_hasher_chip);
+        inventory.add_periphery_chip_with_height_and_tracegen(
+            sha256_block_hasher_chip,
+            None,
+            |chip, postflight| {
+                Ok(AirProvingContext::simple_no_pis(
+                    crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
+                ))
+            },
+        );
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_chip = Sha2MainChip::<Val<SC>, Sha256Config>::new(
-            records,
-            bitwise_lu.clone(),
-            pointer_max_bits,
+            range_checker.clone(),
+            byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(sha256_main_chip);
+        inventory.add_executor_chip_with_tracegen(sha256_main_chip, |chip, postflight| {
+            Ok(AirProvingContext::simple_no_pis(
+                crate::generate_main_trace_from_postflight(chip, postflight)?,
+            ))
+        });
 
         // SHA-512
         inventory.next_air::<Sha2BlockHasherVmAir<Sha512Config>>()?;
-        // shared records between the main chip and the block hasher chip
-        let records = Arc::new(Mutex::new(None));
         let sha512_block_hasher_chip = Sha2BlockHasherChip::<Val<SC>, Sha512Config>::new(
             bitwise_lu.clone(),
-            pointer_max_bits,
+            range_checker.clone(),
+            byte_ptr_max_bits,
             mem_helper.clone(),
-            records.clone(),
         );
-        inventory.add_periphery_chip(sha512_block_hasher_chip);
+        inventory.add_periphery_chip_with_height_and_tracegen(
+            sha512_block_hasher_chip,
+            None,
+            |chip, postflight| {
+                Ok(AirProvingContext::simple_no_pis(
+                    crate::generate_block_hasher_trace_from_postflight(chip, postflight)?,
+                ))
+            },
+        );
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_chip = Sha2MainChip::<Val<SC>, Sha512Config>::new(
-            records,
-            bitwise_lu.clone(),
-            pointer_max_bits,
+            range_checker.clone(),
+            byte_ptr_max_bits,
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(sha512_main_chip);
+        inventory.add_executor_chip_with_tracegen(sha512_main_chip, |chip, postflight| {
+            Ok(AirProvingContext::simple_no_pis(
+                crate::generate_main_trace_from_postflight(chip, postflight)?,
+            ))
+        });
 
         Ok(())
     }

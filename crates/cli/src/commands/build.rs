@@ -397,7 +397,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         let transpiler = app_config.app_vm_config.transpiler();
         let data = read(elf_path)
             .with_context(|| format!("failed to read ELF at {}", elf_path.display()))?;
-        let elf = Elf::decode(&data, MEM_SIZE as u32)
+        let elf = Elf::decode(&data, MEM_SIZE as u64)
             .with_context(|| format!("failed to decode ELF for target '{}'", target.name))?;
         let exe = VmExe::from_elf(elf, transpiler)
             .with_context(|| format!("failed to transpile target '{}'", target.name))?;

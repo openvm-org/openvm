@@ -55,7 +55,8 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
-    let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc], F::ZERO);
+    let padded_initial_pc_idx =
+        pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc_idx], F::ZERO);
 
     let perm = poseidon2_perm();
     cols.program_commit_hash = perm.permute(padded_program_commit)[..DIGEST_SIZE]
@@ -64,7 +65,7 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     cols.initial_root_hash = perm.permute(padded_initial_root)[..DIGEST_SIZE]
         .try_into()
         .unwrap();
-    cols.initial_pc_hash = perm.permute(padded_initial_pc)[..DIGEST_SIZE]
+    cols.initial_pc_idx_hash = perm.permute(padded_initial_pc_idx)[..DIGEST_SIZE]
         .try_into()
         .unwrap();
 
@@ -74,7 +75,7 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     poseidon2_compress_inputs.extend_from_slice(&[
         padded_program_commit,
         padded_initial_root,
-        padded_initial_pc,
+        padded_initial_pc_idx,
     ]);
 
     cols.intermediate_exe_commit =
@@ -103,10 +104,10 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     let root_pvs: &mut RootVerifierPvs<F> = public_values.as_mut_slice().borrow_mut();
 
     root_pvs.app_exe_commit =
-        poseidon2_compress_with_capacity(cols.intermediate_exe_commit, cols.initial_pc_hash).0;
+        poseidon2_compress_with_capacity(cols.intermediate_exe_commit, cols.initial_pc_idx_hash).0;
     poseidon2_compress_inputs.push(crate::utils::digests_to_poseidon2_input(
         cols.intermediate_exe_commit,
-        cols.initial_pc_hash,
+        cols.initial_pc_idx_hash,
     ));
 
     root_pvs.app_vm_commit = app_vm_commit;

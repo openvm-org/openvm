@@ -114,7 +114,7 @@ pub fn verify_vm_stark_proof_pvs(
 
     let &VmPvs::<F> {
         program_commit,
-        initial_pc,
+        initial_pc_idx,
         exit_code,
         is_terminate,
         initial_root,
@@ -139,7 +139,7 @@ pub fn verify_vm_stark_proof_pvs(
 
     // Check that the app_commit is as expected.
     let claimed_app_exe_commit =
-        compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc);
+        compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc_idx);
     if claimed_app_exe_commit != vk.baseline.app_exe_commit {
         return Err(VerifyStarkError::AppExeCommitMismatch {
             expected: vk.baseline.app_exe_commit,

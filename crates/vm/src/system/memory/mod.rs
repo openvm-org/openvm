@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::{
-    interaction::PermutationCheckBus, p3_util::log2_strict_usize, StarkProtocolConfig,
-};
+use openvm_instructions::{BLOCK_FE_WIDTH, VM_DIGEST_WIDTH};
+use openvm_platform::memory::MEM_BITS;
+use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 
 mod controller;
 pub mod merkle;
@@ -14,20 +14,36 @@ pub mod persistent;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) use controller::dimensions::ptr_bits_from_address_height;
 pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 use crate::{
-    arch::{AirRefWithColumns, MemoryConfig},
+    arch::{AirRefWithColumns, MemoryConfig, U16_CELL_SIZE_BITS},
     system::memory::{
-        dimensions::MemoryDimensions, interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
-        offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
+        interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
+        persistent::PersistentBoundaryAir,
     },
 };
 
-// @dev Currently this is only used for debug assertions, but we may switch to making it constant
-// and removing from MemoryConfig
-pub const POINTER_MAX_BITS: usize = 29;
+/// Default maximum bit width of pointers within each address space. Pointers index cells, not
+/// bytes.
+pub const DEFAULT_POINTER_MAX_BITS: usize = MEM_BITS - U16_CELL_SIZE_BITS;
+// Valid RVR memory pointers and leaf indices fit in `u32`. Guest operands stay
+// `u64` until a runtime bounds check proves that they are valid pointers.
+const _: () = assert!(MEM_BITS <= u32::BITS as usize);
+
+/// Returns whether `bytes` contains any non-zero byte.
+///
+/// Fixed-size comparisons allow the compiler to vectorize scans of mostly-zero memory pages.
+#[inline]
+pub(crate) fn has_nonzero_byte(bytes: &[u8]) -> bool {
+    const ZERO_CHUNK: [u8; 32] = [0; 32];
+
+    let mut chunks = bytes.chunks_exact(ZERO_CHUNK.len());
+    chunks.any(|chunk| chunk != ZERO_CHUNK) || chunks.remainder().iter().any(|&byte| byte != 0)
+}
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
@@ -35,8 +51,20 @@ pub enum OpType {
     Write = 1,
 }
 
+/// Number of low pointer bits omitted from a memory-bus address.
+///
+/// Every memory-bus operation addresses one [`BLOCK_FE_WIDTH`]-cell block, and block starts are
+/// aligned to [`BLOCK_FE_WIDTH`]. The bus therefore carries the block index `pointer /
+/// BLOCK_FE_WIDTH` instead of the AS-native cell pointer.
+pub const MEMORY_BLOCK_INDEX_SHIFT: usize = BLOCK_FE_WIDTH.ilog2() as usize;
+
 /// The full pointer to a location in memory consists of an address space and a pointer within
 /// the address space.
+///
+/// The memory bus addresses [`BLOCK_FE_WIDTH`]-cell blocks, so the pointer is expressed at block
+/// granularity: an AS-native cell pointer divided by [`BLOCK_FE_WIDTH`]. With the largest
+/// supported 32-bit AS-native pointer domain it is at most 30 bits wide, so it fits injectively in
+/// the BabyBear field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct MemoryAddress<S, T> {
@@ -64,6 +92,17 @@ impl<S, T> MemoryAddress<S, T> {
     }
 }
 
+impl<S: Clone, T: openvm_stark_backend::p3_field::PrimeCharacteristicRing> MemoryAddress<S, T> {
+    /// Returns the address `blocks` memory-bus blocks after `self`.
+    #[inline(always)]
+    pub fn offset_blocks(&self, blocks: usize) -> Self {
+        Self::new(
+            self.address_space.clone(),
+            self.pointer.clone() + T::from_usize(blocks),
+        )
+    }
+}
+
 #[derive(Clone)]
 pub struct MemoryAirInventory {
     pub bridge: MemoryBridge,
@@ -78,16 +117,13 @@ impl MemoryAirInventory {
         compression_bus: PermutationCheckBus,
     ) -> Self {
         let memory_bus = bridge.memory_bus();
-        let memory_dims = MemoryDimensions {
-            addr_space_height: mem_config.addr_space_height,
-            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-        };
-        let boundary = PersistentBoundaryAir::<CHUNK> {
+        let memory_dims = mem_config.memory_dimensions();
+        let boundary = PersistentBoundaryAir::<VM_DIGEST_WIDTH> {
             memory_bus,
             merkle_bus,
             compression_bus,
         };
-        let merkle = MemoryMerkleAir::<CHUNK> {
+        let merkle = MemoryMerkleAir::<VM_DIGEST_WIDTH> {
             memory_dimensions: memory_dims,
             merkle_bus,
             compression_bus,

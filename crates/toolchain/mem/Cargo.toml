@@ -1,0 +1,13 @@
+[package]
+name = "openvm-mem"
+description = "libc memory intrinsics (memcpy, memset, memmove, memcmp, bcmp) for OpenVM guest programs."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true

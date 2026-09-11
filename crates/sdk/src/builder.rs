@@ -1,7 +1,4 @@
-use std::{
-    marker::PhantomData,
-    sync::{Arc, OnceLock},
-};
+use std::sync::{Arc, OnceLock};
 
 use eyre::eyre;
 use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
@@ -79,13 +76,12 @@ where
     #[cfg(feature = "root-prover")]
     root_source: Option<RootSource>,
     agg_tree_config: Option<AggregationTreeConfig>,
-    transpiler: Option<Transpiler<F>>,
+    transpiler: Option<Transpiler>,
     deferral_source: Option<DeferralSource>,
     #[cfg(feature = "evm-prove")]
     halo2_source: Option<Halo2Source>,
     #[cfg(feature = "evm-prove")]
     halo2_params_reader: Option<CacheHalo2ParamsReader>,
-    _phantom: PhantomData<E>,
 }
 
 impl<E, VB> GenericSdkBuilder<E, VB>
@@ -281,7 +277,7 @@ where
 
     /// Sets the transpiler used to convert guest ELFs into
     /// [`VmExe`](openvm_circuit::arch::instructions::exe::VmExe)s.
-    pub fn transpiler(mut self, transpiler: Transpiler<F>) -> Self {
+    pub fn transpiler(mut self, transpiler: Transpiler) -> Self {
         Self::set_once(&mut self.transpiler, "transpiler", transpiler);
         self
     }
@@ -348,7 +344,6 @@ where
                 halo2_source: _,
             #[cfg(feature = "evm-prove")]
             halo2_params_reader,
-            _phantom: _,
         } = self;
 
         let (app_config, app_pk_seed) = Self::normalize_app_source(app_source);
@@ -356,7 +351,7 @@ where
         #[cfg(feature = "root-prover")]
         let (root_params, root_pk_seed) = Self::normalize_root_source(root_source);
 
-        let executor = VmExecutor::new(app_config.app_vm_config.clone())
+        let executor = VmExecutor::<F, _>::new(app_config.app_vm_config.clone())
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_tree_config = agg_tree_config.unwrap_or_default();
 
@@ -449,7 +444,6 @@ where
             halo2_params_reader,
             #[cfg(feature = "evm-prove")]
             halo2_prover: Self::init_once_lock(halo2_prover_seed, "halo2_prover"),
-            _phantom: PhantomData,
         })
     }
 
@@ -458,7 +452,7 @@ where
     pub fn build(mut self) -> Result<GenericSdk<E, VB>, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         if self.transpiler.is_none() {
             self.transpiler = self.app_source.as_ref().map(|app_source| match app_source {
@@ -569,7 +563,6 @@ where
             halo2_source: None,
             #[cfg(feature = "evm-prove")]
             halo2_params_reader: None,
-            _phantom: PhantomData,
         }
     }
 }
@@ -595,7 +588,7 @@ where
     ) -> Result<Self, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         let SdkCachedProvingKey {
             app_pk,

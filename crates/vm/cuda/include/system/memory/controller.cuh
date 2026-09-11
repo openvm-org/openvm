@@ -20,7 +20,6 @@ struct MemoryAuxColsFactory {
             AUX_LEN,
             row.slice_from(COL_INDEX(MemoryBaseAuxCols, timestamp_lt_aux))
         );
-        COL_WRITE_VALUE(row, MemoryBaseAuxCols, prev_timestamp, prev_timestamp);
     }
 
     __device__ void fill_zero(RowSlice row) {

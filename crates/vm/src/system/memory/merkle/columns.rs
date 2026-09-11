@@ -3,7 +3,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 
 #[derive(Debug, AlignedBorrow, StructReflection)]
 #[repr(C)]
-pub struct MemoryMerkleCols<T, const CHUNK: usize> {
+pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     // `expand_direction` =  1 corresponds to initial memory state
     // `expand_direction` = -1 corresponds to final memory state
     // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
@@ -19,21 +19,20 @@ pub struct MemoryMerkleCols<T, const CHUNK: usize> {
     pub parent_as_label: T,
     pub parent_address_label: T,
 
-    pub parent_hash: [T; CHUNK],
-    pub left_child_hash: [T; CHUNK],
-    pub right_child_hash: [T; CHUNK],
+    pub parent_hash: [T; DIGEST_WIDTH],
+    pub left_child_hash: [T; DIGEST_WIDTH],
+    pub right_child_hash: [T; DIGEST_WIDTH],
 
-    // indicate whether `expand_direction` is different from origin
-    // when `expand_direction` != -1, must be 0
-    pub left_direction_different: T,
-    pub right_direction_different: T,
+    // Encodes each child's Merkle-bus interaction for this row.
+    pub left_child_mode: T,
+    pub right_child_mode: T,
 }
 
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
 #[repr(C)]
-pub struct MemoryMerklePvs<T, const CHUNK: usize> {
+pub struct MemoryMerklePvs<T, const DIGEST_WIDTH: usize> {
     /// The memory state root before the execution of this segment.
-    pub initial_root: [T; CHUNK],
+    pub initial_root: [T; DIGEST_WIDTH],
     /// The memory state root after the execution of this segment.
-    pub final_root: [T; CHUNK],
+    pub final_root: [T; DIGEST_WIDTH],
 }

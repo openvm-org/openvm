@@ -7,6 +7,7 @@ use std::{
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
@@ -16,165 +17,224 @@ use openvm_stark_backend::{
     prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
+use rustc_hash::FxHashSet;
 use tracing::instrument;
 
-use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
+use super::merkle::SerialReceiver;
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
-    system::memory::{
-        controller::CHUNK, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition,
+    system::{
+        memory::{offline_checker::MemoryBus, MemoryAddress, MemoryImage},
+        TouchedMemory,
     },
 };
 
-/// Number of DEFAULT_BLOCK_SIZE blocks per CHUNK (e.g., 2 for 8/4).
-/// Blocks are on the same row only for Merkle tree hashing (8 bytes at a time).
-/// Memory bus interactions use per-block timestamps.
-pub const BLOCKS_PER_CHUNK: usize = CHUNK / DEFAULT_BLOCK_SIZE;
+/// Number of memory-bus blocks covered by one merkle leaf.
+pub const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-/// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
-/// accessed timestamp---in either the initial or final memory state.
+/// Each row describes one touched merkle leaf (`DIGEST_WIDTH` cells): its data and hash in both
+/// the initial and final memory state, together with the per-block final timestamps.
+/// Initial timestamps are always zero.
 #[repr(C)]
 #[derive(Debug, AlignedBorrow, StructReflection)]
-pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
-    // `expand_direction` =  1 corresponds to initial memory state
-    // `expand_direction` = -1 corresponds to final memory state
-    // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
-    pub expand_direction: T,
+pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
+    pub is_valid: T,
+    pub is_dirty: T,
     pub address_space: T,
     pub leaf_label: T,
-    pub values: [T; CHUNK],
-    pub hash: [T; CHUNK],
-    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block within the chunk has its own timestamp.
+    pub initial_values: [T; DIGEST_WIDTH],
+    pub final_values: [T; DIGEST_WIDTH],
+    pub initial_hash: [T; DIGEST_WIDTH],
+    pub final_hash: [T; DIGEST_WIDTH],
+    /// Per-block timestamps. Each BLOCK_FE_WIDTH block within the leaf has its own timestamp.
     /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
     /// at t=0 final).
-    pub timestamps: [T; BLOCKS_PER_CHUNK],
+    pub final_timestamps: [T; BLOCKS_PER_LEAF],
 }
 
 /// Imposes the following constraints:
-/// - `expand_direction` should be -1, 0, 1
+/// - `is_valid` and `is_dirty` are boolean, and `is_dirty` implies `is_valid`
+/// - on clean rows (`is_valid = 1, is_dirty = 0`), final values equal initial ones
 ///
-/// Sends the following interactions:
-/// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
-/// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
-///   `merkle_bus`.
+/// Sends the following interactions (one row per touched leaf):
+/// - merkle bus: initial leaf `[1, 0, as_label, leaf_label, initial_hash]` with multiplicity
+///   `is_valid`; final leaf `[-1, 0, as_label, leaf_label, final_hash]` with multiplicity
+///   `-is_dirty`.
+/// - compression bus: `(initial_values, 0, initial_hash)` with multiplicity `is_valid`;
+///   `(final_values, 0, final_hash)` with multiplicity `is_dirty`.
+/// - memory bus: opens the block at timestamp 0 with `initial_values` (multiplicity `is_valid`) and
+///   closes it at `final_timestamps` with `final_values` (multiplicity `-is_valid`).
 #[derive(Clone, Debug, ColumnsAir)]
-#[columns_via(PersistentBoundaryCols<u8, CHUNK>)]
-pub struct PersistentBoundaryAir<const CHUNK: usize> {
+#[columns_via(PersistentBoundaryCols<u8, DIGEST_WIDTH>)]
+pub struct PersistentBoundaryAir<const DIGEST_WIDTH: usize> {
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
 }
 
-impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, F> BaseAir<F> for PersistentBoundaryAir<DIGEST_WIDTH> {
     fn width(&self) -> usize {
-        PersistentBoundaryCols::<F, CHUNK>::width()
+        PersistentBoundaryCols::<F, DIGEST_WIDTH>::width()
     }
 }
 
-impl<const CHUNK: usize, F> BaseAirWithPublicValues<F> for PersistentBoundaryAir<CHUNK> {}
-impl<const CHUNK: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<CHUNK> {}
+impl<const DIGEST_WIDTH: usize, F> BaseAirWithPublicValues<F>
+    for PersistentBoundaryAir<DIGEST_WIDTH>
+{
+}
+impl<const DIGEST_WIDTH: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<DIGEST_WIDTH> {}
 
-impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
+    for PersistentBoundaryAir<DIGEST_WIDTH>
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
-        let local: &PersistentBoundaryCols<AB::Var, CHUNK> = (*local).borrow();
+        let local: &PersistentBoundaryCols<AB::Var, DIGEST_WIDTH> = (*local).borrow();
 
-        // `direction` should be -1, 0, 1
-        builder.assert_eq(
-            local.expand_direction,
-            local.expand_direction * local.expand_direction * local.expand_direction,
-        );
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_dirty);
+        // `is_dirty` may only be set on valid rows
+        builder.when(local.is_dirty).assert_one(local.is_valid);
 
-        // Constrain that an "initial" row has all timestamp zero.
-        // Since `direction` is constrained to be in {-1, 0, 1}, we can select `direction == 1`
-        // with the constraint below.
-        let mut when_initial =
-            builder.when(local.expand_direction * (local.expand_direction + AB::F::ONE));
-        for i in 0..BLOCKS_PER_CHUNK {
-            when_initial.assert_zero(local.timestamps[i]);
+        // If the leaf is clean, its final values must match the initial ones.
+        // Since both bits are boolean and `is_dirty` implies `is_valid`, the selector below
+        // is 1 exactly on clean valid rows.
+        let mut when_clean = builder.when(local.is_valid - local.is_dirty);
+        for i in 0..DIGEST_WIDTH {
+            when_clean.assert_eq(local.initial_values[i], local.final_values[i]);
         }
+        // `final_hash` needs no clean-row constraint: both interactions that contain it
+        // have multiplicity `is_dirty`, so it is unused here.
 
+        // merkle-bus interaction: initial leaf
         let mut expand_fields = vec![
-            // direction =  1 => is_final = 0
-            // direction = -1 => is_final = 1
-            local.expand_direction.into(),
+            AB::Expr::ONE,
             AB::Expr::ZERO,
             local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
             local.leaf_label.into(),
         ];
-        expand_fields.extend(local.hash.map(Into::into));
+        expand_fields.extend(local.initial_hash.map(Into::into));
         self.merkle_bus
-            .interact(builder, expand_fields, local.expand_direction.into());
+            .interact(builder, expand_fields, local.is_valid.into());
+        // merkle-bus interaction: final leaf
+        let mut expand_fields = vec![
+            AB::Expr::NEG_ONE,
+            AB::Expr::ZERO,
+            local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
+            local.leaf_label.into(),
+        ];
+        expand_fields.extend(local.final_hash.map(Into::into));
+        self.merkle_bus
+            .interact(builder, expand_fields, AB::Expr::ZERO - local.is_dirty);
 
+        // compression bus interaction: initial leaf
         self.compression_bus.interact(
             builder,
             iter::empty()
-                .chain(local.values.map(Into::into))
-                .chain(iter::repeat_n(AB::Expr::ZERO, CHUNK))
-                .chain(local.hash.map(Into::into)),
-            local.expand_direction * local.expand_direction,
+                .chain(local.initial_values.map(Into::into))
+                .chain(iter::repeat_n(AB::Expr::ZERO, DIGEST_WIDTH))
+                .chain(local.initial_hash.map(Into::into)),
+            local.is_valid,
+        );
+        // compression bus interaction: final leaf
+        self.compression_bus.interact(
+            builder,
+            iter::empty()
+                .chain(local.final_values.map(Into::into))
+                .chain(iter::repeat_n(AB::Expr::ZERO, DIGEST_WIDTH))
+                .chain(local.final_hash.map(Into::into)),
+            local.is_dirty,
         );
 
-        let chunk_size_f = AB::F::from_usize(CHUNK);
-        for block_idx in 0..BLOCKS_PER_CHUNK {
-            let offset = AB::F::from_usize(block_idx * DEFAULT_BLOCK_SIZE);
-            // Split the 1xCHUNK leaf into DEFAULT_BLOCK_SIZE-sized bus messages.
-            // Each block uses its own timestamp - untouched blocks stay at t=0.
+        // memory bus interactions
+        for block_idx in 0..BLOCKS_PER_LEAF {
+            let memory_block_index = local.leaf_label * AB::F::from_usize(BLOCKS_PER_LEAF)
+                + AB::F::from_usize(block_idx);
+            // Each block uses its own timestamp; untouched blocks stay at t=0.
+            // initial block
             self.memory_bus
                 .send(
-                    MemoryAddress::new(
-                        local.address_space,
-                        local.leaf_label * chunk_size_f + offset,
-                    ),
-                    local.values
-                        [block_idx * DEFAULT_BLOCK_SIZE..(block_idx + 1) * DEFAULT_BLOCK_SIZE]
+                    MemoryAddress::new(local.address_space.into(), memory_block_index.clone()),
+                    local.initial_values
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
-                    local.timestamps[block_idx],
+                    AB::Expr::ZERO,
                 )
-                .eval(builder, local.expand_direction);
+                .eval(builder, local.is_valid);
+            // final block
+            self.memory_bus
+                .send(
+                    MemoryAddress::new(local.address_space.into(), memory_block_index),
+                    local.final_values
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
+                        .to_vec(),
+                    local.final_timestamps[block_idx],
+                )
+                .eval(builder, AB::Expr::ZERO - local.is_valid);
         }
     }
 }
 
-pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
-    pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: Option<Vec<FinalTouchedLabel<F, CHUNK>>>,
+pub struct PersistentBoundaryChip<F, const DIGEST_WIDTH: usize> {
+    pub air: PersistentBoundaryAir<DIGEST_WIDTH>,
+    touched_labels: Option<Vec<FinalTouchedLabel<F, DIGEST_WIDTH>>>,
     overridden_height: Option<usize>,
 }
 
 #[derive(Debug)]
-pub struct FinalTouchedLabel<F, const CHUNK: usize> {
+pub struct FinalTouchedLabel<F, const DIGEST_WIDTH: usize> {
     address_space: u32,
     label: u32,
-    init_values: [F; CHUNK],
-    final_values: [F; CHUNK],
-    init_hash: [F; CHUNK],
-    final_hash: [F; CHUNK],
-    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block has its own timestamp.
-    final_timestamps: [u32; BLOCKS_PER_CHUNK],
+    init_values: [F; DIGEST_WIDTH],
+    final_values: [F; DIGEST_WIDTH],
+    init_hash: [F; DIGEST_WIDTH],
+    final_hash: [F; DIGEST_WIDTH],
+    /// Per-block timestamps. Each BLOCK_FE_WIDTH block has its own timestamp.
+    final_timestamps: [u32; BLOCKS_PER_LEAF],
+    /// Whether some block of the leaf was *written* during execution (independent of
+    /// the written content). Dirtiness gates all of the row's final-state interactions:
+    /// a clean leaf's final hash equals its initial one and is never recorded with the
+    /// hasher.
+    is_dirty: bool,
 }
 
-type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timestamp, values)
-type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
-pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
+/// Pointers `(address_space, leaf_ptr)` of the leaves containing at least one block
+/// *written* during execution (per-write dirtiness, tracked by `TracingMemory`:
+/// writing values equal to the existing ones still marks a leaf dirty), keyed like
+/// `Equipartition<_, DIGEST_WIDTH>` so entries match the merkle chip's `final_memory`
+/// keys.
+pub type DirtyLeaves = FxHashSet<(u32, u32)>;
 
-pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
-    final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
-) -> ChunkedTouchedMemory<F> {
-    let mut enriched: Vec<EnrichedEntry<F>> = final_memory
+// (block_idx, timestamp, is_dirty, values)
+type BlockInfo<F> = (usize, u32, bool, [F; BLOCK_FE_WIDTH]);
+type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // ((addr_space, leaf_label), block_info)
+/// Touched memory grouped into merkle leaves: `(addr_space, leaf_label) -> blocks`.
+pub(crate) type LeafGroupedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
+
+/// Groups final memory blocks that are strictly ordered by `(address_space, pointer)`.
+pub(crate) fn group_sorted_touched_memory_by_leaf<F: Copy + Send + Sync>(
+    final_memory: &TouchedMemory<F>,
+) -> LeafGroupedTouchedMemory<F> {
+    let enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
-        .map(|&((addr_space, ptr), ts_values)| {
-            let chunk_label = ptr / CHUNK as u32;
-            let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
-            let key = (addr_space, chunk_label);
-            let block_info = (block_idx, ts_values.timestamp, ts_values.values);
+        .map(|block| {
+            let leaf_label = block.ptr / VM_DIGEST_WIDTH as u32;
+            let block_idx = ((block.ptr % VM_DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
+            let key = (block.address_space, leaf_label);
+            let block_info = (
+                block_idx,
+                block.timestamp,
+                block.is_dirty != 0,
+                block.values,
+            );
             (key, block_info)
         })
         .collect();
-    enriched.sort_unstable_by_key(|(key, _)| *key);
+    debug_assert!(enriched
+        .windows(2)
+        .all(|window| (window[0].0, (window[0].1).0) < (window[1].0, (window[1].1).0)));
 
     enriched
         .chunk_by(|a, b| a.0 == b.0)
@@ -186,7 +246,7 @@ pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
         .collect()
 }
 
-impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
+impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGEST_WIDTH> {
     pub fn new(
         memory_bus: MemoryBus,
         merkle_bus: PermutationCheckBus,
@@ -207,76 +267,101 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         self.overridden_height = Some(overridden_height);
     }
 
-    /// Finalize the boundary chip with per-block timestamped memory.
+    /// Finalize the boundary chip with touched memory grouped by Merkle leaf.
     ///
-    /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity (4 bytes per entry, single timestamp
-    /// each). This function rechunks into CHUNK-sized (8 bytes) groups with per-block
-    /// timestamps. Untouched blocks within a touched chunk get values from initial_memory and
-    /// timestamp 0.
+    /// Untouched blocks within a touched leaf get values from initial_memory and timestamp 0.
+    ///
+    /// Returns the [`DirtyLeaves`] this chip committed to, so the merkle chip consumes
+    /// the exact same bits instead of re-deriving dirtiness.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
-        // Touched stuff at DEFAULT_BLOCK_SIZE granularity
-        final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+        final_memory_by_leaf: &LeafGroupedTouchedMemory<F>,
         hasher: &H,
-    ) where
-        H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
+    ) -> DirtyLeaves
+    where
+        H: Hasher<DIGEST_WIDTH, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        let final_touched_labels: Vec<_> = group_touched_memory_by_chunk(final_memory)
-            .into_par_iter()
-            .map(|((addr_space, chunk_label), blocks)| {
-                let chunk_ptr = chunk_label * CHUNK as u32;
-                // SAFETY: addr_space from `final_memory` are all in bounds
-                let init_values: [F; CHUNK] = array::from_fn(|i| unsafe {
-                    initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
+        let final_touched_labels: Vec<_> = final_memory_by_leaf
+            .par_iter()
+            .map(|((addr_space, leaf_label), blocks)| {
+                let ptr = leaf_label * DIGEST_WIDTH as u32;
+                // SAFETY: addr_space from `final_memory_by_leaf` are all in bounds
+                let init_values: [F; DIGEST_WIDTH] = array::from_fn(|i| unsafe {
+                    initial_memory.get_f::<F>(*addr_space, ptr + i as u32)
                 });
 
                 let mut final_values = init_values;
-                let mut timestamps = [0u32; BLOCKS_PER_CHUNK];
+                let mut timestamps = [0u32; BLOCKS_PER_LEAF];
 
-                for (block_idx, ts, values) in blocks {
+                for &(block_idx, ts, _, values) in blocks {
                     timestamps[block_idx] = ts;
                     for (i, &val) in values.iter().enumerate() {
-                        final_values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
+                        final_values[block_idx * BLOCK_FE_WIDTH + i] = val;
                     }
                 }
 
+                // Dirtiness is per *write*, tracked during execution: a leaf is dirty
+                // iff some block of it was written, even if the written values equal
+                // the initial ones. A clean (unwritten) leaf cannot have changed, so
+                // its final hash is the initial one.
+                let is_dirty = blocks.iter().any(|&(_, _, dirty, _)| dirty);
+                debug_assert!(
+                    is_dirty || final_values == init_values,
+                    "unwritten leaf ({addr_space}, {leaf_label}) changed values"
+                );
                 let initial_hash = hasher.hash(&init_values);
-                let final_hash = hasher.hash(&final_values);
+                let final_hash = if is_dirty {
+                    hasher.hash(&final_values)
+                } else {
+                    initial_hash
+                };
                 FinalTouchedLabel {
-                    address_space: addr_space,
-                    label: chunk_label,
+                    address_space: *addr_space,
+                    label: *leaf_label,
                     init_values,
                     final_values,
                     init_hash: initial_hash,
                     final_hash,
                     final_timestamps: timestamps,
+                    is_dirty,
                 }
             })
             .collect();
         for l in &final_touched_labels {
             hasher.receive(&l.init_values);
-            hasher.receive(&l.final_values);
+            // A clean leaf's final compression has multiplicity `is_dirty = 0` on the
+            // compression bus, so it must not be recorded with the hasher chip.
+            if l.is_dirty {
+                hasher.receive(&l.final_values);
+            }
         }
+        let dirty_leaves = final_touched_labels
+            .iter()
+            .filter(|l| l.is_dirty)
+            .map(|l| (l.address_space, l.label * DIGEST_WIDTH as u32))
+            .collect();
         self.touched_labels = Some(final_touched_labels);
+        dirty_leaves
     }
 }
 
-impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, CHUNK>
+impl<const DIGEST_WIDTH: usize, SC> Chip<CpuBackend<SC>>
+    for PersistentBoundaryChip<Val<SC>, DIGEST_WIDTH>
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self) -> AirProvingContext<CpuBackend<SC>> {
         let trace = {
             let touched_labels = self
                 .touched_labels
                 .as_ref()
                 .expect("Cannot generate trace before finalization");
-            let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
+            let width = PersistentBoundaryCols::<Val<SC>, DIGEST_WIDTH>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-            let mut height = (2 * touched_labels.len()).next_power_of_two();
+            let mut height = touched_labels.len().next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
                 oh = oh.next_power_of_two();
                 assert!(
@@ -287,26 +372,19 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            rows.par_chunks_mut(2 * width)
+            rows.par_chunks_mut(width)
                 .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
-                    let (initial_row, final_row) = row.split_at_mut(width);
-                    *initial_row.borrow_mut() = PersistentBoundaryCols {
-                        expand_direction: Val::<SC>::ONE,
+                    *row.borrow_mut() = PersistentBoundaryCols {
+                        is_valid: Val::<SC>::ONE,
+                        is_dirty: Val::<SC>::from_bool(touched_label.is_dirty),
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
-                        values: touched_label.init_values,
-                        hash: touched_label.init_hash,
-                        timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_CHUNK],
-                    };
-
-                    *final_row.borrow_mut() = PersistentBoundaryCols {
-                        expand_direction: Val::<SC>::NEG_ONE,
-                        address_space: Val::<SC>::from_u32(touched_label.address_space),
-                        leaf_label: Val::<SC>::from_u32(touched_label.label),
-                        values: touched_label.final_values,
-                        hash: touched_label.final_hash,
-                        timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
+                        initial_values: touched_label.init_values,
+                        final_values: touched_label.final_values,
+                        initial_hash: touched_label.init_hash,
+                        final_hash: touched_label.final_hash,
+                        final_timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
                     };
                 });
             RowMajorMatrix::new(rows, width)

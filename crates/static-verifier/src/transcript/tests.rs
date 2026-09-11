@@ -137,7 +137,7 @@ fn transcript_outputs_match_native_interleaved_flow() {
 
     let expected_sample = native.sample().as_canonical_u64();
     let expected_ext = ext_to_u64(fs_sample_ext(&mut native));
-    let expected_bits = fs_sample_bits(&mut native, 17) as u64;
+    let expected_bits = fs_sample_bits(&mut native, 17);
     assert!(fs_check_witness(
         &mut native,
         9,

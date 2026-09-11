@@ -1,76 +1,118 @@
 use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
+use openvm_circuit::arch::cuda::postflight::{
+    GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
+};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_cuda_common::d_buffer::DeviceBuffer;
+use openvm_deferral_transpiler::DeferralOpcode;
+use openvm_instructions::{
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS},
+    LocalOpcode, DEFERRAL_AS,
+};
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::{
-    DeferralCallAdapterCols, DeferralCallAdapterRecord, DeferralCallCoreCols,
-    DeferralCallCoreRecord,
+use super::{DeferralCallAdapterCols, DeferralCallCoreCols};
+use crate::{
+    cuda_abi::call,
+    poseidon2::{DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer},
 };
-use crate::{cuda_abi::call, poseidon2::DeferralPoseidon2SharedBuffer};
 
 #[derive(new)]
 pub struct DeferralCallChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<BYTE_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
     pub num_deferral_circuits: usize,
-    pub poseidon2: DeferralPoseidon2SharedBuffer,
+    pub(crate) poseidon2: DeferralPoseidon2SharedBuffer,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
-    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        type Record = (DeferralCallAdapterRecord<F>, DeferralCallCoreRecord<F>);
-        const RECORD_SIZE: usize = size_of::<Record>();
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+impl DeferralCallChipGpu {
+    pub fn generate_proving_ctx_from_postflight(
+        &self,
+        program: &GpuPostflightProgram,
+        transcript: &GpuPostflightTranscript,
+        replay_plan: &GpuPostflightPlan,
+        max_trace_height: usize,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuPostflightError> {
+        let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let step_range = replay_plan.opcode_range(DeferralOpcode::CALL.global_opcode());
+        if step_range.is_empty() {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
         }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
-
-        let num_records = records.len() / RECORD_SIZE;
-        let trace_height = next_power_of_two_or_zero(num_records);
+        let trace_height = step_range
+            .len()
+            .checked_next_power_of_two()
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(
+                    "Deferral CALL trace height overflow".to_string(),
+                )
+            })?;
+        if trace_height > max_trace_height {
+            return Err(GpuPostflightError::InvalidTranscript(format!(
+                "Deferral CALL padded trace height {trace_height} exceeds segment limit {max_trace_height}"
+            )));
+        }
         let trace_width =
             DeferralCallAdapterCols::<F>::width() + DeferralCallCoreCols::<F>::width();
-        let device_ctx = &self.range_checker.device_ctx;
-
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        trace_height
+            .checked_mul(trace_width)
+            .and_then(|elements| elements.checked_mul(size_of::<F>()))
+            .ok_or_else(|| {
+                GpuPostflightError::InvalidTranscript(
+                    "Deferral CALL trace allocation overflow".to_string(),
+                )
+            })?;
+        let poseidon_records = step_range.len().checked_mul(2).ok_or_else(|| {
+            GpuPostflightError::InvalidTranscript(
+                "Deferral CALL Poseidon producer allocation overflow".to_string(),
+            )
+        })?;
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
-
+        let poseidon2 = DeferralPoseidon2ProducerBuffer::new(poseidon_records, device_ctx);
         unsafe {
-            call::tracegen(
+            call::replay_tracegen(
                 trace.buffer(),
                 trace_height,
                 trace_width,
-                &d_records,
-                num_records,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.field_values(),
+                transcript.field_initial_values(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                DeferralOpcode::CALL.global_opcode().as_usize() as u32,
+                REGISTER_AS,
+                MEMORY_AS,
+                DEFERRAL_AS,
+                self.address_bits as u32,
                 &self.count,
                 self.num_deferral_circuits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS as u32,
-                &self.poseidon2.records,
-                &self.poseidon2.counts,
-                &self.poseidon2.idx,
-                // Length in F elements; the CUDA side converts to record count.
-                self.poseidon2.records.len(),
+                &poseidon2.records,
+                &poseidon2.counts,
+                &poseidon2.idx,
+                poseidon2.records.len() / 16,
                 self.address_bits,
+                transcript.error_ptr(),
                 device_ctx.stream.as_raw(),
-            )
-            .expect("Failed to generate deferral call trace");
+            )?;
         }
-
-        AirProvingContext::simple_no_pis(trace)
+        self.poseidon2.push(poseidon2);
+        Ok(AirProvingContext::simple_no_pis(trace))
     }
 }

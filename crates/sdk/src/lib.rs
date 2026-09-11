@@ -1,9 +1,9 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
-#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 
+#[cfg(feature = "rvr")]
+use std::path::PathBuf;
 use std::{
     fs::read,
-    marker::PhantomData,
     path::Path,
     sync::{Arc, OnceLock},
 };
@@ -16,14 +16,22 @@ use openvm_build::{
 };
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
-pub use openvm_circuit;
+#[cfg(feature = "rvr")]
+pub use openvm_circuit::arch::rvr::{RvrTrackedExecution, RvrTrackedExecutionOutcome};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::{
+    execution_mode::MeteredCtx,
+    instructions::program::DEFAULT_PC_STEP,
+    rvr::{default_addr2line_cmd, GuestDebugMap},
+};
+pub use openvm_circuit::{self, arch::ExecutionOutcome};
 use openvm_circuit::{
     arch::{
-        execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
-        MeteredExecutor, PreflightExecutor, SystemConfig, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmExecutor,
+        execution_mode::Segment, instructions::exe::VmExe, ContinuationProverBuilder, Executor,
+        InitFileGenerator, MeteredExecutor, SystemConfig, VirtualMachine, VirtualMachineError,
+        VmBuilder, VmExecutionConfig, VmExecutor, VmState,
     },
-    system::memory::merkle::public_values::extract_public_values,
+    system::memory::{merkle::public_values::extract_public_values, online::GuestMemory},
 };
 use openvm_continuations::CommitBytes;
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
@@ -37,12 +45,17 @@ use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use openvm_verify_stark_host::{verify_vm_stark_proof_decoded, vk::VmStarkVerifyingKey};
+pub use types::{ExecutableFormat, ExecutableInput};
 
+#[cfg(feature = "rvr")]
+use crate::compiled::load_metered_artifact_metadata;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
-    prover::{AggProver, AppProver, DeferralAggProver, DeferralHookCommits, StarkProver},
-    types::{AppExecutionCommit, ExecutableFormat, VmBaseline},
+    prover::{
+        vm::new_local_vm, AggProver, AppProver, DeferralAggProver, DeferralHookCommits, StarkProver,
+    },
+    types::{AppExecutionCommit, VmBaseline},
 };
 #[cfg(feature = "evm-prove")]
 use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};
@@ -68,6 +81,7 @@ pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config 
 pub use openvm_verify_stark_host::{vk::VerificationBaseline, VmStarkProof};
 
 pub mod builder;
+pub mod compiled;
 pub mod config;
 pub mod fs;
 #[cfg(feature = "evm-prove")]
@@ -86,7 +100,14 @@ mod tests;
 
 mod error;
 mod stdin;
+#[cfg(feature = "rvr")]
+pub use compiled::CompiledExePureWithInstretTracking;
+pub use compiled::{
+    CompiledExeMetered, CompiledExeMeteredCost, CompiledExePreflight, CompiledExePure,
+    PreflightOutput,
+};
 pub use error::SdkError;
+pub use openvm_sdk_config::SegmentProver;
 pub use stdin::*;
 
 pub const OPENVM_VERSION: &str = concat!(
@@ -94,6 +115,12 @@ pub const OPENVM_VERSION: &str = concat!(
     ".",
     env!("CARGO_PKG_VERSION_MINOR")
 );
+
+struct CompileInput {
+    executable: ExecutableFormat,
+    #[cfg(feature = "rvr")]
+    elf_path: Option<PathBuf>,
+}
 
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
 // BabyBearPoseidon2RootEngine right now.
@@ -109,7 +136,7 @@ pub const OPENVM_VERSION: &str = concat!(
 /// that depends on the program executable.
 ///
 /// Some commonly used methods are:
-/// - [`execute`](Self::execute)
+/// - [`compile_and_execute`](Self::compile_and_execute)
 /// - [`prove`](Self::prove)
 /// - [`verify_proof`](Self::verify_proof)
 #[derive(Getters)]
@@ -138,7 +165,7 @@ where
     #[getset(get = "pub")]
     app_vm_builder: VB,
 
-    transpiler: Option<Transpiler<F>>,
+    transpiler: Option<Transpiler>,
 
     /// The `executor` may be used to construct different types of interpreters, given the program,
     /// for more specific execution purposes. By default, it is recommended to use the
@@ -158,8 +185,6 @@ where
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
     halo2_prover: OnceLock<Halo2Prover>,
-
-    _phantom: PhantomData<E>,
 }
 
 #[derive(Clone, Default)]
@@ -223,13 +248,15 @@ where
         GenericSdk::new(AppConfig::standard(app_params), agg_params).unwrap()
     }
 
-    /// Creates SDK with a configuration with RISC-V RV32IM and IO VM extensions loaded.
+    /// Creates SDK with a configuration with RISC-V RV64IM and IO VM extensions loaded.
     ///
-    /// **Note**: To use this configuration, your `openvm.toml` must match
-    /// [`SdkVmConfig::riscv32`]. See the `openvm-sdk-config` crate documentation for the
-    /// corresponding TOML.
-    pub fn riscv32(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
-        GenericSdk::new(AppConfig::riscv32(app_params), agg_params).unwrap()
+    /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
+    ///
+    /// ```toml
+    #[doc = include_str!("../../sdk-config/src/openvm_riscv64.toml")]
+    /// ```
+    pub fn riscv64(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
+        GenericSdk::new(AppConfig::riscv64(app_params), agg_params).unwrap()
     }
 }
 
@@ -245,7 +272,7 @@ where
     ) -> Result<Self, SdkError>
     where
         VB: Default,
-        VB::VmConfig: TranspilerConfig<F>,
+        VB::VmConfig: TranspilerConfig,
     {
         Self::builder()
             .app_config(app_config)
@@ -375,11 +402,11 @@ where
         let elf_path =
             find_unique_executable(pkg_dir, target_dir, target_filter).map_err(SdkError::Other)?;
         let data = read(&elf_path)?;
-        Elf::decode(&data, MEM_SIZE as u32).map_err(SdkError::Other)
+        Elf::decode(&data, MEM_SIZE as u64).map_err(SdkError::Other)
     }
 
     /// Transpiler for transpiling RISC-V ELF to OpenVM executable.
-    pub fn transpiler(&self) -> Result<&Transpiler<F>, SdkError> {
+    pub fn transpiler(&self) -> Result<&Transpiler, SdkError> {
         self.transpiler
             .as_ref()
             .ok_or(SdkError::TranspilerNotAvailable)
@@ -389,7 +416,7 @@ where
     pub fn convert_to_exe(
         &self,
         executable: impl Into<ExecutableFormat>,
-    ) -> Result<Arc<VmExe<F>>, SdkError> {
+    ) -> Result<Arc<VmExe>, SdkError> {
         let executable = executable.into();
         let exe = match executable {
             ExecutableFormat::Elf(elf) => {
@@ -401,6 +428,53 @@ where
         };
         Ok(exe)
     }
+
+    fn compile_input(
+        &self,
+        executable: impl Into<ExecutableInput>,
+    ) -> Result<CompileInput, SdkError> {
+        let executable = executable.into();
+        match executable {
+            ExecutableInput::Format(format) => Ok(CompileInput {
+                executable: format,
+                #[cfg(feature = "rvr")]
+                elf_path: None,
+            }),
+            ExecutableInput::ElfFile(path) => {
+                let bytes = read(&path)?;
+                let elf = Elf::decode(&bytes, MEM_SIZE as u64)?;
+                Ok(CompileInput {
+                    executable: ExecutableFormat::Elf(elf),
+                    #[cfg(feature = "rvr")]
+                    elf_path: Some(path),
+                })
+            }
+            #[cfg(feature = "rvr")]
+            ExecutableInput::WithElfPath {
+                executable,
+                elf_path,
+            } => Ok(CompileInput {
+                executable,
+                elf_path: Some(elf_path),
+            }),
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    fn guest_debug_map(&self, elf_path: &Path, exe: &VmExe) -> Result<GuestDebugMap, SdkError> {
+        let pcs = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .enumerate()
+            .filter_map(|(index, slot)| {
+                slot.as_ref()
+                    .map(|_| exe.program.pc_base + (index as u32) * DEFAULT_PC_STEP)
+            })
+            .collect::<Vec<_>>();
+        GuestDebugMap::from_elf(elf_path, &pcs, &default_addr2line_cmd())
+            .map_err(|err| SdkError::Other(eyre::eyre!(err)))
+    }
 }
 
 // The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
@@ -408,23 +482,117 @@ where
 impl<E, VB> GenericSdk<E, VB>
 where
     E: StarkEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    VB: ContinuationProverBuilder<E> + Clone,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + 'static,
 {
-    /// Returns the user public values as field elements.
-    pub fn execute(
+    fn app_vm(&self) -> Result<VirtualMachine<E, VB>, SdkError> {
+        let app_pk = self.app_pk();
+        new_local_vm(self.app_vm_builder.clone(), &app_pk.app_vm_pk).map_err(SdkError::from)
+    }
+
+    /// Compile `app_exe` and execute it, returning the user public values as bytes.
+    pub fn compile_and_execute(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
-        let exe = self.convert_to_exe(app_exe)?;
-        let instance = self
-            .executor
+        let compiled = self.compile(app_exe)?;
+        self.execute(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for pure execution.
+    #[tracing::instrument(name = "sdk.compile", level = "info", skip_all)]
+    pub fn compile(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePure<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        #[cfg(feature = "rvr")]
+        {
+            let guest_debug_map = input
+                .elf_path
+                .as_deref()
+                .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+                .transpose()?;
+            self.executor
+                .instance_with_debug_map(&exe, guest_debug_map.as_ref())
+                .map(CompiledExePure::new)
+                .map_err(VirtualMachineError::from)
+                .map_err(SdkError::from)
+        }
+        #[cfg(not(feature = "rvr"))]
+        self.executor
             .instance(&exe)
-            .map_err(VirtualMachineError::from)?;
-        let final_memory = instance
-            .execute(inputs, None)
+            .map(CompiledExePure::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Compile `app_exe` for pure RVR execution with instret tracking and block-boundary
+    /// suspension.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.compile_with_instret_tracking", level = "info", skip_all)]
+    pub fn compile_with_instret_tracking(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePureWithInstretTracking<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        self.executor
+            .instret_tracking_instance(&exe, guest_debug_map.as_ref())
+            .map(CompiledExePureWithInstretTracking::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Load a previously saved pure-mode RVR artifact.
+    ///
+    /// Its generated execution kind is validated from the artifact marker,
+    /// but no general `exe`, config, or code-version validation is performed.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePure<'_>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .load_instance(lib_path, &exe)
+            .map(CompiledExePure::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Load a previously saved pure RVR artifact with instret tracking.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_with_instret_tracking(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePureWithInstretTracking<'_>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .load_instret_tracking_instance(lib_path, &exe)
+            .map(CompiledExePureWithInstretTracking::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
+    #[tracing::instrument(name = "sdk.execute", level = "info", skip_all)]
+    pub fn execute(
+        &self,
+        compiled: &CompiledExePure<'_>,
+        inputs: StdIn,
+    ) -> Result<Vec<u8>, SdkError> {
+        let final_memory = compiled
+            .execute(inputs)
             .map_err(VirtualMachineError::from)?
             .memory;
         let public_values = extract_public_values(
@@ -434,25 +602,154 @@ where
         Ok(public_values)
     }
 
+    /// Compile `app_exe` for bounded preflight execution.
+    #[tracing::instrument(name = "sdk.compile_preflight", level = "info", skip_all)]
+    pub fn compile_preflight(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePreflight<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        #[cfg(feature = "rvr")]
+        {
+            let guest_debug_map = input
+                .elf_path
+                .as_deref()
+                .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+                .transpose()?;
+            self.executor
+                .preflight_instance_with_debug_map(&exe, guest_debug_map.as_ref())
+                .map(CompiledExePreflight::new)
+                .map_err(VirtualMachineError::from)
+                .map_err(SdkError::from)
+        }
+        #[cfg(not(feature = "rvr"))]
+        self.executor
+            .preflight_instance(&exe)
+            .map(CompiledExePreflight::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Run preflight for exactly one metered segment from `state`.
+    #[tracing::instrument(name = "sdk.execute_preflight", level = "info", skip_all)]
+    pub fn execute_preflight(
+        &self,
+        compiled: &CompiledExePreflight<'_>,
+        state: VmState<GuestMemory>,
+        segment: &Segment,
+    ) -> Result<PreflightOutput, SdkError> {
+        compiled
+            .execute_segment(state, segment)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Load a previously saved preflight-mode artifact.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_preflight(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePreflight<'_>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .load_preflight_instance(lib_path, &exe)
+            .map(CompiledExePreflight::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
     /// Executes with segmentation for proof generation.
     /// Returns both user public values and segments with instruction counts and trace heights.
-    pub fn execute_metered(
+    pub fn compile_and_execute_metered(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
+        let compiled = self.compile_metered(app_exe)?;
+        self.execute_metered(&compiled, inputs)
+    }
 
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
+    /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
+    /// a precomputed `MeteredCtx` so subsequent runs just clone it.
+    #[tracing::instrument(name = "sdk.compile_metered", level = "info", skip_all)]
+    pub fn compile_metered(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExeMetered<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        let vm = self.app_vm()?;
 
         let ctx = vm.build_metered_ctx(&exe);
-        let interpreter = vm
-            .metered_interpreter(&exe)
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        #[cfg(feature = "rvr")]
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        #[cfg(feature = "rvr")]
+        let instance = self
+            .executor
+            .metered_instance_with_debug_map(
+                &exe,
+                &executor_idx_to_air_idx,
+                ctx.trace_heights.len(),
+                guest_debug_map.as_ref(),
+            )
             .map_err(VirtualMachineError::from)?;
+        #[cfg(not(feature = "rvr"))]
+        let instance = self
+            .executor
+            .metered_instance(&exe, &executor_idx_to_air_idx)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered {
+            instance,
+            ctx,
+            #[cfg(feature = "rvr")]
+            executor_idx_to_air_idx,
+        })
+    }
 
-        let (segments, final_state) = interpreter
-            .execute_metered(inputs, ctx)
+    /// Load a previously saved metered-mode artifact. The `MeteredCtx`
+    /// is rebuilt. Caller supplies `app_exe`; no compatibility validation is performed.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_metered(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExeMetered<'_>, SdkError> {
+        let metadata = load_metered_artifact_metadata(lib_path).map_err(SdkError::Other)?;
+        let exe = self.convert_to_exe(app_exe)?;
+        let mut ctx = MeteredCtx::from_config(
+            metadata.metered_ctx_config,
+            metadata.segmentation_config,
+            self.executor.config.as_ref(),
+        );
+        ctx.seed_initial_memory(&exe.init_memory);
+        let instance = self
+            .executor
+            .load_metered_instance(lib_path, &exe, &metadata.executor_idx_to_air_idx)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered {
+            instance,
+            ctx,
+            executor_idx_to_air_idx: metadata.executor_idx_to_air_idx,
+        })
+    }
+
+    /// Run a [`CompiledExeMetered`] against `inputs`.
+    #[tracing::instrument(name = "sdk.execute_metered", level = "info", skip_all)]
+    pub fn execute_metered(
+        &self,
+        compiled: &CompiledExeMetered<'_>,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let (segments, final_state) = compiled
+            .instance
+            .execute_metered(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
@@ -464,23 +761,81 @@ where
 
     /// Executes with cost metering to measure computational cost in trace cells.
     /// Returns both user public values, and cost along with instruction count.
-    pub fn execute_metered_cost(
+    pub fn compile_and_execute_metered_cost(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
+        let compiled = self.compile_metered_cost(app_exe)?;
+        self.execute_metered_cost(&compiled, inputs)
+    }
 
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
+    /// Compile `app_exe` for metered-cost execution. See [`Self::compile_metered`].
+    #[tracing::instrument(name = "sdk.compile_metered_cost", level = "info", skip_all)]
+    pub fn compile_metered_cost(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        let vm = self.app_vm()?;
 
         let ctx = vm.build_metered_cost_ctx();
-        let interpreter = vm
-            .metered_cost_interpreter(&exe)
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        #[cfg(feature = "rvr")]
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        #[cfg(feature = "rvr")]
+        let instance = self
+            .executor
+            .metered_cost_instance_with_debug_map(
+                &exe,
+                &executor_idx_to_air_idx,
+                &ctx.widths,
+                guest_debug_map.as_ref(),
+            )
             .map_err(VirtualMachineError::from)?;
+        #[cfg(not(feature = "rvr"))]
+        let instance = self
+            .executor
+            .metered_cost_instance(&exe, &executor_idx_to_air_idx)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost { instance, ctx })
+    }
 
-        let (ctx, final_state) = interpreter
-            .execute_metered_cost(inputs, ctx)
+    /// Load a previously saved metered-cost-mode artifact. The `MeteredCostCtx` is
+    /// rebuilt. Caller supplies `app_exe`; no compatibility validation is performed.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_metered_cost(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        let vm = self.app_vm()?;
+
+        let ctx = vm.build_metered_cost_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let instance = self
+            .executor
+            .load_metered_cost_instance(lib_path, &exe, &executor_idx_to_air_idx, &ctx.widths)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost { instance, ctx })
+    }
+
+    /// Run a [`CompiledExeMeteredCost`] against `inputs`.
+    #[tracing::instrument(name = "sdk.execute_metered_cost", level = "info", skip_all)]
+    pub fn execute_metered_cost(
+        &self,
+        compiled: &CompiledExeMeteredCost<'_>,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let (ctx, final_state) = compiled
+            .instance
+            .execute_metered_cost(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
         let instret = ctx.instret;
         let cost = ctx.cost;
@@ -841,37 +1196,21 @@ where
         Ok(())
     }
 
-    /// Verifies an aggregate STARK proof with the certified Swirl verifier extracted from its Lean
-    /// formalization (linked through FFI; see the [`certified_verifier`] module docs).
+    /// Returns an error because the certified Swirl verifier is not available for RV64.
     ///
-    /// Certified verification is scoped to the canonical standard pipeline, so this fails if
-    /// `verified_baseline` — the [`VerificationBaseline`] the proof is verified against by
-    /// [`verify_proof`](Self::verify_proof) — does not have the canonical [`VmBaseline`]
-    /// (`app_exe_commit` is ignored). The expected baseline and the aggregation vk are both
-    /// derived from the canonical standard [`CpuSdk`], making each call keygen-expensive. Use
-    /// alongside [`verify_proof`](Self::verify_proof), not instead of it.
+    /// The current Lean formalization covers only the removed canonical RV32 pipeline. Treating
+    /// its verifier as an RV64 verifier would be unsound. Use [`verify_proof`](Self::verify_proof)
+    /// for RV64 proofs until an RV64 formalization and extracted verifier are available.
     #[cfg(feature = "certified-verifier")]
     pub fn verify_proof_with_certified_verifier(
         verified_baseline: &VerificationBaseline,
         proof: &VmStarkProof,
     ) -> Result<(), SdkError> {
-        let sdk = CpuSdk::standard(
-            config::default_system_params(),
-            AggregationSystemParams::default(),
-        );
-        if VmBaseline::from(verified_baseline) != sdk.vm_baseline() {
-            return Err(SdkError::Other(eyre::eyre!(
-                "the proof's baseline does not match the canonical standard pipeline: certified \
-                 verification only covers proofs generated with the standard app VM config and \
-                 default app and aggregation parameters"
-            )));
-        }
-        let vk = VmStarkVerifyingKey {
-            mvk: (*sdk.agg_vk()).clone(),
-            baseline: verified_baseline.clone(),
-        };
-        certified_verifier::verify_vm_stark_proof(&vk, proof)
-            .map_err(|e| SdkError::Other(eyre::eyre!(e)))
+        let _ = (verified_baseline, proof);
+        Err(SdkError::Other(eyre::eyre!(
+            "the certified verifier is unavailable for RV64: the current Lean formalization \
+             covers only the removed canonical RV32 pipeline"
+        )))
     }
 
     #[cfg(feature = "evm-verify")]

@@ -3,9 +3,9 @@ use core::cmp::min;
 use openvm_keccak256_guest::{KECCAK_OUTPUT_SIZE, KECCAK_RATE, KECCAK_WIDTH_BYTES};
 use spin::Mutex;
 
-/// Aligned wrapper for Keccak state to ensure 4-byte alignment on word accesses.
+/// Aligned wrapper for Keccak state to ensure 8-byte alignment on memory block accesses.
 #[derive(Clone)]
-#[repr(align(4))]
+#[repr(align(8))]
 struct AlignedState([u8; KECCAK_WIDTH_BYTES]);
 
 /// Keccak-256 hasher state for incremental hashing.

@@ -1,0 +1,281 @@
+use std::array;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use std::sync::Arc;
+
+use openvm_circuit::arch::{
+    testing::{
+        memory::{gen_nonzero_register_pointer, gen_register_pointer},
+        TestBuilder,
+    },
+    MemoryConfig, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
+use openvm_riscv_transpiler::LoadStoreOpcode::{
+    self, LOADBU, LOADD, LOADHU, LOADWU, STOREB, STORED, STOREH, STOREW,
+};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use rand::{rngs::StdRng, Rng};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    openvm_circuit::arch::testing::default_var_range_checker_bus,
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+};
+
+use crate::{
+    adapters::{bytes_to_u16_block, bytes_to_u32, sign_extend_imm16, u16_block_to_bytes},
+    load::common::load_write_data,
+    store::common::store_write_data,
+};
+
+pub(crate) const IMM_BITS: usize = 16;
+pub(crate) const MAX_INS_CAPACITY: usize = 128;
+pub(crate) type F = BabyBear;
+
+struct MemoryAccess {
+    a: usize,
+    b: usize,
+    base_ptr: usize,
+    imm: u32,
+    imm_sign: u32,
+    rs1: [u8; 8],
+    shift_amount: usize,
+}
+fn random_memory_access(
+    tester: &impl TestBuilder<F>,
+    rng: &mut StdRng,
+    alignment: usize,
+    rs1: Option<[u8; 8]>,
+    imm: Option<u32>,
+    imm_sign: Option<u32>,
+) -> MemoryAccess {
+    let imm = imm.unwrap_or_else(|| rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = imm_sign.unwrap_or_else(|| rng.random_range(0..2));
+    let imm_ext = sign_extend_imm16(imm, imm_sign);
+
+    let max_addr = 1usize << tester.address_bits();
+    let imm_signed = if imm_sign == 0 {
+        imm as i64
+    } else {
+        imm as i64 - (1 << IMM_BITS)
+    };
+    let min_ptr = imm_signed.max(0) as usize;
+    let alignment_mask = (1usize << alignment) - 1;
+    let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
+    // Leave room for a second block when the access crosses the first one.
+    let ptr_val = rng.random_range(min_aligned_ptr..((max_addr - MEMORY_BLOCK_BYTES) >> alignment))
+        << alignment;
+    let rs1_low = (ptr_val as i64 - imm_signed) as u32;
+    let ptr = rs1_low.to_le_bytes();
+    let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
+    let rs1_low = bytes_to_u32(rs1);
+    let ptr_val = imm_ext.wrapping_add(rs1_low);
+    let shift_amount = (ptr_val as usize) & 7;
+    let base_ptr = (ptr_val as usize) - shift_amount;
+
+    let a = gen_register_pointer(rng, REGISTER_NUM_LIMBS);
+    // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
+    let b = gen_nonzero_register_pointer(rng, REGISTER_NUM_LIMBS);
+
+    MemoryAccess {
+        a,
+        b,
+        base_ptr,
+        imm,
+        imm_sign,
+        rs1,
+        shift_amount,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn set_and_execute_load<E: openvm_circuit::arch::Executor<F> + Clone>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
+    rng: &mut StdRng,
+    opcode: LoadStoreOpcode,
+    rs1: Option<[u8; 8]>,
+    imm: Option<u32>,
+    imm_sign: Option<u32>,
+    mem_as: Option<usize>,
+) {
+    assert!(
+        matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU),
+        "unsupported unsigned load opcode: {opcode:?}"
+    );
+    // Sample every byte offset within a memory block.
+    let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
+    let mem_as = mem_as.unwrap_or(MEMORY_AS as usize);
+
+    tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
+
+    let mut prev_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
+        bytes_to_u16_block(access.rs1)
+    } else {
+        array::from_fn(|_| rng.random())
+    };
+    let read_data: [[u16; BLOCK_FE_WIDTH]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
+    if access.a == 0 {
+        prev_data = [0; BLOCK_FE_WIDTH];
+    }
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        access.a,
+        u16_block_to_bytes(prev_data).map(F::from_u8),
+    );
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr,
+        u16_block_to_bytes(read_data[0]).map(F::from_u8),
+    );
+    // The second block only exists (and is only read) when the access crosses; skip seeding it
+    // when the first block is the last one in the address space (non-crossing top-of-memory
+    // accesses).
+    if access.base_ptr + MEMORY_BLOCK_BYTES < (1usize << tester.address_bits()) {
+        tester.write_bytes(
+            mem_as,
+            access.base_ptr + MEMORY_BLOCK_BYTES,
+            u16_block_to_bytes(read_data[1]).map(F::from_u8),
+        );
+    }
+
+    let enabled_write = access.a != 0;
+    tester.execute(
+        executor,
+        preflight,
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                access.a,
+                access.b,
+                access.imm as usize,
+                REGISTER_AS as usize,
+                mem_as,
+                enabled_write as usize,
+                access.imm_sign as usize,
+            ],
+        ),
+    );
+
+    let write_data = load_write_data(opcode, read_data, access.shift_amount);
+    let expected = if enabled_write {
+        u16_block_to_bytes(write_data).map(F::from_u8)
+    } else {
+        [F::ZERO; 8]
+    };
+    assert_eq!(
+        expected,
+        tester.read_bytes::<8>(REGISTER_AS as usize, access.a)
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn set_and_execute_store<E: openvm_circuit::arch::Executor<F> + Clone>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    preflight: &mut openvm_circuit::arch::testing::TestPreflight,
+    rng: &mut StdRng,
+    opcode: LoadStoreOpcode,
+    rs1: Option<[u8; 8]>,
+    imm: Option<u32>,
+    imm_sign: Option<u32>,
+) {
+    assert!(
+        matches!(opcode, STORED | STOREW | STOREH | STOREB),
+        "unsupported store opcode: {opcode:?}"
+    );
+    // Sample every byte offset within a memory block.
+    let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
+    let mem_as = MEMORY_AS as usize;
+
+    tester.write_bytes(REGISTER_AS as usize, access.b, access.rs1.map(F::from_u8));
+
+    let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
+    let mut read_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
+        bytes_to_u16_block(access.rs1)
+    } else {
+        array::from_fn(|_| rng.random())
+    };
+    if access.a == 0 {
+        read_data = [0; BLOCK_FE_WIDTH];
+    }
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr,
+        u16_block_to_bytes(prev_data[0]).map(F::from_u8),
+    );
+    // See the load helper: the second block does not exist for non-crossing accesses at the top
+    // of the address space.
+    let has_second_block = access.base_ptr + MEMORY_BLOCK_BYTES < (1usize << tester.address_bits());
+    if has_second_block {
+        tester.write_bytes(
+            mem_as,
+            access.base_ptr + MEMORY_BLOCK_BYTES,
+            u16_block_to_bytes(prev_data[1]).map(F::from_u8),
+        );
+    }
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        access.a,
+        u16_block_to_bytes(read_data).map(F::from_u8),
+    );
+
+    tester.execute(
+        executor,
+        preflight,
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                access.a,
+                access.b,
+                access.imm as usize,
+                REGISTER_AS as usize,
+                mem_as,
+                true as usize,
+                access.imm_sign as usize,
+            ],
+        ),
+    );
+
+    let write_data = store_write_data(opcode, read_data, prev_data, access.shift_amount);
+    assert_eq!(
+        u16_block_to_bytes(write_data[0]).map(F::from_u8),
+        tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr)
+    );
+    // The second block is either rewritten by the crossing store or untouched; both must match
+    // the model.
+    if has_second_block {
+        assert_eq!(
+            u16_block_to_bytes(write_data[1]).map(F::from_u8),
+            tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr + MEMORY_BLOCK_BYTES)
+        );
+    }
+}
+
+pub(crate) fn store_memory_config() -> MemoryConfig {
+    MemoryConfig::default()
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
+    MemoryConfig::default()
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen.
+// ////////////////////////////////////////////////////////////////////////////////////
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
+    Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ))
+}

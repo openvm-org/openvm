@@ -26,6 +26,33 @@ struct DeviceBufferConstView {
     }
 };
 
+template <typename T>
+struct DeviceBufferView {
+    T* ptr;
+    size_t size;
+
+    __device__ __host__ __forceinline__ T* begin() const {
+        return ptr;
+    }
+
+    __device__ __host__ __forceinline__ T* end() const {
+        return ptr + len();
+    }
+
+    __device__ __host__ __forceinline__ T* data() const {
+        return ptr;
+    }
+
+    __device__ __host__ __forceinline__ T& operator [](size_t idx) const {
+        assert(idx < len());
+        return ptr[idx];
+    }
+
+    __device__ __host__ __forceinline__ size_t len() const {
+        return size / sizeof(T);
+    }
+};
+
 struct DeviceRawBufferConstView {
     uintptr_t ptr;
     size_t size;

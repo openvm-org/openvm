@@ -1,24 +1,57 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        testing::{
+            memory::{gen_distinct_register_pointers, gen_pointer},
+            TestBuilder, TestChipHarness, TestPreflight, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        },
+        ExecutionBridge, Executor, MemoryConfig, Postflight, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{BYTE_BITS, MEMORY_AS, REGISTER_AS, REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    openvm_circuit::arch::{
+        cuda::postflight::GpuPostflightProgram, PreflightHistory, PreflightMemoryLog,
+    },
+    openvm_instructions::{program::Program, SystemOpcode},
+    rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
+};
 
-use crate::xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller};
+use crate::{
+    xorin::{
+        air::XorinVmAir,
+        columns::{XorinVmCols, NUM_XORIN_VM_COLS},
+        trace::generate_trace_from_postflight,
+        XorinVmChip, XorinVmExecutor, XorinVmFiller,
+    },
+    KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS,
+};
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
@@ -27,7 +60,8 @@ const MAX_TRACE_ROWS: usize = 4096;
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (XorinVmAir, XorinVmExecutor, XorinVmChip<F>) {
@@ -35,13 +69,14 @@ fn create_harness_fields(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
+        range_checker_chip.bus(),
         address_bits,
         XorinOpcode::CLASS_OFFSET,
     );
 
     let executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, address_bits);
     let chip = XorinVmChip::new(
-        XorinVmFiller::new(bitwise_chip, address_bits),
+        XorinVmFiller::new(bitwise_chip, range_checker_chip, address_bits),
         memory_helper,
     );
     (air, executor, chip)
@@ -52,44 +87,69 @@ fn create_test_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
 
     let (air, executor, chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
 
-    let harness = Harness::with_capacity(executor, air, chip, MAX_TRACE_ROWS);
+    let harness = Harness::with_capacity(
+        executor,
+        air,
+        chip,
+        MAX_TRACE_ROWS,
+        generate_trace_from_postflight,
+    );
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+fn xorin_test_pointers(
+    rng: &mut StdRng,
+    len: usize,
+    input_ptr_offset: Option<usize>,
+) -> (usize, usize) {
+    if len == 0 {
+        // Main-memory pointers are never dereferenced for an all-padding row, but the AIR still
+        // converts them to cell pointers on every enabled row, so they must be 2-byte aligned.
+        return (2, 4);
+    }
+    if let Some(offset) = input_ptr_offset {
+        assert!(offset.is_multiple_of(MEMORY_BLOCK_BYTES));
+        let buffer_ptr = gen_pointer(rng, len + offset);
+        (buffer_ptr, buffer_ptr + offset)
+    } else {
+        (gen_pointer(rng, len), gen_pointer(rng, len))
+    }
+}
+
+fn set_and_execute<E: Executor<F> + Clone>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
-    arena: &mut RA,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     opcode: XorinOpcode,
     buffer_length: Option<usize>,
+    input_ptr_offset: Option<usize>,
 ) {
-    const MAX_LEN: usize = 136;
+    const MAX_LEN: usize = KECCAK_RATE_BYTES;
 
     let buffer_length = match buffer_length {
         Some(length) => length,
         None => MAX_LEN,
     };
 
-    assert!(buffer_length.is_multiple_of(4));
+    assert!(buffer_length.is_multiple_of(MEMORY_BLOCK_BYTES));
 
     let rand_buffer = get_random_message(rng, MAX_LEN);
     let mut rand_buffer_arr = [0u8; MAX_LEN];
@@ -99,48 +159,91 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut rand_input_arr = [0u8; MAX_LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-    let rd = gen_pointer(rng, 4);
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
+    let [rd, rs1, rs2] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
-    let buffer_ptr = gen_pointer(rng, buffer_length);
-    let input_ptr = gen_pointer(rng, buffer_length);
+    let num_blocks = buffer_length / MEMORY_BLOCK_BYTES;
+    let (buffer_ptr, input_ptr) = xorin_test_pointers(rng, buffer_length, input_ptr_offset);
 
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
     let rand_input_arr_f = rand_input_arr.map(F::from_u8);
 
-    for i in 0..(buffer_length / 4) {
-        let buffer_chunk: [F; 4] = rand_buffer_arr_f[4 * i..4 * i + 4]
-            .try_into()
-            .expect("slice has length 4");
-        tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
-
-        let input_chunk: [F; 4] = rand_input_arr_f[4 * i..4 * i + 4]
-            .try_into()
-            .expect("slice has length 4");
-        tester.write(2, input_ptr + 4 * i, input_chunk);
+    // Initialize buffer before input so overlapping ranges have a deterministic final image.
+    for i in 0..num_blocks {
+        let start = MEMORY_BLOCK_BYTES * i;
+        let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
+        let mut buffer_chunk = [F::ZERO; MEMORY_BLOCK_BYTES];
+        for (j, &v) in rand_buffer_arr_f[start..end].iter().enumerate() {
+            buffer_chunk[j] = v;
+        }
+        tester.write_bytes(
+            MEMORY_AS as usize,
+            buffer_ptr + MEMORY_BLOCK_BYTES * i,
+            buffer_chunk,
+        );
     }
 
-    tester.write(1, rd, (buffer_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs1, (input_ptr as u32).to_le_bytes().map(F::from_u8));
-    tester.write(1, rs2, (buffer_length as u32).to_le_bytes().map(F::from_u8));
+    for i in 0..num_blocks {
+        let start = MEMORY_BLOCK_BYTES * i;
+        let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
+        let mut input_chunk = [F::ZERO; MEMORY_BLOCK_BYTES];
+        for (j, &v) in rand_input_arr_f[start..end].iter().enumerate() {
+            input_chunk[j] = v;
+        }
+        tester.write_bytes(
+            MEMORY_AS as usize,
+            input_ptr + MEMORY_BLOCK_BYTES * i,
+            input_chunk,
+        );
+    }
+
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        rd,
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
+    );
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        rs1,
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
+    );
+    tester.write_bytes(
+        REGISTER_AS as usize,
+        rs2,
+        (buffer_length as u64).to_le_bytes().map(F::from_u8),
+    );
     tester.execute(
         executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
+        preflight,
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [rd, rs1, rs2, REGISTER_AS as usize, MEMORY_AS as usize],
+        ),
     );
+
+    // Input initialization happens after buffer initialization and may overlap it.
+    let mut preimage_buffer = rand_buffer_arr;
+    for (input_index, &byte) in rand_input_arr[..buffer_length].iter().enumerate() {
+        if let Some(buffer_index) = (input_ptr + input_index)
+            .checked_sub(buffer_ptr)
+            .filter(|&index| index < buffer_length)
+        {
+            preimage_buffer[buffer_index] = byte;
+        }
+    }
 
     let mut expected_output = [0u8; MAX_LEN];
     for i in 0..buffer_length {
-        expected_output[i] = rand_buffer_arr[i] ^ rand_input_arr[i];
+        expected_output[i] = preimage_buffer[i] ^ rand_input_arr[i];
     }
 
     let mut output_buffer = [F::from_u8(0); MAX_LEN];
 
-    for i in 0..(buffer_length / 4) {
-        let output_chunk: [F; 4] = tester.read(2, buffer_ptr + 4 * i);
-        output_buffer[4 * i..4 * i + 4].copy_from_slice(&output_chunk);
+    for i in 0..num_blocks {
+        let output_chunk: [F; MEMORY_BLOCK_BYTES] =
+            tester.read_bytes(MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
+        let start = MEMORY_BLOCK_BYTES * i;
+        let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
+        output_buffer[start..end].copy_from_slice(&output_chunk[..end - start]);
     }
 
     for i in 0..buffer_length {
@@ -151,83 +254,77 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 #[test]
 fn xorin_chip_positive_tests() {
     let num_ops: usize = 100;
-
-    for _ in 0..num_ops {
-        let mut rng = create_seeded_rng();
-        let mut tester = VmChipTestBuilder::default();
-        let (mut harness, bitwise) = create_test_harness(&mut tester);
-
-        let buffer_length = Some(rng.random_range(1..=34) * 4);
-
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
-            &mut rng,
-            XorinOpcode::XORIN,
-            buffer_length,
-        );
-
-        let tester = tester
-            .build()
-            .load(harness)
-            .load_periphery(bitwise)
-            .finalize();
-        tester.simple_test().expect("Verification failed");
-    }
-}
-
-// todo: complete the negative test (currently wip)
-/*
-#[allow(clippy::too_many_arguments)]
-fn run_xorin_chip_negative_tests(
-    prank_sponge: Option<XorinSpongeCols<F>>,
-    prank_instruction: Option<XorinInstructionCols<F>>,
-    prank_mem_oc: Option<XorinMemoryCols<F>>,
-    interaction_error: bool,
-) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-    let buffer_length = Some(rng.random_range(1..=34) * 4_usize);
+    for _ in 0..num_ops {
+        let buffer_length = Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
+
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            XorinOpcode::XORIN,
+            buffer_length,
+            None,
+        );
+    }
+
+    for input_ptr_offset in [0, MEMORY_BLOCK_BYTES] {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            XorinOpcode::XORIN,
+            Some(3 * MEMORY_BLOCK_BYTES),
+            Some(input_ptr_offset),
+        );
+    }
 
     set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.arena,
+        &mut harness.preflight,
+        &mut rng,
+        XorinOpcode::XORIN,
+        Some(0),
+        None,
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+fn run_xorin_chip_negative_test(prank: impl Fn(&mut XorinVmCols<F>)) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
+
+    let buffer_length = Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
         &mut rng,
         XorinOpcode::XORIN,
         buffer_length,
+        None,
     );
 
-    use openvm_stark_backend::p3_matrix::dense::DenseMatrix;
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        use std::borrow::BorrowMut;
-
-        use openvm_stark_backend::p3_matrix::Matrix;
-
-        use crate::xorin::columns::XorinVmCols;
-
-        let mut values = trace.row_slice(0).to_vec();
-        let width = XorinVmCols::<F>::width();
-        // split_at_mut() to avoid the compiler saying that it is
-        // unable to determine the size during compile time
-        let cols: &mut XorinVmCols<F> = values.split_at_mut(width).0.borrow_mut();
-
-        if let Some(prank_sponge) = prank_sponge {
-            cols.sponge = prank_sponge;
-        }
-        if let Some(prank_instruction) = prank_instruction {
-            cols.instruction = prank_instruction;
-        }
-        if let Some(prank_mem_oc) = prank_mem_oc.clone() {
-            cols.mem_oc = prank_mem_oc;
-        }
+        let mut values = trace.row_slice(0).unwrap().to_vec();
+        let cols: &mut XorinVmCols<F> = values.split_at_mut(NUM_XORIN_VM_COLS).0.borrow_mut();
+        prank(cols);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
-
-    use openvm_stark_backend::utils::disable_debug_builder;
 
     disable_debug_builder();
 
@@ -237,41 +334,170 @@ fn run_xorin_chip_negative_tests(
         .load_periphery(bitwise)
         .finalize();
 
-    if interaction_error {
-        tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
-    } else {
-        tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
-    }
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
-*/
+
+#[test]
+fn xorin_unaligned_buffer_ptr_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        // An unaligned heap pointer must be rejected by the block-index quotient range check:
+        // `(byte_lo + 6) / 8` is not a 13-bit integer in the field, so no witness can redirect
+        // the access to an aliased block index.
+        cols.instruction.buffer_ptr_limbs[0] += F::from_u32(6);
+    });
+}
+
+#[test]
+fn xorin_wrong_output_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.sponge.postimage_buffer_bytes[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_len_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        // is_padding_bytes has the form 0...01...1; turn the last active block into padding.
+        let last_active = (0..KECCAK_RATE_MEM_OPS)
+            .rev()
+            .find(|&i| cols.sponge.is_padding_bytes[i] == F::ZERO)
+            .expect("at least one active block");
+        cols.sponge.is_padding_bytes[last_active] = F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_buffer_ptr_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.buffer_ptr_limbs[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_input_ptr_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.input_ptr_limbs[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_preimage_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.sponge.preimage_buffer_bytes[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_write_timestamp_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.mem_oc.buffer_bytes_write_base_aux[0]
+            .timestamp_lt_aux
+            .diff_decomp[0] += F::ONE;
+    });
+}
+
+fn xorin_postflight_fixture() -> Harness {
+    const LEN: usize = 16;
+
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_test_harness(&mut tester);
+    let instruction = Instruction::from_usize(
+        XorinOpcode::XORIN.global_opcode(),
+        [8, 16, 24, REGISTER_AS as usize, MEMORY_AS as usize],
+    );
+    let block = |bytes: [u8; MEMORY_BLOCK_BYTES]| {
+        std::array::from_fn(|index| u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]]))
+    };
+    unsafe {
+        let memory = &mut tester.memory.memory.data;
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 4, block((0x100u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 8, block((0x200u64).to_le_bytes()));
+        memory.write::<u16, BLOCK_FE_WIDTH>(REGISTER_AS, 12, block((LEN as u64).to_le_bytes()));
+        for index in 0..LEN / MEMORY_BLOCK_BYTES {
+            memory.write::<u16, BLOCK_FE_WIDTH>(
+                MEMORY_AS,
+                0x80 + (index * BLOCK_FE_WIDTH) as u32,
+                block(std::array::from_fn(|byte| {
+                    (index * MEMORY_BLOCK_BYTES + byte) as u8
+                })),
+            );
+            memory.write::<u16, BLOCK_FE_WIDTH>(
+                MEMORY_AS,
+                0x100 + (index * BLOCK_FE_WIDTH) as u32,
+                block(std::array::from_fn(|byte| {
+                    (0xa0 + index * MEMORY_BLOCK_BYTES + byte) as u8
+                })),
+            );
+        }
+    }
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.preflight,
+        &instruction,
+        0,
+    );
+    harness
+}
+
+#[test]
+fn postflight_xorin_trace_generation_succeeds() {
+    let harness = xorin_postflight_fixture();
+    let execution = &harness.preflight.executions[0];
+    let memory_config = MemoryConfig::default();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &execution.history, &memory_config).unwrap();
+    let actual = generate_trace_from_postflight(&harness.chip, &postflight).unwrap();
+
+    assert_eq!(actual.width(), NUM_XORIN_VM_COLS);
+    assert_eq!(actual.height(), 1);
+}
+
+#[test]
+fn postflight_xorin_rejects_corrupt_write() {
+    let harness = xorin_postflight_fixture();
+    let execution = &harness.preflight.executions[0];
+    let mut history = execution.history.clone();
+    history.memory.accesses.last_mut().unwrap().value[0] ^= 1;
+    let memory_config = MemoryConfig::default();
+    let postflight =
+        Postflight::new_for_test(&execution.program, &history, &memory_config).unwrap();
+    let error = generate_trace_from_postflight(&harness.chip, &postflight).unwrap_err();
+
+    assert!(error.to_string().contains("unexpected write"));
+}
 
 // ////////////////////////////////////////////////////////////////////////////////////
 // CUDA TESTS
 // ////////////////////////////////////////////////////////////////////////////////////
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::{
-    testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
-    DenseRecordArena,
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::arch::testing::{
+    default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
 };
 
-#[cfg(feature = "cuda")]
-use crate::{cuda::XorinVmChipGpu, xorin::trace::XorinVmRecordMut};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::cuda::XorinVmChipGpu;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuHarness =
     GpuTestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChipGpu, XorinVmChip<F>>;
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<BYTE_BITS>::new(bitwise_bus));
+    let dummy_range_checker_chip = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        ),
+    );
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
         dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -284,59 +510,57 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_TRACE_ROWS)
+        .with_trace_generators(
+            generate_trace_from_postflight,
+            |chip, program, transcript, plan| {
+                chip.generate_proving_ctx_from_postflight(program, transcript, plan)
+            },
+        )
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn cuda_set_and_execute(
     tester: &mut GpuChipTestBuilder,
     executor: &mut XorinVmExecutor,
-    arena: &mut DenseRecordArena,
+    preflight: &mut TestPreflight,
     rng: &mut StdRng,
     len: Option<usize>,
+    input_ptr_offset: Option<usize>,
 ) {
-    use openvm_circuit::arch::testing::memory::gen_pointer;
+    let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
 
-    let len = len.unwrap_or_else(|| rng.random_range(4..=136));
-    let len = (len / 4) * 4;
-    if len == 0 {
-        return;
-    }
+    let [buffer_reg, input_reg, len_reg] = gen_distinct_register_pointers(rng, REGISTER_NUM_LIMBS);
 
-    let buffer_reg = gen_pointer(rng, 4);
-    let input_reg = gen_pointer(rng, 4);
-    let len_reg = gen_pointer(rng, 4);
+    let (buffer_ptr, input_ptr) = xorin_test_pointers(rng, len, input_ptr_offset);
 
-    let buffer_ptr = gen_pointer(rng, len);
-    let input_ptr = gen_pointer(rng, len);
-
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
-        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
+    tester.write_bytes(
         1,
         input_reg,
-        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(1, len_reg, (len as u32).to_le_bytes().map(F::from_u8));
+    tester.write_bytes(1, len_reg, (len as u64).to_le_bytes().map(F::from_u8));
 
     let buffer_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
-    for (i, chunk) in buffer_data.chunks(4).enumerate() {
-        let mut word = [F::ZERO; 4];
+    for (i, chunk) in buffer_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
+        let mut word = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * 4, word);
+        tester.write_bytes(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let input_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
-    for (i, chunk) in input_data.chunks(4).enumerate() {
-        let mut word = [F::ZERO; 4];
+    for (i, chunk) in input_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
+        let mut word = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, input_ptr + i * 4, word);
+        tester.write_bytes(2, input_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -344,10 +568,10 @@ fn cuda_set_and_execute(
         [buffer_reg, input_reg, len_reg, 1, 2],
     );
 
-    tester.execute(executor, arena, &instruction);
+    tester.execute(executor, preflight, &instruction);
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_xorin_cuda_tracegen() {
     let mut rng = create_seeded_rng();
@@ -361,26 +585,43 @@ fn test_xorin_cuda_tracegen() {
         cuda_set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
+            None,
             None,
         );
     }
 
-    for len in [4, 8, 16, 32, 64, 128, 136] {
+    for len in [8, 16, 24, 32, 64, 128, 136] {
         cuda_set_and_execute(
             &mut tester,
             &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.preflight,
             &mut rng,
             Some(len),
+            None,
         );
     }
 
-    harness
-        .dense_arena
-        .get_record_seeker::<XorinVmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+    for input_ptr_offset in [0, MEMORY_BLOCK_BYTES] {
+        cuda_set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            Some(3 * MEMORY_BLOCK_BYTES),
+            Some(input_ptr_offset),
+        );
+    }
+
+    cuda_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        Some(0),
+        None,
+    );
 
     tester
         .build()
@@ -390,7 +631,7 @@ fn test_xorin_cuda_tracegen() {
         .unwrap();
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_xorin_cuda_tracegen_single() {
     let mut rng = create_seeded_rng();
@@ -402,15 +643,11 @@ fn test_xorin_cuda_tracegen_single() {
     cuda_set_and_execute(
         &mut tester,
         &mut harness.executor,
-        &mut harness.dense_arena,
+        &mut harness.preflight,
         &mut rng,
         Some(16),
+        None,
     );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<XorinVmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()
@@ -418,4 +655,142 @@ fn test_xorin_cuda_tracegen_single() {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_xorin_preflight_replay_accepts_valid_transcript_and_rejects_unaligned_len() {
+    let buffer_reg = 8usize;
+    let input_reg = 16usize;
+    let len_reg = 24usize;
+    let buffer_ptr = 0x100u32;
+    let input_ptr = 0x200u32;
+    let len = KECCAK_RATE_BYTES;
+    let xorin = Instruction::from_usize(
+        XorinOpcode::XORIN.global_opcode(),
+        [
+            buffer_reg,
+            input_reg,
+            len_reg,
+            REGISTER_AS as usize,
+            MEMORY_AS as usize,
+        ],
+    );
+    let instructions = [
+        xorin,
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let memory_config = openvm_circuit::arch::MemoryConfig::default();
+
+    let block = |bytes: &[u8]| {
+        std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
+    };
+    let register_block = |value: u64| block(&value.to_le_bytes());
+    let mut memory_log = vec![
+        PreflightMemoryEvent {
+            timestamp: 1,
+            address_space_and_kind: REGISTER_AS,
+            pointer: buffer_reg as u32 / 2,
+            value: register_block(buffer_ptr as u64),
+        },
+        PreflightMemoryEvent {
+            timestamp: 2,
+            address_space_and_kind: REGISTER_AS,
+            pointer: input_reg as u32 / 2,
+            value: register_block(input_ptr as u64),
+        },
+        PreflightMemoryEvent {
+            timestamp: 3,
+            address_space_and_kind: REGISTER_AS,
+            pointer: len_reg as u32 / 2,
+            value: register_block(len as u64),
+        },
+    ];
+    let buffer_bytes = (0..len).map(|offset| offset as u8).collect::<Vec<_>>();
+    let input_bytes = (0..len)
+        .map(|offset| (offset as u8).wrapping_mul(17))
+        .collect::<Vec<_>>();
+    let num_blocks = len / MEMORY_BLOCK_BYTES;
+    for i in 0..num_blocks {
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 4 + i as u32,
+            address_space_and_kind: MEMORY_AS,
+            pointer: buffer_ptr / 2 + (i * 4) as u32,
+            value: block(&buffer_bytes[i * 8..][..8]),
+        });
+    }
+    for i in 0..num_blocks {
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 4 + num_blocks as u32 + i as u32,
+            address_space_and_kind: MEMORY_AS,
+            pointer: input_ptr / 2 + (i * 4) as u32,
+            value: block(&input_bytes[i * 8..][..8]),
+        });
+    }
+    for i in 0..num_blocks {
+        let output =
+            std::array::from_fn::<_, 8, _>(|j| buffer_bytes[i * 8 + j] ^ input_bytes[i * 8 + j]);
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 4 + 2 * num_blocks as u32 + i as u32,
+            address_space_and_kind: MEMORY_AS | PREFLIGHT_WRITE_BIT,
+            pointer: buffer_ptr / 2 + (i * 4) as u32,
+            value: block(&output),
+        });
+    }
+    let final_timestamp = 4 + 3 * num_blocks as u32;
+    let history = PreflightHistory {
+        program: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: final_timestamp,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: final_timestamp,
+            },
+        ],
+        memory: PreflightMemoryLog {
+            accesses: memory_log,
+            ..Default::default()
+        },
+    };
+
+    let tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let chip = XorinVmChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits() as u32,
+    );
+
+    let device_ctx = &tester.range_checker().device_ctx;
+    let gpu_program = GpuPostflightProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (gpu_transcript, replay_plan) = gpu_program
+        .upload_history_for_test(&program, &history, Some(0))
+        .unwrap();
+    let _replay_ctx = chip
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_transcript, &replay_plan)
+        .unwrap();
+    assert_eq!(gpu_transcript.error_code().unwrap(), 0);
+
+    let mut corrupt = history;
+    corrupt.memory.accesses[2].value[0] = 7;
+    let (gpu_corrupt, corrupt_plan) = gpu_program
+        .upload_history_for_test(&program, &corrupt, Some(0))
+        .unwrap();
+    let corrupt_chip = XorinVmChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits() as u32,
+    );
+    corrupt_chip
+        .generate_proving_ctx_from_postflight(&gpu_program, &gpu_corrupt, &corrupt_plan)
+        .unwrap();
+    assert_eq!(gpu_corrupt.error_code().unwrap(), 801);
 }

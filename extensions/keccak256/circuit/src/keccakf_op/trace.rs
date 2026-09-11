@@ -1,257 +1,244 @@
 use core::convert::TryInto;
 use std::{
     borrow::BorrowMut,
-    mem::{align_of, size_of},
-    sync::{Arc, Mutex},
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use openvm_circuit::{
-    arch::*,
-    system::memory::{
-        offline_checker::MemoryReadAuxRecord, online::TracingMemory, MemoryAuxColsFactory,
-        SharedMemoryHelper,
-    },
+    arch::{Postflight, PostflightError, PostflightStep, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    system::memory::{MemoryAuxColsFactory, SharedMemoryHelper},
+    utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow, Chip,
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerChip,
 };
-use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    program::{pc_to_idx, DEFAULT_PC_STEP},
+    riscv::{MEMORY_AS, REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_rv32im_circuit::adapters::{timed_write, tracing_read};
+use openvm_riscv_circuit::adapters::{
+    add_block_index_range_checks, byte_ptr_to_u16_ptr_value, bytes_to_u16_block,
+    ptr_to_field_u16_limbs, try_bytes_to_u32, u16_block_to_bytes,
+};
 use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    StarkProtocolConfig, Val,
+    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
 };
 
-use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
+use super::NUM_OP_ROWS_PER_INS;
 use crate::{
     keccakf_op::{columns::KeccakfOpCols, keccakf_postimage_bytes},
-    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_WORDS, KECCAK_WORD_SIZE,
+    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_MEM_OPS,
 };
 
 #[derive(derive_new::new)]
 pub struct KeccakfOpChip<F> {
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
-    // NOTE[jpw]: this is an awkward way to pass data from this execution chip to the
-    // KeccakfPeriphery chip. This can be improved with a redesign of how record arenas are shared
-    // with chips.
-    pub shared_records: Arc<Mutex<Vec<KeccakfRecord>>>,
+    pub(crate) shared_preimages: Arc<Mutex<Vec<KeccakfPreimage>>>,
 }
 
-impl<SC, RA> Chip<RA, CpuBackend<SC>> for KeccakfOpChip<Val<SC>>
-where
-    SC: StarkProtocolConfig,
-    Val<SC>: PrimeField32,
-    RA: RowMajorMatrixArena<Val<SC>>,
-{
-    fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let rows_used = arena.trace_offset() / arena.width();
-        let mut trace = arena.into_matrix();
-        let mem_helper = self.mem_helper.as_borrowed();
-        self.fill_trace(&mem_helper, &mut trace, rows_used);
-        AirProvingContext::simple_no_pis(trace)
-    }
+struct KeccakfReplay {
+    pc: u32,
+    timestamp: u32,
+    rd_ptr: u32,
+    buffer_ptr: u32,
+    rd_prev_timestamp: u32,
+    buffer_prev_timestamps: [u32; KECCAK_WIDTH_MEM_OPS],
+    preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
+    postimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
 }
 
-#[derive(Clone, Copy, Default)]
-pub struct KeccakfMetadata;
-
-impl MultiRowMetadata for KeccakfMetadata {
-    fn get_num_rows(&self) -> usize {
-        NUM_OP_ROWS_PER_INS
-    }
-}
-
-pub(crate) type KeccakfRecordLayout = MultiRowLayout<KeccakfMetadata>;
-
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct KeccakfRecord {
-    pub pc: u32,
+#[derive(Clone)]
+pub(crate) struct KeccakfPreimage {
     pub timestamp: u32,
-    pub rd_ptr: u32,
-    pub buffer_ptr: u32,
-    pub rd_aux: MemoryReadAuxRecord,
-    pub buffer_word_aux: [MemoryReadAuxRecord; KECCAK_WIDTH_WORDS],
-    pub preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
+    pub bytes: [u8; KECCAK_WIDTH_BYTES],
 }
 
-/// Mutable reference wrapper for KeccakfRecord, used for record seeking in CUDA tests
-pub struct KeccakfRecordMut<'a> {
-    pub inner: &'a mut KeccakfRecord,
-}
-
-impl<'a> CustomBorrow<'a, KeccakfRecordMut<'a>, KeccakfRecordLayout> for [u8] {
-    fn custom_borrow(&'a mut self, _layout: KeccakfRecordLayout) -> KeccakfRecordMut<'a> {
-        let (record_buf, _rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<KeccakfRecord>()) };
-        KeccakfRecordMut {
-            inner: record_buf.borrow_mut(),
-        }
-    }
-
-    unsafe fn extract_layout(&self) -> KeccakfRecordLayout {
-        KeccakfRecordLayout::new(KeccakfMetadata)
-    }
-}
-
-impl SizedRecord<KeccakfRecordLayout> for KeccakfRecordMut<'_> {
-    fn size(_layout: &KeccakfRecordLayout) -> usize {
-        size_of::<KeccakfRecord>()
-    }
-
-    fn alignment(_layout: &KeccakfRecordLayout) -> usize {
-        align_of::<KeccakfRecord>()
-    }
-}
-
-impl<F, RA> PreflightExecutor<F, RA> for KeccakfExecutor
-where
-    F: PrimeField32,
-    for<'buf> RA: RecordArena<'buf, KeccakfRecordLayout, &'buf mut KeccakfRecord>,
-{
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", KeccakfOpcode::KECCAKF)
-    }
-
-    fn execute(
+impl<F: PrimeField32> KeccakfOpChip<F> {
+    fn fill_trace_row(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
-        let &Instruction { a, .. } = instruction;
-        let rd_ptr = a.as_canonical_u32();
-
-        let record = state.ctx.alloc(KeccakfRecordLayout::new(KeccakfMetadata));
-
-        record.pc = *state.pc;
-        record.timestamp = state.memory.timestamp();
-        record.rd_ptr = rd_ptr;
-        let buffer_ptr = u32::from_le_bytes(tracing_read(
-            state.memory,
-            RV32_REGISTER_AS,
-            rd_ptr,
-            &mut record.rd_aux.prev_timestamp,
-        ));
-        record.buffer_ptr = buffer_ptr;
-
-        let guest_mem = state.memory.data();
-        // SAFETY:
-        // - RV32_MEMORY_AS (2) consists of `u8`
-        // - get_slice will panic (if protected mode) if out of bounds
-        let prestate =
-            unsafe { guest_mem.get_slice(RV32_MEMORY_AS, record.buffer_ptr, KECCAK_WIDTH_BYTES) };
-        record.preimage_buffer_bytes.copy_from_slice(prestate);
-        let poststate = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
-        for (word_idx, (word, aux)) in poststate
-            .chunks_exact(KECCAK_WORD_SIZE)
-            .zip(&mut record.buffer_word_aux)
-            .enumerate()
-        {
-            // We don't need prev_data since we read it earlier
-            let (t_prev, _) = timed_write::<KECCAK_WORD_SIZE>(
-                state.memory,
-                RV32_MEMORY_AS,
-                buffer_ptr + (word_idx * KECCAK_WORD_SIZE) as u32,
-                word.try_into().unwrap(),
-            );
-            aux.prev_timestamp = t_prev;
-        }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
-    }
-}
-
-impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
-    fn fill_trace(
-        &self,
+        range_checker: &VariableRangeCheckerChip,
         mem_helper: &MemoryAuxColsFactory<F>,
-        trace_matrix: &mut RowMajorMatrix<F>,
-        rows_used: usize,
+        row: &mut [F],
+        replay: &KeccakfReplay,
     ) {
-        if rows_used == 0 {
-            return;
+        row.fill(F::ZERO);
+        let local: &mut KeccakfOpCols<F> = row.borrow_mut();
+
+        local.pc_idx = F::from_u32(pc_to_idx(replay.pc));
+        local.is_valid = F::ONE;
+        local.timestamp = F::from_u32(replay.timestamp);
+        local.rd_ptr = F::from_u32(replay.rd_ptr);
+        local.buffer_ptr_limbs = ptr_to_field_u16_limbs(replay.buffer_ptr);
+
+        // Pack consecutive pairs of state bytes into u16 cells.
+        for (dst, bytes) in local
+            .preimage
+            .iter_mut()
+            .zip(replay.preimage_buffer_bytes.chunks_exact(2))
+        {
+            *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
         }
-        assert!(rows_used.is_multiple_of(NUM_OP_ROWS_PER_INS));
+        for (dst, bytes) in local
+            .postimage
+            .iter_mut()
+            .zip(replay.postimage_buffer_bytes.chunks_exact(2))
+        {
+            *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
+        }
 
-        let width = trace_matrix.width();
-        let (trace, dummy_trace) = trace_matrix.values.split_at_mut(rows_used * width);
-        // For clarity we just clone the records into a separate vector to avoid dealing with unsafe
-        // overwriting
-        let records = trace
-            .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
-            .map(|mut row| {
-                let record: &mut KeccakfRecord = unsafe {
-                    get_record_from_slice(&mut row, KeccakfRecordLayout::new(KeccakfMetadata))
-                };
-                record.clone()
-            })
-            .collect::<Vec<_>>();
-        dummy_trace.fill(F::ZERO);
+        let mut timestamp = replay.timestamp;
+        mem_helper.fill(
+            replay.rd_prev_timestamp,
+            replay.timestamp,
+            local.rd_aux.as_mut(),
+        );
+        timestamp += 1;
+        for (aux, &previous_timestamp) in local
+            .buffer_word_aux
+            .iter_mut()
+            .zip(&replay.buffer_prev_timestamps)
+        {
+            mem_helper.fill(previous_timestamp, timestamp, aux);
+            timestamp += 1;
+        }
 
-        trace
-            .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
-            .zip(records.par_iter())
-            .for_each(|(row, record)| {
-                row.fill(F::ZERO);
-
-                let postimage_buffer_bytes = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
-                let buffer_ptr_limbs = record.buffer_ptr.to_le_bytes();
-
-                let local: &mut KeccakfOpCols<F> = row.borrow_mut();
-
-                local.pc = F::from_u32(record.pc);
-                local.is_valid = F::ONE;
-                local.timestamp = F::from_u32(record.timestamp);
-                local.rd_ptr = F::from_u32(record.rd_ptr);
-                local.buffer_ptr_limbs = buffer_ptr_limbs.map(F::from_u8);
-
-                for (dst, &byte) in local.preimage.iter_mut().zip(&record.preimage_buffer_bytes) {
-                    *dst = F::from_u8(byte);
-                }
-                for (dst, &byte) in local.postimage.iter_mut().zip(&postimage_buffer_bytes) {
-                    *dst = F::from_u8(byte);
-                }
-
-                let mut timestamp = record.timestamp;
-                mem_helper.fill(
-                    record.rd_aux.prev_timestamp,
-                    record.timestamp,
-                    local.rd_aux.as_mut(),
-                );
-                timestamp += 1;
-                for (aux, record_aux) in local
-                    .buffer_word_aux
-                    .iter_mut()
-                    .zip(&record.buffer_word_aux)
-                {
-                    mem_helper.fill(record_aux.prev_timestamp, timestamp, aux);
-                    timestamp += 1;
-                }
-
-                let limb_shift = 1u32
-                    << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits) as u32;
-                let scaled_limb =
-                    (buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] as u32) * limb_shift;
-                self.bitwise_lookup_chip
-                    .request_range(scaled_limb, scaled_limb);
-
-                for pair in postimage_buffer_bytes.chunks_exact(2) {
-                    self.bitwise_lookup_chip
-                        .request_range(pair[0] as u32, pair[1] as u32);
-                }
-            });
-        *self.shared_records.lock().unwrap() = records;
+        // Block-index range-check counts, mirroring the AIR's per-valid-row multiplicity.
+        add_block_index_range_checks(range_checker, replay.buffer_ptr, self.pointer_max_bits);
     }
+}
+
+/// Generates the KeccakF operation trace directly from immutable preflight history.
+pub(crate) fn generate_trace_from_postflight<F: PrimeField32>(
+    chip: &KeccakfOpChip<F>,
+    postflight: &Postflight<'_, F>,
+) -> Result<RowMajorMatrix<F>, PostflightError> {
+    let steps = postflight.steps(KeccakfOpcode::KECCAKF.global_opcode());
+    let width = KeccakfOpCols::<F>::width();
+    let height = next_power_of_two_or_zero(steps.len() * NUM_OP_ROWS_PER_INS);
+    let mut trace = RowMajorMatrix::new(F::zero_vec(height * width), width);
+    let temporary_range_checker =
+        Arc::new(VariableRangeCheckerChip::new(chip.range_checker_chip.bus()));
+    let temporary_mem_helper = SharedMemoryHelper::new(
+        temporary_range_checker.clone(),
+        chip.mem_helper.timestamp_max_bits(),
+    );
+    let mem_helper = temporary_mem_helper.as_borrowed();
+    let preimages = trace.values[..steps.len() * width * NUM_OP_ROWS_PER_INS]
+        .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
+        .zip(steps.par_iter().copied())
+        .map(|(row, step)| {
+            let replay = replay_step(postflight, step, chip.pointer_max_bits)?;
+            chip.fill_trace_row(temporary_range_checker.as_ref(), &mem_helper, row, &replay);
+            Ok(KeccakfPreimage {
+                timestamp: replay.timestamp,
+                bytes: replay.preimage_buffer_bytes,
+            })
+        })
+        .collect::<Result<Vec<_>, PostflightError>>()?;
+    if chip.range_checker_chip.count.len() != temporary_range_checker.count.len() {
+        return Err(PostflightError::new("KECCAKF range-checker shape mismatch"));
+    }
+    for (destination, source) in chip
+        .range_checker_chip
+        .count
+        .iter()
+        .zip(&temporary_range_checker.count)
+    {
+        destination.fetch_add(source.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+    *chip.shared_preimages.lock().unwrap() = preimages;
+    Ok(trace)
+}
+
+fn replay_step<F: PrimeField32>(
+    postflight: &Postflight<'_, F>,
+    step: PostflightStep,
+    pointer_max_bits: usize,
+) -> Result<KeccakfReplay, PostflightError> {
+    let instruction = postflight.instruction(step);
+    if !instruction.b.is_zero()
+        || !instruction.c.is_zero()
+        || instruction.d.as_u32() != REGISTER_AS
+        || instruction.e.as_u32() != MEMORY_AS
+    {
+        return Err(PostflightError::new(
+            "KECCAKF instruction has invalid operands",
+        ));
+    }
+
+    let pc = postflight.pc(step);
+    let timestamp = postflight.timestamp(step);
+    let rd_ptr = instruction.a.as_u32();
+    if rd_ptr & 1 != 0 {
+        return Err(PostflightError::new(
+            "KECCAKF register pointer must be two-byte aligned",
+        ));
+    }
+    let mut replay = postflight.replay(step);
+    let rd = replay.read_u16(REGISTER_AS, byte_ptr_to_u16_ptr_value(rd_ptr))?;
+    let buffer_ptr = try_bytes_to_u32(u16_block_to_bytes(rd.value))
+        .ok_or_else(|| PostflightError::new("KECCAKF buffer pointer exceeds 32 bits"))?;
+    if buffer_ptr & 1 != 0 {
+        return Err(PostflightError::new(
+            "KECCAKF buffer pointer must be two-byte aligned",
+        ));
+    }
+    let domain_end = if pointer_max_bits < 32 {
+        1u64 << pointer_max_bits
+    } else {
+        1u64 << 32
+    };
+    if u64::from(buffer_ptr) + KECCAK_WIDTH_BYTES as u64 > domain_end {
+        return Err(PostflightError::new(
+            "KECCAKF state exceeds the pointer domain",
+        ));
+    }
+
+    let mut preimage_buffer_bytes = [0u8; KECCAK_WIDTH_BYTES];
+    for word_index in 0..KECCAK_WIDTH_MEM_OPS {
+        let pointer = byte_ptr_to_u16_ptr_value(buffer_ptr) + (word_index * BLOCK_FE_WIDTH) as u32;
+        let previous = replay.peek_u16(MEMORY_AS, pointer)?;
+        preimage_buffer_bytes
+            [word_index * MEMORY_BLOCK_BYTES..(word_index + 1) * MEMORY_BLOCK_BYTES]
+            .copy_from_slice(&u16_block_to_bytes(previous));
+    }
+    let postimage = keccakf_postimage_bytes(&preimage_buffer_bytes);
+    let mut buffer_prev_timestamps = [0; KECCAK_WIDTH_MEM_OPS];
+    for (word_index, bytes) in postimage.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let pointer = byte_ptr_to_u16_ptr_value(buffer_ptr) + (word_index * BLOCK_FE_WIDTH) as u32;
+        let access = replay.write_u16(
+            MEMORY_AS,
+            pointer,
+            bytes_to_u16_block(bytes.try_into().expect("chunk length is fixed")),
+        )?;
+        buffer_prev_timestamps[word_index] = access.previous_timestamp;
+        let previous_bytes = u16_block_to_bytes(access.previous_value);
+        if previous_bytes.as_slice()
+            != &preimage_buffer_bytes
+                [word_index * MEMORY_BLOCK_BYTES..(word_index + 1) * MEMORY_BLOCK_BYTES]
+        {
+            return Err(PostflightError::new(
+                "KECCAKF peek did not resolve the write predecessor",
+            ));
+        }
+    }
+    let next_pc = pc
+        .checked_add(DEFAULT_PC_STEP)
+        .ok_or_else(|| PostflightError::new("KECCAKF program counter overflow"))?;
+    replay.finish(next_pc)?;
+
+    Ok(KeccakfReplay {
+        pc,
+        timestamp,
+        rd_ptr,
+        buffer_ptr,
+        rd_prev_timestamp: rd.previous_timestamp,
+        buffer_prev_timestamps,
+        preimage_buffer_bytes,
+        postimage_buffer_bytes: postimage,
+    })
 }
