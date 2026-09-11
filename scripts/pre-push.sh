@@ -156,8 +156,8 @@ crate_features() {
 ERRORS=0
 
 # --- Step 1: Format check ---
-info "Step 1/3: cargo +nightly fmt --all -- --check"
-if cargo +nightly fmt --all -- --check; then
+info "Step 1/3: cargo +nightly-2026-09-10 fmt --all -- --check"
+if cargo +nightly-2026-09-10 fmt --all -- --check; then
     pass "formatting"
 else
     fail "formatting"

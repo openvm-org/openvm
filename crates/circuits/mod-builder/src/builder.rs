@@ -593,7 +593,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             // If this is not true then the evaluated constraint is not divisible by p.
             debug_assert_eq!(expr_bigint, &q * &expr.prime_bigint);
             let q_limbs = big_int_to_num_limbs(&q, limb_bits, expr.q_limbs[i]);
-            assert_eq!(q_limbs.len(), expr.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
+            assert_eq!(q_limbs.len(), expr.q_limbs[i]); // If this fails, the q_limbs estimate is
+                                                        // wrong.
             for &q in q_limbs.iter() {
                 range_checker.add_count((q + (1 << limb_bits)) as u32, limb_bits + 1);
             }
@@ -607,7 +608,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             );
             let constraint = constraint - q_overflow * prime_overflow.clone();
             let carries = constraint.calculate_carries(limb_bits);
-            assert_eq!(carries.len(), expr.carry_limbs[i]); // If this fails, the carry limbs estimate is wrong.
+            assert_eq!(carries.len(), expr.carry_limbs[i]); // If this fails, the carry limbs
+                                                            // estimate is wrong.
             let max_overflow_bits = constraint.max_overflow_bits();
             let (carry_min_abs, carry_bits) =
                 get_carry_max_abs_and_bits(max_overflow_bits, limb_bits);
