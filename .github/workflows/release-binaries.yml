@@ -113,6 +113,8 @@ jobs:
             cuda_package_version: "12-9"
           - cuda_version: "13.0"
             cuda_package_version: "13-0"
+          - cuda_version: "13.1"
+            cuda_package_version: "13-1"
     steps:
       - uses: runs-on/action@v2
         with:
