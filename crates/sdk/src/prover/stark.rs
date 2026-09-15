@@ -6,9 +6,12 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, Executor,
         MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
     },
-    system::memory::merkle::MerkleTree,
+    system::{memory::merkle::MerkleTree, program::trace::compute_initial_memory_commit},
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
+use openvm_stark_backend::{
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    StarkEngine, Val,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::{
     pvs::{DeferralPvs, DEF_PVS_AIR_ID},
@@ -159,8 +162,16 @@ where
     }
 
     pub fn generate_baseline(&self) -> VerificationBaseline {
+        let instance = self.app_prover.instance();
+        let exe = instance.exe();
         VerificationBaseline {
-            app_exe_commit: self.app_prover.app_exe_commit(),
+            program_commit: self.app_prover.app_program_commit(),
+            initial_state: compute_initial_memory_commit(
+                &vm_poseidon2_hasher(),
+                exe,
+                &instance.vm.config().as_ref().memory_config,
+            ),
+            initial_pc: F::from_u32(exe.pc_start),
             memory_dimensions: self.app_prover.memory_dimensions(),
             num_user_pvs: self.app_prover.num_user_pvs(),
             app_vk_commit: self.agg_prover.leaf_prover.get_vk_commit(false),

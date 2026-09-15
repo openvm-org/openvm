@@ -69,17 +69,24 @@ pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
     memory_config: &MemoryConfig,
 ) -> [F; CHUNK] {
     let hasher = vm_poseidon2_hasher();
-    let memory_dimensions = memory_config.memory_dimensions();
-    let mut memory_image = AddressMap::new(memory_config.addr_spaces.clone());
-    memory_image.set_from_sparse(&exe.init_memory);
-    let init_memory_commit =
-        MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
     compute_exe_commit(
         &hasher,
         program_commitment,
-        &init_memory_commit,
+        &compute_initial_memory_commit(&hasher, exe, memory_config),
         F::from_u32(exe.pc_start),
     )
+}
+
+/// Computes the Merkle root of an executable's initial memory using the VM memory configuration.
+/// This rebuilds the Merkle tree from the executable's initial memory image.
+pub fn compute_initial_memory_commit<F: PrimeField32>(
+    hasher: &Poseidon2Hasher<F>,
+    exe: &VmExe<F>,
+    memory_config: &MemoryConfig,
+) -> [F; CHUNK] {
+    let mut memory_image = AddressMap::new(memory_config.addr_spaces.clone());
+    memory_image.set_from_sparse(&exe.init_memory);
+    MerkleTree::from_memory(&memory_image, &memory_config.memory_dimensions(), hasher).root()
 }
 
 /// Computes a Merklelized hash of:

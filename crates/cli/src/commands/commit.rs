@@ -73,7 +73,7 @@ impl CommitCmd {
         let app_vm_commit = prover.app_vm_commit();
 
         let app_commit = AppExecutionCommit {
-            app_exe_commit: CommitBytes::from(baseline.app_exe_commit),
+            app_exe_commit: CommitBytes::from(baseline.app_exe_commit()),
             app_vm_commit: CommitBytes::from(app_vm_commit),
         };
         println!("exe commit: {}", app_commit.app_exe_commit);

@@ -72,7 +72,9 @@ fn fixture_vk_commit(start: u32) -> VkCommit<F> {
 
 fn baseline_fixture() -> VerificationBaseline {
     VerificationBaseline {
-        app_exe_commit: fixture_digest(10),
+        program_commit: fixture_digest(10),
+        initial_state: fixture_digest(20),
+        initial_pc: F::from_u32(30),
         memory_dimensions: MemoryDimensions {
             addr_space_height: 3,
             address_height: 29,
@@ -201,7 +203,7 @@ fn pv_digest_csv(public_values: &[Vec<F>]) -> String {
 
 fn baseline_digest(baseline: &VerificationBaseline) -> String {
     let mut parts = vec![
-        digest_csv(&baseline.app_exe_commit),
+        digest_csv(&baseline.app_exe_commit()),
         baseline.memory_dimensions.addr_space_height.to_string(),
         baseline.memory_dimensions.address_height.to_string(),
         baseline.num_user_pvs.to_string(),

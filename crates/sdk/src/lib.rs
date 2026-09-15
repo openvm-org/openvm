@@ -800,7 +800,7 @@ where
     ) -> Result<AppExecutionCommit, SdkError> {
         let prover = self.prover(app_exe)?;
         Ok(AppExecutionCommit {
-            app_exe_commit: CommitBytes::from(prover.generate_baseline().app_exe_commit),
+            app_exe_commit: CommitBytes::from(prover.generate_baseline().app_exe_commit()),
             app_vm_commit: CommitBytes::from(prover.app_vm_commit()),
         })
     }
@@ -847,9 +847,10 @@ where
     /// Certified verification is scoped to the canonical standard pipeline, so this fails if
     /// `verified_baseline` — the [`VerificationBaseline`] the proof is verified against by
     /// [`verify_proof`](Self::verify_proof) — does not have the canonical [`VmBaseline`]
-    /// (`app_exe_commit` is ignored). The expected baseline and the aggregation vk are both
-    /// derived from the canonical standard [`CpuSdk`], making each call keygen-expensive. Use
-    /// alongside [`verify_proof`](Self::verify_proof), not instead of it.
+    /// (`program_commit`, `initial_state`, and `initial_pc` are ignored). The expected baseline and
+    /// the aggregation vk are both derived from the canonical standard [`CpuSdk`], making each
+    /// call keygen-expensive. Use alongside [`verify_proof`](Self::verify_proof), not instead
+    /// of it.
     #[cfg(feature = "certified-verifier")]
     pub fn verify_proof_with_certified_verifier(
         verified_baseline: &VerificationBaseline,
