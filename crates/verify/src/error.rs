@@ -11,8 +11,12 @@ pub enum VerifyStarkError {
     UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
     #[error("Invalid user public values length: expected {expected}, actual {actual}")]
     UserPvsLengthMismatch { expected: usize, actual: usize },
-    #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
-    AppExeCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid program commit: expected {expected:?}, actual {actual:?}")]
+    ProgramCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid initial memory state root: expected {expected:?}, actual {actual:?}")]
+    InitialStateMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid initial pc: expected {expected}, actual {actual}")]
+    InitialPcMismatch { expected: F, actual: F },
     #[error("Invalid app cached commit: expected {expected:?}, actual {actual:?}")]
     AppVkCachedCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app vk pre-hash: expected {expected:?}, actual {actual:?}")]

@@ -32,7 +32,7 @@ pub fn write_verification_baseline<W: Write>(
     }
 
     write_header(writer, MAGIC_VM_BASELINE)?;
-    SC::encode_digest(&baseline.app_exe_commit, writer)?;
+    SC::encode_digest(&baseline.app_exe_commit(), writer)?;
     write_usize_as_u32(writer, baseline.memory_dimensions.addr_space_height)?;
     write_usize_as_u32(writer, baseline.memory_dimensions.address_height)?;
     write_usize_as_u32(writer, baseline.num_user_pvs)?;

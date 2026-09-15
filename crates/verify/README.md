@@ -36,7 +36,7 @@ The user public values proof length is also checked against the baseline `num_us
 
 Given a fixed VM and executable, we must check certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
 
-- `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
+- `program_commit`, `initial_root`, and `initial_pc` are compared directly against the baseline `program_commit`, `initial_state`, and `initial_pc`, respectively. These are derived from the executable and VM memory configuration. The combined executable commitment used by EVM verification be computed with `VerificationBaseline::app_exe_commit()`.
 - `app_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit` (each containing both `cached_commit` and `vk_pre_hash`) are compared against pre-computed baselines
 - `internal_recursive_vk_commit` is checked conditionally:
   - if `recursion_depth > 1`, it is compared against the pre-computed baseline

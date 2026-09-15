@@ -54,7 +54,7 @@ This generates two files in `${target-dir}/../openvm/${profile}/` (and `--output
     - `app_exe_commit`: A commitment to the OpenVM program binary.
     - `app_vm_commit`: A commitment to the OpenVM configuration.
 
-2. **`*.baseline.json`** — contains the full verification baseline used by `cargo openvm verify stark`, including the exe commit, memory dimensions, and all aggregation VK commits.
+2. **`*.baseline.json`** — contains the full verification baseline used by `cargo openvm verify stark`, including the program commitment, initial memory root (`initial_state`), initial program counter, memory dimensions, and all aggregation VK commits.
 
 If `--app-pk` or `--agg-prefix-pk` are not provided, the command will search for them at `${target-dir}/../openvm/app.pk` and `${target-dir}/../openvm/agg_prefix.pk` respectively. The internal-recursive proving key can be overridden with `--agg-pk` (defaults to `~/.openvm/v[OPENVM_VERSION]/internal_recursive.pk`). If `--exe` is not provided, the command will call `build` before generating the commits. Many of the Cargo options available to `cargo openvm run` are available to `commit` too, for more information on the available options see [Run Flags](/book/writing-apps/running-a-program#run-flags).
 

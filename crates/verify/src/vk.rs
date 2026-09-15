@@ -4,9 +4,12 @@ use std::{
 };
 
 use eyre::{Report, Result};
-use openvm_circuit::system::memory::dimensions::MemoryDimensions;
+use openvm_circuit::{
+    arch::hasher::poseidon2::vm_poseidon2_hasher,
+    system::{memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit},
+};
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
 use serde::{Deserialize, Serialize};
 
 use crate::VkCommit;
@@ -22,9 +25,12 @@ pub struct VmStarkVerifyingKey {
 /// (i.e. internal-recursive) VM STARK proof
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationBaseline {
-    /// Commit to the app exe (i.e. hash of the program commit, initial memory merkle root,
-    /// and initial program counter)
-    pub app_exe_commit: Digest,
+    /// Commitment to the app executable code stored in the ProgramAir cached trace
+    pub program_commit: Digest,
+    /// Merkle root of the app executable's initial memory
+    pub initial_state: Digest,
+    /// Initial program counter of the app executable
+    pub initial_pc: F,
     /// VM memory metadata used to verify the user public values merkle proof
     pub memory_dimensions: MemoryDimensions,
     /// Number of raw user public values
@@ -47,6 +53,18 @@ pub struct VerificationBaseline {
     /// must show that the deferral address space is unchanged. When None, there must be no
     /// deferral public values.
     pub expected_def_hook_commit: Option<Digest>,
+}
+
+impl VerificationBaseline {
+    /// Computes the combined executable commitment used by EVM verification and other consumers.
+    pub fn app_exe_commit(&self) -> Digest {
+        compute_exe_commit(
+            &vm_poseidon2_hasher(),
+            &self.program_commit,
+            &self.initial_state,
+            self.initial_pc,
+        )
+    }
 }
 
 pub fn read_vk_from_file<P: AsRef<Path>>(path: P) -> Result<VmStarkVerifyingKey> {

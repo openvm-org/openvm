@@ -3,9 +3,7 @@ use std::borrow::Borrow;
 use eyre::Result;
 use openvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, ExitCode},
-    system::{
-        memory::merkle::public_values::UserPublicValuesProof, program::trace::compute_exe_commit,
-    },
+    system::memory::merkle::public_values::UserPublicValuesProof,
 };
 use openvm_stark_backend::{
     codec::{Decode, Encode},
@@ -137,13 +135,23 @@ pub fn verify_vm_stark_proof_pvs(
         });
     }
 
-    // Check that the app_commit is as expected.
-    let claimed_app_exe_commit =
-        compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc);
-    if claimed_app_exe_commit != vk.baseline.app_exe_commit {
-        return Err(VerifyStarkError::AppExeCommitMismatch {
-            expected: vk.baseline.app_exe_commit,
-            actual: claimed_app_exe_commit,
+    // Check the executable's program commitment and initial state directly.
+    if program_commit != vk.baseline.program_commit {
+        return Err(VerifyStarkError::ProgramCommitMismatch {
+            expected: vk.baseline.program_commit,
+            actual: program_commit,
+        });
+    }
+    if initial_root != vk.baseline.initial_state {
+        return Err(VerifyStarkError::InitialStateMismatch {
+            expected: vk.baseline.initial_state,
+            actual: initial_root,
+        });
+    }
+    if initial_pc != vk.baseline.initial_pc {
+        return Err(VerifyStarkError::InitialPcMismatch {
+            expected: vk.baseline.initial_pc,
+            actual: initial_pc,
         });
     }
 

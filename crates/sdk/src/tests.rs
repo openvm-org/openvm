@@ -668,6 +668,20 @@ fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_app_exe_commit_matches_baseline() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = sdk.convert_to_exe(elf)?;
+    let app_prover = sdk.app_prover(app_exe.clone())?;
+    let baseline = sdk.prover(app_exe)?.generate_baseline();
+    assert_eq!(app_prover.app_exe_commit(), baseline.app_exe_commit());
+    Ok(())
+}
+
 #[cfg(feature = "certified-verifier")]
 #[test]
 fn test_certified_verifier_accepts_canonical_standard() -> Result<()> {

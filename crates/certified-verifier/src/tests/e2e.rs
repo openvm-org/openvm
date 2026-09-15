@@ -65,15 +65,41 @@ fn optional_air_public_values_follow_trace_presence() {
 }
 
 #[test]
-fn mismatched_executable_commitment_rejected() {
+fn mismatched_program_commitment_rejected() {
     let fixture = fixture();
     let mut invalid_vk = fixture.vk.clone();
-    invalid_vk.baseline.app_exe_commit[0] += F::ONE;
+    invalid_vk.baseline.program_commit[0] += F::ONE;
     assert_rejects(
         &invalid_vk,
         &fixture.proof,
         VerifierError::PublicValues,
-        "mismatched executable commitment",
+        "mismatched program commitment",
+    );
+}
+
+#[test]
+fn mismatched_initial_state_rejected() {
+    let fixture = fixture();
+    let mut invalid_vk = fixture.vk.clone();
+    invalid_vk.baseline.initial_state[0] += F::ONE;
+    assert_rejects(
+        &invalid_vk,
+        &fixture.proof,
+        VerifierError::PublicValues,
+        "mismatched initial state",
+    );
+}
+
+#[test]
+fn mismatched_initial_pc_rejected() {
+    let fixture = fixture();
+    let mut invalid_vk = fixture.vk.clone();
+    invalid_vk.baseline.initial_pc += F::ONE;
+    assert_rejects(
+        &invalid_vk,
+        &fixture.proof,
+        VerifierError::PublicValues,
+        "mismatched initial program counter",
     );
 }
 
