@@ -4,6 +4,11 @@
 #include "system/program.cuh"
 #include <cuda_runtime.h>
 
+template <typename T> struct ProgramTestingCols {
+    ProgramExecutionCols<T> exec;
+    T exec_freq;
+};
+
 __global__ void program_testing_tracegen(
     Fp *trace,
     size_t height,
@@ -23,10 +28,10 @@ __global__ void program_testing_tracegen(
         COL_WRITE_VALUE(row, ProgramExecutionCols, e, record.e);
         COL_WRITE_VALUE(row, ProgramExecutionCols, f, record.f);
         COL_WRITE_VALUE(row, ProgramExecutionCols, g, record.g);
-        COL_WRITE_VALUE(row, ProgramCols, exec_freq, Fp::one());
+        COL_WRITE_VALUE(row, ProgramTestingCols, exec_freq, Fp::one());
     } else if (idx < height) {
 #pragma unroll
-        for (size_t i = 0; i < sizeof(ProgramCols<uint8_t>); i++) {
+        for (size_t i = 0; i < sizeof(ProgramTestingCols<uint8_t>); i++) {
             row.write(i, 0);
         }
     }
@@ -40,7 +45,7 @@ extern "C" int _program_testing_tracegen(
     size_t num_records,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(ProgramCols<uint8_t>));
+    assert(width == sizeof(ProgramTestingCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     program_testing_tracegen<<<grid, block, 0, stream>>>(d_trace, height, d_records, num_records);
     return CHECK_KERNEL();

@@ -240,3 +240,76 @@ fn test_program_with_undefined_instructions() {
 
     interaction_test(program, vec![0, 2, 5]);
 }
+
+fn check_boundary_columns(num_instructions: usize, corrupt: Option<(usize, usize)>) {
+    let instruction = Instruction::from_usize(TERMINATE.global_opcode(), [0, 0, 0]);
+    let program = Program::from_instructions(&vec![instruction; num_instructions]);
+    let mut cached_trace = generate_cached_trace(&program);
+    let height = cached_trace.height();
+    assert_eq!(cached_trace.width(), 11);
+    for row in 0..height {
+        let values = cached_trace.row_slice(row).unwrap();
+        assert_eq!(
+            values[0],
+            BabyBear::from_u32(1 + u32::from(row == height - 1))
+        );
+        assert_eq!(values[10], BabyBear::from_bool(row == 0));
+    }
+    if let Some((row, column)) = corrupt {
+        cached_trace.row_mut(row)[column] += BabyBear::ONE;
+    }
+
+    let engine = test_cpu_engine();
+    let (commitment, data) = TraceCommitter::commit(engine.device(), &[&cached_trace]).unwrap();
+    let cached = CommittedTraceData {
+        commitment,
+        data: Arc::new(data),
+        trace: cached_trace,
+    };
+    let chip = ProgramChip {
+        filtered_exec_frequencies: vec![0; num_instructions],
+        cached: Some(cached),
+        _marker: std::marker::PhantomData,
+    };
+    let air = ProgramAir::new(ProgramBus::new(READ_INSTRUCTION_BUS));
+    let result = engine.run_test(any_air_arc_vec!(air), vec![chip.generate_proving_ctx(())]);
+    if corrupt.is_some() {
+        assert!(
+            result.is_err(),
+            "corrupted boundary column must be rejected"
+        );
+    } else {
+        result.expect("valid boundary columns must verify");
+    }
+}
+
+#[test_case::test_case(0; "empty")]
+#[test_case::test_case(1; "single_row")]
+#[test_case::test_case(2; "two_rows")]
+#[test_case::test_case(5; "padding")]
+#[test_case::test_case(8; "no_padding")]
+fn test_program_boundary_columns(num_instructions: usize) {
+    check_boundary_columns(num_instructions, None);
+}
+
+#[test_case::test_case(5, 0; "first_row")]
+#[test_case::test_case(5, 1; "interior_row_1")]
+#[test_case::test_case(5, 2; "interior_row_2")]
+#[test_case::test_case(5, 3; "interior_row_3")]
+#[test_case::test_case(5, 4; "last_instruction")]
+#[test_case::test_case(5, 5; "first_padding_row")]
+#[test_case::test_case(5, 6; "interior_padding_row")]
+#[test_case::test_case(5, 7; "last_padding_row")]
+fn test_program_boundary_columns_negative(num_instructions: usize, row: usize) {
+    // All frequencies are zero, including instruction and padding rows.
+    for column in [0, 10] {
+        check_boundary_columns(num_instructions, Some((row, column)));
+    }
+}
+
+#[test]
+fn test_program_single_row_boundary_columns_negative() {
+    for column in [0, 10] {
+        check_boundary_columns(1, Some((0, column)));
+    }
+}

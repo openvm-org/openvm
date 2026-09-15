@@ -12,7 +12,13 @@ template <typename T> struct ProgramExecutionCols {
     T g;
 };
 
-template <typename T> struct ProgramCols {
+template <typename T> struct ProgramCachedCols {
+    T exec_end;
     ProgramExecutionCols<T> exec;
+    T exec_start;
+};
+
+template <typename T> struct ProgramCols {
+    ProgramCachedCols<T> cached;
     T exec_freq;
 };

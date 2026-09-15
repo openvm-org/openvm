@@ -1,6 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
+use openvm_circuit::{primitives::Chip, system::program::ProgramCachedCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::{
@@ -60,7 +60,7 @@ impl ProgramChipGPU {
 
         let trace = DeviceMatrix::<F>::with_capacity_on(
             height,
-            size_of::<ProgramExecutionCols<u8>>(),
+            size_of::<ProgramCachedCols<u8>>(),
             device_ctx,
         );
         trace.buffer().fill_zero_on(device_ctx).unwrap();
@@ -224,6 +224,16 @@ mod tests {
             )),
         ];
         let program = Program::new_without_debug_infos_with_option(&instructions, 0);
+        test_cached_committed_trace_data(program);
+    }
+
+    #[test_case::test_case(1; "single_row")]
+    #[test_case::test_case(2; "two_rows")]
+    #[test_case::test_case(8; "no_padding")]
+    #[test_case::test_case(100; "many_padding_rows")]
+    fn test_cuda_program_cached_tracegen_boundary_columns(num_instructions: usize) {
+        let instruction = Instruction::from_usize(TERMINATE.global_opcode(), [0, 0, 0]);
+        let program = Program::from_instructions(&vec![instruction; num_instructions]);
         test_cached_committed_trace_data(program);
     }
 }

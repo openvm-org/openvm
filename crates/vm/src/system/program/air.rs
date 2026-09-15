@@ -1,10 +1,12 @@
+use std::borrow::Borrow;
+
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder,
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::Field,
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -14,8 +16,16 @@ use super::ProgramBus;
 #[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
 #[repr(C)]
 pub struct ProgramCols<T> {
-    pub exec: ProgramExecutionCols<T>,
+    pub cached: ProgramCachedCols<T>,
     pub exec_freq: T,
+}
+
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
+#[repr(C)]
+pub struct ProgramCachedCols<T> {
+    pub exec_end: T,
+    pub exec: ProgramExecutionCols<T>,
+    pub exec_start: T,
 }
 
 #[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
@@ -42,7 +52,7 @@ pub struct ProgramAir {
 impl<F: Field> BaseAirWithPublicValues<F> for ProgramAir {}
 impl<F: Field> PartitionedBaseAir<F> for ProgramAir {
     fn cached_main_widths(&self) -> Vec<usize> {
-        vec![ProgramExecutionCols::<F>::width()]
+        vec![ProgramCachedCols::<F>::width()]
     }
     fn common_main_width(&self) -> usize {
         1
@@ -60,10 +70,18 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for ProgramAir {
         let cached_trace = &builder.cached_mains()[0];
 
         let exec_freq = common_trace.row_slice(0).expect("row 0 present")[0];
-        let exec_cols = cached_trace.row_slice(0).expect("row 0 present").to_vec();
+        let cached_row = cached_trace.row_slice(0).expect("row 0 present").to_vec();
+        let cached_cols: &ProgramCachedCols<AB::Var> = cached_row.as_slice().borrow();
 
-        self.bus
-            .inner
-            .add_key_with_lookups(builder, exec_cols, exec_freq);
+        // These constraints also apply to padding and unexecuted instructions, ensuring
+        // that all rows are accounted for in the cached trace commit.
+        builder.assert_eq(cached_cols.exec_end, AB::Expr::ONE + builder.is_last_row());
+        builder.assert_eq(cached_cols.exec_start, builder.is_first_row());
+
+        self.bus.inner.add_key_with_lookups(
+            builder,
+            cached_row[1..cached_row.len() - 1].iter().copied(),
+            exec_freq,
+        );
     }
 }
