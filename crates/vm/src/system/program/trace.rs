@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     StarkProtocolConfig, Val,
 };
 
-use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
+use super::{Instruction, ProgramCachedCols, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -111,7 +111,7 @@ pub fn compute_exe_commit<F: PrimeField32>(
 }
 
 pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorMatrix<F> {
-    let width = ProgramExecutionCols::<F>::width();
+    let width = ProgramCachedCols::<F>::width();
     let mut instructions = program
         .enumerate_by_pc()
         .into_iter()
@@ -126,12 +126,16 @@ pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorM
         ));
     }
 
-    let mut rows = F::zero_vec(instructions.len() * width);
+    let height = instructions.len();
+    let mut rows = F::zero_vec(height * width);
     rows.par_chunks_mut(width)
         .zip(instructions)
-        .for_each(|(row, (pc, instruction))| {
-            let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
-            *row = ProgramExecutionCols {
+        .enumerate()
+        .for_each(|(idx, (row, (pc, instruction)))| {
+            let row: &mut ProgramCachedCols<F> = row.borrow_mut();
+            row.exec_end = F::ONE + F::from_bool(idx == height - 1);
+            row.exec_start = F::from_bool(idx == 0);
+            row.exec = ProgramExecutionCols {
                 pc: F::from_u32(pc),
                 opcode: instruction.opcode.to_field(),
                 a: instruction.a,
