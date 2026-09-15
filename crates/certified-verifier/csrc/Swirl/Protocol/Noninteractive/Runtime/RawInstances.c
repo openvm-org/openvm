@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: Swirl.Protocol.Noninteractive.Runtime.RawInstances
-// Imports: public import Init public import Swirl.Protocol.Noninteractive.Runtime.Core public import Swirl.Protocol.Noninteractive.Ops public import Swirl.Protocol.Noninteractive.Verifier.Runtime.Whir public import Fundamentals.BabyBear.Raw public import Fundamentals.BabyBearExt4.Raw public import Fundamentals.Poseidon2.Raw
+// Imports: public import Init public meta import Init public import Swirl.Protocol.Noninteractive.Runtime.Core public import Swirl.Protocol.Noninteractive.Ops public import Swirl.Protocol.Noninteractive.Verifier.Runtime.Whir public import Fundamentals.BabyBear.Raw public import Fundamentals.BabyBearExt4.Raw public import Fundamentals.Poseidon2.Raw
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -13,485 +13,290 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1;
-lean_object* l_Fundamentals_BabyBear_FBB_Raw_ofNat(lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawAlgMap(lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw;
-lean_object* l_Fundamentals_Poseidon2_Raw_hashSlice(lean_object*);
-lean_object* l_List_get_x3fInternal___redArg(lean_object*, lean_object*);
-lean_object* l_Fundamentals_BabyBearExt4_Raw_ofCoeffs(lean_object*, lean_object*, lean_object*, lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1___boxed(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0___boxed(lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0(lean_object*);
-lean_object* l_Fundamentals_BabyBearExt4_Raw_pow(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1___boxed(lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw;
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__0(lean_object*, lean_object*);
-extern lean_object* l_Fundamentals_BabyBearExt4_Raw_one;
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6;
-lean_object* l_Fundamentals_BabyBearExt4_Raw_ofBase(lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_twoAdicGenerator(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_add___boxed(lean_object*, lean_object*);
 lean_object* lean_array_to_list(lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw;
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5;
-lean_object* l_Fundamentals_BabyBearExt4_Raw_add___boxed(lean_object*, lean_object*);
-lean_object* l_Fundamentals_BabyBearExt4_Raw_sub___boxed(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__2(lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1;
-lean_object* l_Fundamentals_BabyBearExt4_Raw_ofNat___boxed(lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw;
-lean_object* l_Fundamentals_Poseidon2_Raw_compressDigest(lean_object*, lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw;
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0;
+lean_object* l_List_get_x3fInternal___redArg(lean_object*, lean_object*);
 lean_object* lean_nat_mod(lean_object*, lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0;
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1;
-extern lean_object* l_Fundamentals_BabyBearExt4_Raw_zero;
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0___boxed(lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0(uint8_t);
-lean_object* l_Fundamentals_BabyBearExt4_Raw_twoAdicGenerator(lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2;
-lean_object* l_Fundamentals_BabyBearExt4_Raw_inv(lean_object*);
-lean_object* l_Fundamentals_Poseidon2_Raw_permute(lean_object*);
-lean_object* l_Fundamentals_BabyBearExt4_Raw_mul___boxed(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1(lean_object*);
-static lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7;
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0() {
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofCoeffs(lean_object*, lean_object*, lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_sub___boxed(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_inv(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_pow(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_mul___boxed(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofNat___boxed(lean_object*);
+extern lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_one;
+extern lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_zero;
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_hashSlice(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat___boxed(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_permute(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofBase(lean_object*);
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_permute, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0_value;
+static const lean_ctor_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*4 + 0, .m_other = 4, .m_tag = 0}, .m_objs = {((lean_object*)(((size_t)(16) << 1) | 1)),((lean_object*)(((size_t)(8) << 1) | 1)),((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0_value)}};
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1_value;
+LEAN_EXPORT const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1_value;
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1___boxed(lean_object*, lean_object*);
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__0, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__0_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*1, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1___boxed, .m_arity = 2, .m_num_fixed = 1, .m_objs = {((lean_object*)(((size_t)(4) << 1) | 1))} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__1 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__1_value;
+static const lean_ctor_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*3 + 0, .m_other = 3, .m_tag = 0}, .m_objs = {((lean_object*)(((size_t)(4) << 1) | 1)),((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__0_value),((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__1_value)}};
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__2 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__2_value;
+LEAN_EXPORT const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___closed__2_value;
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0(uint8_t);
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1(lean_object*);
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0___boxed, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__0_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat___boxed, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__1 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__1_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__2 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__2_value;
+static const lean_ctor_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*3 + 0, .m_other = 3, .m_tag = 0}, .m_objs = {((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__0_value),((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__1_value),((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__2_value)}};
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__3 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__3_value;
+LEAN_EXPORT const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___closed__3_value;
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0___boxed(lean_object*);
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0___boxed, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___closed__0_value;
+LEAN_EXPORT const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___closed__0_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofNat___boxed, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_add___boxed, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_mul___boxed, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_pow, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3_value;
+static lean_once_cell_t lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_sub___boxed, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5_value;
+static lean_once_cell_t lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_inv, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7_value;
+static lean_once_cell_t lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8;
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF;
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawAlgMap(lean_object*);
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_twoAdicGenerator, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0_value;
+LEAN_EXPORT const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_hashSlice, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0_value;
+static const lean_closure_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1_value;
+static const lean_ctor_object lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 0, .m_other = 2, .m_tag = 0}, .m_objs = {((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0_value),((lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1_value)}};
+static const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2 = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2_value;
+LEAN_EXPORT const lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw = (const lean_object*)&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2_value;
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__0(lean_object* v_value_8_, lean_object* v_i_9_){
 _start:
 {
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_Poseidon2_Raw_permute), 1, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1() {
-_start:
+lean_object* v___x_10_; lean_object* v___x_11_; 
+v___x_10_ = lean_array_to_list(v_value_8_);
+v___x_11_ = l_List_get_x3fInternal___redArg(v___x_10_, v_i_9_);
+lean_dec(v___x_10_);
+if (lean_obj_tag(v___x_11_) == 0)
 {
-lean_object* x_1; lean_object* x_2; lean_object* x_3; lean_object* x_4; lean_object* x_5; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0;
-x_2 = lean_unsigned_to_nat(0u);
-x_3 = lean_unsigned_to_nat(8u);
-x_4 = lean_unsigned_to_nat(16u);
-x_5 = lean_alloc_ctor(0, 4, 0);
-lean_ctor_set(x_5, 0, x_4);
-lean_ctor_set(x_5, 1, x_3);
-lean_ctor_set(x_5, 2, x_2);
-lean_ctor_set(x_5, 3, x_1);
-return x_5;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw() {
-_start:
-{
-lean_object* x_1; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1;
-return x_1;
-}
-}
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__0(lean_object* x_1, lean_object* x_2) {
-_start:
-{
-lean_object* x_3; lean_object* x_4; 
-x_3 = lean_array_to_list(x_1);
-x_4 = l_List_get_x3fInternal___redArg(x_3, x_2);
-lean_dec(x_3);
-if (lean_obj_tag(x_4) == 0)
-{
-lean_object* x_5; 
-x_5 = lean_unsigned_to_nat(0u);
-return x_5;
+lean_object* v___x_12_; 
+v___x_12_ = lean_unsigned_to_nat(0u);
+return v___x_12_;
 }
 else
 {
-lean_object* x_6; 
-x_6 = lean_ctor_get(x_4, 0);
-lean_inc(x_6);
-lean_dec_ref(x_4);
-return x_6;
+lean_object* v_val_13_; 
+v_val_13_ = lean_ctor_get(v___x_11_, 0);
+lean_inc(v_val_13_);
+lean_dec_ref_known(v___x_11_, 1);
+return v_val_13_;
 }
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1(lean_object* x_1, lean_object* x_2) {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1(lean_object* v___x_14_, lean_object* v_words_15_){
 _start:
 {
-lean_object* x_3; lean_object* x_4; lean_object* x_5; lean_object* x_6; lean_object* x_7; lean_object* x_8; lean_object* x_9; lean_object* x_10; lean_object* x_11; lean_object* x_12; lean_object* x_13; lean_object* x_14; lean_object* x_15; 
-x_3 = lean_unsigned_to_nat(0u);
-x_4 = lean_nat_mod(x_3, x_1);
-lean_inc_ref(x_2);
-x_5 = lean_apply_1(x_2, x_4);
-x_6 = lean_unsigned_to_nat(1u);
-x_7 = lean_nat_mod(x_6, x_1);
-lean_inc_ref(x_2);
-x_8 = lean_apply_1(x_2, x_7);
-x_9 = lean_unsigned_to_nat(2u);
-x_10 = lean_nat_mod(x_9, x_1);
-lean_inc_ref(x_2);
-x_11 = lean_apply_1(x_2, x_10);
-x_12 = lean_unsigned_to_nat(3u);
-x_13 = lean_nat_mod(x_12, x_1);
-x_14 = lean_apply_1(x_2, x_13);
-x_15 = l_Fundamentals_BabyBearExt4_Raw_ofCoeffs(x_5, x_8, x_11, x_14);
-return x_15;
+lean_object* v___x_16_; lean_object* v___x_17_; lean_object* v___x_18_; lean_object* v___x_19_; lean_object* v___x_20_; lean_object* v___x_21_; lean_object* v___x_22_; lean_object* v___x_23_; lean_object* v___x_24_; lean_object* v___x_25_; lean_object* v___x_26_; lean_object* v___x_27_; lean_object* v___x_28_; 
+v___x_16_ = lean_unsigned_to_nat(0u);
+v___x_17_ = lean_nat_mod(v___x_16_, v___x_14_);
+lean_inc_ref_n(v_words_15_, 3);
+v___x_18_ = lean_apply_1(v_words_15_, v___x_17_);
+v___x_19_ = lean_unsigned_to_nat(1u);
+v___x_20_ = lean_nat_mod(v___x_19_, v___x_14_);
+v___x_21_ = lean_apply_1(v_words_15_, v___x_20_);
+v___x_22_ = lean_unsigned_to_nat(2u);
+v___x_23_ = lean_nat_mod(v___x_22_, v___x_14_);
+v___x_24_ = lean_apply_1(v_words_15_, v___x_23_);
+v___x_25_ = lean_unsigned_to_nat(3u);
+v___x_26_ = lean_nat_mod(v___x_25_, v___x_14_);
+v___x_27_ = lean_apply_1(v_words_15_, v___x_26_);
+v___x_28_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofCoeffs(v___x_18_, v___x_21_, v___x_24_, v___x_27_);
+return v___x_28_;
 }
 }
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw() {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1___boxed(lean_object* v___x_29_, lean_object* v_words_30_){
 _start:
 {
-lean_object* x_1; lean_object* x_2; lean_object* x_3; lean_object* x_4; 
-x_1 = lean_alloc_closure((void*)(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__0), 2, 0);
-x_2 = lean_unsigned_to_nat(4u);
-x_3 = lean_alloc_closure((void*)(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1___boxed), 2, 1);
-lean_closure_set(x_3, 0, x_2);
-x_4 = lean_alloc_ctor(0, 3, 0);
-lean_ctor_set(x_4, 0, x_2);
-lean_ctor_set(x_4, 1, x_1);
-lean_ctor_set(x_4, 2, x_3);
-return x_4;
+lean_object* v_res_31_; 
+v_res_31_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1(v___x_29_, v_words_30_);
+lean_dec(v___x_29_);
+return v_res_31_;
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1___boxed(lean_object* x_1, lean_object* x_2) {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0(uint8_t v_b_40_){
 _start:
 {
-lean_object* x_3; 
-x_3 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw___lam__1(x_1, x_2);
-lean_dec(x_1);
-return x_3;
-}
-}
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0(uint8_t x_1) {
-_start:
+if (v_b_40_ == 0)
 {
-if (x_1 == 0)
-{
-lean_object* x_2; 
-x_2 = lean_unsigned_to_nat(0u);
-return x_2;
+lean_object* v___x_41_; 
+v___x_41_ = lean_unsigned_to_nat(0u);
+return v___x_41_;
 }
 else
 {
-lean_object* x_3; 
-x_3 = lean_unsigned_to_nat(1u);
-return x_3;
+lean_object* v___x_42_; 
+v___x_42_ = lean_unsigned_to_nat(1u);
+return v___x_42_;
 }
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1(lean_object* x_1) {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0___boxed(lean_object* v_b_43_){
 _start:
 {
-lean_object* x_2; 
-x_2 = l_Fundamentals_BabyBear_FBB_Raw_ofNat(x_1);
-return x_2;
+uint8_t v_b_boxed_44_; lean_object* v_res_45_; 
+v_b_boxed_44_ = lean_unbox(v_b_43_);
+v_res_45_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0(v_b_boxed_44_);
+return v_res_45_;
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__2(lean_object* x_1) {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1(lean_object* v_digest_46_){
 _start:
 {
-lean_object* x_2; 
-x_2 = lean_array_to_list(x_1);
-return x_2;
+lean_object* v___x_47_; 
+v___x_47_ = lean_array_to_list(v_digest_46_);
+return v___x_47_;
 }
 }
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw() {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0(lean_object* v_word_56_){
 _start:
 {
-lean_object* x_1; lean_object* x_2; lean_object* x_3; lean_object* x_4; 
-x_1 = lean_alloc_closure((void*)(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0___boxed), 1, 0);
-x_2 = lean_alloc_closure((void*)(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1___boxed), 1, 0);
-x_3 = lean_alloc_closure((void*)(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__2), 1, 0);
-x_4 = lean_alloc_ctor(0, 3, 0);
-lean_ctor_set(x_4, 0, x_1);
-lean_ctor_set(x_4, 1, x_2);
-lean_ctor_set(x_4, 2, x_3);
-return x_4;
+lean_inc(v_word_56_);
+return v_word_56_;
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0___boxed(lean_object* x_1) {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0___boxed(lean_object* v_word_57_){
 _start:
 {
-uint8_t x_2; lean_object* x_3; 
-x_2 = lean_unbox(x_1);
-x_3 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__0(x_2);
-return x_3;
+lean_object* v_res_58_; 
+v_res_58_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0(v_word_57_);
+lean_dec(v_word_57_);
+return v_res_58_;
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1___boxed(lean_object* x_1) {
+static lean_object* _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4(void){
 _start:
 {
-lean_object* x_2; 
-x_2 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw___lam__1(x_1);
-lean_dec(x_1);
-return x_2;
+lean_object* v___x_65_; lean_object* v___x_66_; lean_object* v___x_67_; lean_object* v___x_68_; lean_object* v___x_69_; lean_object* v___x_70_; lean_object* v___x_71_; 
+v___x_65_ = ((lean_object*)(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3));
+v___x_66_ = ((lean_object*)(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2));
+v___x_67_ = ((lean_object*)(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1));
+v___x_68_ = ((lean_object*)(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0));
+v___x_69_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_one;
+v___x_70_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_zero;
+v___x_71_ = lean_alloc_ctor(0, 6, 0);
+lean_ctor_set(v___x_71_, 0, v___x_70_);
+lean_ctor_set(v___x_71_, 1, v___x_69_);
+lean_ctor_set(v___x_71_, 2, v___x_68_);
+lean_ctor_set(v___x_71_, 3, v___x_67_);
+lean_ctor_set(v___x_71_, 4, v___x_66_);
+lean_ctor_set(v___x_71_, 5, v___x_65_);
+return v___x_71_;
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0(lean_object* x_1) {
+static lean_object* _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6(void){
 _start:
 {
-lean_inc(x_1);
-return x_1;
+lean_object* v___x_73_; lean_object* v___x_74_; lean_object* v___x_75_; 
+v___x_73_ = ((lean_object*)(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5));
+v___x_74_ = lean_obj_once(&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4, &lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4_once, _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4);
+v___x_75_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_75_, 0, v___x_74_);
+lean_ctor_set(v___x_75_, 1, v___x_73_);
+return v___x_75_;
 }
 }
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw() {
+static lean_object* _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8(void){
 _start:
 {
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0___boxed), 1, 0);
-return x_1;
+lean_object* v___x_77_; lean_object* v___x_78_; lean_object* v___x_79_; 
+v___x_77_ = ((lean_object*)(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7));
+v___x_78_ = lean_obj_once(&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6, &lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6_once, _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6);
+v___x_79_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_79_, 0, v___x_78_);
+lean_ctor_set(v___x_79_, 1, v___x_77_);
+return v___x_79_;
 }
 }
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0___boxed(lean_object* x_1) {
+static lean_object* _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF(void){
 _start:
 {
-lean_object* x_2; 
-x_2 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw___lam__0(x_1);
-lean_dec(x_1);
-return x_2;
+lean_object* v___x_80_; 
+v___x_80_ = lean_obj_once(&lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8, &lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8_once, _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8);
+return v___x_80_;
 }
 }
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0() {
+LEAN_EXPORT lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawAlgMap(lean_object* v_value_81_){
 _start:
 {
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_ofNat___boxed), 1, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_add___boxed), 2, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_mul___boxed), 2, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_pow), 2, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4() {
-_start:
-{
-lean_object* x_1; lean_object* x_2; lean_object* x_3; lean_object* x_4; lean_object* x_5; lean_object* x_6; lean_object* x_7; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3;
-x_2 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2;
-x_3 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1;
-x_4 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0;
-x_5 = l_Fundamentals_BabyBearExt4_Raw_one;
-x_6 = l_Fundamentals_BabyBearExt4_Raw_zero;
-x_7 = lean_alloc_ctor(0, 6, 0);
-lean_ctor_set(x_7, 0, x_6);
-lean_ctor_set(x_7, 1, x_5);
-lean_ctor_set(x_7, 2, x_4);
-lean_ctor_set(x_7, 3, x_3);
-lean_ctor_set(x_7, 4, x_2);
-lean_ctor_set(x_7, 5, x_1);
-return x_7;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_sub___boxed), 2, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6() {
-_start:
-{
-lean_object* x_1; lean_object* x_2; lean_object* x_3; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5;
-x_2 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4;
-x_3 = lean_alloc_ctor(0, 2, 0);
-lean_ctor_set(x_3, 0, x_2);
-lean_ctor_set(x_3, 1, x_1);
-return x_3;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_inv), 1, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8() {
-_start:
-{
-lean_object* x_1; lean_object* x_2; lean_object* x_3; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7;
-x_2 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6;
-x_3 = lean_alloc_ctor(0, 2, 0);
-lean_ctor_set(x_3, 0, x_2);
-lean_ctor_set(x_3, 1, x_1);
-return x_3;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF() {
-_start:
-{
-lean_object* x_1; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8;
-return x_1;
-}
-}
-LEAN_EXPORT lean_object* l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawAlgMap(lean_object* x_1) {
-_start:
-{
-lean_object* x_2; 
-x_2 = l_Fundamentals_BabyBearExt4_Raw_ofBase(x_1);
-return x_2;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_BabyBearExt4_Raw_twoAdicGenerator), 1, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw() {
-_start:
-{
-lean_object* x_1; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0;
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_Poseidon2_Raw_hashSlice), 1, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1() {
-_start:
-{
-lean_object* x_1; 
-x_1 = lean_alloc_closure((void*)(l_Fundamentals_Poseidon2_Raw_compressDigest), 2, 0);
-return x_1;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2() {
-_start:
-{
-lean_object* x_1; lean_object* x_2; lean_object* x_3; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1;
-x_2 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0;
-x_3 = lean_alloc_ctor(0, 2, 0);
-lean_ctor_set(x_3, 0, x_2);
-lean_ctor_set(x_3, 1, x_1);
-return x_3;
-}
-}
-static lean_object* _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw() {
-_start:
-{
-lean_object* x_1; 
-x_1 = l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2;
-return x_1;
+lean_object* v___x_82_; 
+v___x_82_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofBase(v_value_81_);
+return v___x_82_;
 }
 }
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_Swirl_Protocol_Noninteractive_Runtime_Core(uint8_t builtin);
-lean_object* initialize_Swirl_Protocol_Noninteractive_Ops(uint8_t builtin);
-lean_object* initialize_Swirl_Protocol_Noninteractive_Verifier_Runtime_Whir(uint8_t builtin);
-lean_object* initialize_Fundamentals_BabyBear_Raw(uint8_t builtin);
-lean_object* initialize_Fundamentals_BabyBearExt4_Raw(uint8_t builtin);
-lean_object* initialize_Fundamentals_Poseidon2_Raw(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_Core(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Ops(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_Whir(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_Raw(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw(uint8_t builtin);
+void lean_initialize_runtime_module();
 static bool _G_initialized = false;
-LEAN_EXPORT lean_object* initialize_Swirl_Protocol_Noninteractive_Runtime_RawInstances(uint8_t builtin) {
+LEAN_EXPORT lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances(uint8_t builtin) {
 lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
+lean_initialize_runtime_module();
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Swirl_Protocol_Noninteractive_Runtime_Core(builtin);
+res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Swirl_Protocol_Noninteractive_Ops(builtin);
+res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_Core(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Swirl_Protocol_Noninteractive_Verifier_Runtime_Whir(builtin);
+res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Ops(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Fundamentals_BabyBear_Raw(builtin);
+res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_Whir(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Fundamentals_BabyBearExt4_Raw(builtin);
+res = initialize_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_Raw(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Fundamentals_Poseidon2_Raw(builtin);
+res = initialize_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__0);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw___closed__1);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instDuplexSpongeSpecRaw);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instExtensionEncodingRaw);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTranscriptEncodingRaw);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instBaseFieldToNatRaw);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__0);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__1);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__2);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__3);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__4);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__5);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__6);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__7);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF___closed__8);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw___closed__0);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instTwoAdicGenRaw);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__0);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__1);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2 = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw___closed__2);
-l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw = _init_l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw();
-lean_mark_persistent(l_Swirl_Protocol_Noninteractive_Runtime_RawInstances_instMerkleHasherRaw);
+res = initialize_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF = _init_lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF();
+lean_mark_persistent(lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF);
 return lean_io_result_mk_ok(lean_box(0));
 }
 #ifdef __cplusplus

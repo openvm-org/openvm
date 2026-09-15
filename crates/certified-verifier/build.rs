@@ -12,7 +12,7 @@ use std::{
 /// Lean toolchain the vendored C sources were generated with. The
 /// generated C is ABI-coupled to this runtime version; keep in sync with
 /// README.md when refreshing the vendored sources.
-const LEAN_TOOLCHAIN: &str = "leanprover/lean4:v4.26.0";
+const LEAN_TOOLCHAIN: &str = "leanprover/lean4:v4.34.0-rc2";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=ELAN_HOME");
