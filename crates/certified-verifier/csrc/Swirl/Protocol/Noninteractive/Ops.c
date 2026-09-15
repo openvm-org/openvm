@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: Swirl.Protocol.Noninteractive.Ops
-// Imports: public import Init public import Swirl.Protocol.Noninteractive.Core public import Fundamentals.FieldOps
+// Imports: public import Init public meta import Init public import Swirl.Protocol.Noninteractive.Core public import Fundamentals.FieldOps
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -14,20 +14,26 @@
 extern "C" {
 #endif
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_Swirl_Protocol_Noninteractive_Core(uint8_t builtin);
-lean_object* initialize_Fundamentals_FieldOps(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Core(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dformal_Fundamentals_FieldOps(uint8_t builtin);
+void lean_initialize_runtime_module();
 static bool _G_initialized = false;
-LEAN_EXPORT lean_object* initialize_Swirl_Protocol_Noninteractive_Ops(uint8_t builtin) {
+LEAN_EXPORT lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Ops(uint8_t builtin) {
 lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
+lean_initialize_runtime_module();
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Swirl_Protocol_Noninteractive_Core(builtin);
+res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_Fundamentals_FieldOps(builtin);
+res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Core(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_swirl_x2drbr_x2dformal_Fundamentals_FieldOps(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 return lean_io_result_mk_ok(lean_box(0));

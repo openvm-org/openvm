@@ -15,8 +15,9 @@ scratch_dir="$(mktemp -d)"
 trap 'rm -rf -- "$scratch_dir"' EXIT
 
 for trace in "$vm_trace" "$dump_trace"; do
-  jq -r '.inputs[] | select(.[0] == "linkObjs") | .[1][][0]' "$trace"
+  jq -r '.inputs | .. | arrays | .[0]? | strings | select(endswith(".c.o.export"))' "$trace"
 done | sort -u > "$scratch_dir/generated-objects"
+test -s "$scratch_dir/generated-objects"
 
 while IFS= read -r object; do
   generated_c="${object%.o.export}"
