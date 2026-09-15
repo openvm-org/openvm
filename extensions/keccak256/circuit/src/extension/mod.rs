@@ -190,6 +190,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         inventory.add_air(xorin_air);
 
         let keccakf_state_bus = PermutationCheckBus::new(inventory.new_bus_idx());
+        // Metered execution stores both AIR indices; with reverse indexing the perm AIR
+        // must remain immediately before the op AIR (see PERM_AIR_IDX_OFFSET).
         let periphery_air = KeccakfPermAir::new(keccakf_state_bus);
         inventory.add_air(periphery_air);
 
