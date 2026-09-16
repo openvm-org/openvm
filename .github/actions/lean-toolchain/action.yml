@@ -5,7 +5,7 @@ inputs:
   toolchain:
     description: "Lean toolchain to install."
     required: false
-    default: "leanprover/lean4:v4.34.0-rc2"
+    default: "leanprover/lean4:v4.34.0"
 
 outputs:
   toolchain:

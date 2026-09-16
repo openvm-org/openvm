@@ -5,7 +5,7 @@
 //! Lean. The internal FFI harness invokes the linked Lean verifier on those exact inputs.
 //!
 //! The verifier itself is Lean compiled to C: the generated C sources use a lightweight link
-//! closure and Lean toolchain `leanprover/lean4:v4.34.0-rc2`. They are vendored under `csrc/`,
+//! closure and Lean toolchain `leanprover/lean4:v4.34.0`. They are vendored under `csrc/`,
 //! compiled by this crate's `build.rs`, and linked directly into the Rust target.
 
 use harness::{run_certified_verifier, verifier_error_from_exit_code};
