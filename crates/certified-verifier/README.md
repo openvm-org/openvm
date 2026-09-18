@@ -61,7 +61,7 @@ from `ws-fv`'s pinned dependencies.
 The wire format is a hand-written contract between the encoder and tests in
 `crates/certified-verifier/` and the Lean decoders in the pinned `ws-fv` revision. Validated at:
 
-- `ws-fv` commit `252d9e55c1a265406552411d25ec490b1feb0c3f`
+- `ws-fv` commit `b94bf5a2a38535d22a2e5a6633b7e6d8351b8a84`
   (`main`)
 - `openvm-org/stark-backend` commit `d667af5929d0ea9e5194adf639d6bddeb8c10f9a`
   (this workspace's pin).

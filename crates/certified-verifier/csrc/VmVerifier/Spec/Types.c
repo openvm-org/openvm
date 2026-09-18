@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: VmVerifier.Spec.Types
-// Imports: public import Init public meta import Init public import Fundamentals.BabyBearExt4.Raw public import Recursion.Spec.Common.VerifierPublicValues public import Swirl.Protocol.Noninteractive.Verifier.Runtime.Main
+// Imports: public import Init public meta import Init public import Fundamentals.Spec.BabyBearExt4.Raw public import Recursion.Spec.Common.VerifierPublicValues public import Swirl.Spec.ReferenceVerifier.Verifier.Runtime.Main
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -26,8 +26,8 @@ lean_object* lean_string_length(lean_object*);
 lean_object* lean_nat_sub(lean_object*, lean_object*);
 lean_object* lean_nat_mul(lean_object*, lean_object*);
 lean_object* lean_nat_add(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Std_Format_joinSep___at___00Array_repr___at___00instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0_spec__0_spec__1(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Std_Format_joinSep___at___00Array_repr___at___00instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0_spec__0_spec__1(lean_object*, lean_object*);
 lean_object* l_List_get_x3fInternal___redArg(lean_object*, lean_object*);
 lean_object* lp_workspace_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg(lean_object*, lean_object*);
 lean_object* lp_workspace_Recursion_Spec_VmSegmentPublicValues_fromList_x3f___redArg(lean_object*);
@@ -529,7 +529,7 @@ goto v_reusejp_137_;
 v_reusejp_137_:
 {
 lean_object* v___x_139_; lean_object* v___x_140_; 
-v___x_139_ = lp_swirl_x2drbr_x2dformal_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_132_);
+v___x_139_ = lp_swirl_x2drbr_x2dfv_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_132_);
 v___x_140_ = lean_alloc_ctor(5, 2, 0);
 lean_ctor_set(v___x_140_, 0, v___x_138_);
 lean_ctor_set(v___x_140_, 1, v___x_139_);
@@ -594,7 +594,7 @@ goto v_reusejp_152_;
 v_reusejp_152_:
 {
 lean_object* v___x_154_; lean_object* v___x_155_; lean_object* v___x_156_; 
-v___x_154_ = lp_swirl_x2drbr_x2dformal_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_147_);
+v___x_154_ = lp_swirl_x2drbr_x2dfv_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_147_);
 v___x_155_ = lean_alloc_ctor(5, 2, 0);
 lean_ctor_set(v___x_155_, 0, v___x_153_);
 lean_ctor_set(v___x_155_, 1, v___x_154_);
@@ -626,7 +626,7 @@ lean_dec(v_x_160_);
 v_head_163_ = lean_ctor_get(v_x_159_, 0);
 lean_inc(v_head_163_);
 lean_dec_ref_known(v_x_159_, 2);
-v___x_164_ = lp_swirl_x2drbr_x2dformal_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_163_);
+v___x_164_ = lp_swirl_x2drbr_x2dfv_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_163_);
 return v___x_164_;
 }
 else
@@ -636,7 +636,7 @@ lean_inc(v_tail_162_);
 v_head_165_ = lean_ctor_get(v_x_159_, 0);
 lean_inc(v_head_165_);
 lean_dec_ref_known(v_x_159_, 2);
-v___x_166_ = lp_swirl_x2drbr_x2dformal_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_165_);
+v___x_166_ = lp_swirl_x2drbr_x2dfv_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_head_165_);
 v___x_167_ = lp_workspace_List_foldl___at___00Std_Format_joinSep___at___00List_repr___at___00VmVerifier_instReprUserPublicValuesProof_repr_spec__0_spec__0_spec__1(v_x_160_, v___x_166_, v_tail_162_);
 return v___x_167_;
 }
@@ -708,7 +708,7 @@ else
 {
 lean_object* v___x_198_; lean_object* v___x_199_; lean_object* v___x_200_; lean_object* v___x_201_; lean_object* v___x_202_; lean_object* v___x_203_; lean_object* v___x_204_; lean_object* v___x_205_; uint8_t v___x_206_; lean_object* v___x_207_; 
 v___x_198_ = ((lean_object*)(lp_workspace_List_repr___at___00VmVerifier_instReprUserPublicValuesProof_repr_spec__0___redArg___closed__3));
-v___x_199_ = lp_swirl_x2drbr_x2dformal_Std_Format_joinSep___at___00Array_repr___at___00instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0_spec__0_spec__1(v_a_196_, v___x_198_);
+v___x_199_ = lp_swirl_x2drbr_x2dfv_Std_Format_joinSep___at___00Array_repr___at___00instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0_spec__0_spec__1(v_a_196_, v___x_198_);
 v___x_200_ = lean_obj_once(&lp_workspace_List_repr___at___00VmVerifier_instReprUserPublicValuesProof_repr_spec__0___redArg___closed__6, &lp_workspace_List_repr___at___00VmVerifier_instReprUserPublicValuesProof_repr_spec__0___redArg___closed__6_once, _init_lp_workspace_List_repr___at___00VmVerifier_instReprUserPublicValuesProof_repr_spec__0___redArg___closed__6);
 v___x_201_ = ((lean_object*)(lp_workspace_List_repr___at___00VmVerifier_instReprUserPublicValuesProof_repr_spec__0___redArg___closed__7));
 v___x_202_ = lean_alloc_ctor(5, 2, 0);
@@ -811,7 +811,7 @@ lean_ctor_set(v___x_254_, 1, v___x_253_);
 v___x_255_ = lean_alloc_ctor(5, 2, 0);
 lean_ctor_set(v___x_255_, 0, v___x_254_);
 lean_ctor_set(v___x_255_, 1, v___x_231_);
-v___x_256_ = lp_swirl_x2drbr_x2dformal_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_publicValuesCommit_230_);
+v___x_256_ = lp_swirl_x2drbr_x2dfv_instReprVector_repr___at___00Fundamentals_BabyBearExt4_instReprRaw_repr_spec__0___redArg(v_publicValuesCommit_230_);
 v___x_257_ = lean_alloc_ctor(4, 2, 0);
 lean_ctor_set(v___x_257_, 0, v___x_233_);
 lean_ctor_set(v___x_257_, 1, v___x_256_);
@@ -1268,9 +1268,9 @@ return v___x_353_;
 }
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Fundamentals_Spec_BabyBearExt4_Raw(uint8_t builtin);
 lean_object* initialize_workspace_Recursion_Spec_Common_VerifierPublicValues(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_Main(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Verifier_Runtime_Main(uint8_t builtin);
 void lean_initialize_runtime_module();
 static bool _G_initialized = false;
 LEAN_EXPORT lean_object* initialize_workspace_VmVerifier_Spec_Types(uint8_t builtin) {
@@ -1284,13 +1284,13 @@ lean_dec_ref(res);
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Fundamentals_Spec_BabyBearExt4_Raw(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 res = initialize_workspace_Recursion_Spec_Common_VerifierPublicValues(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_Main(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Verifier_Runtime_Main(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 lp_workspace_VmVerifier_constraintEvalCachedIndex = _init_lp_workspace_VmVerifier_constraintEvalCachedIndex();

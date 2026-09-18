@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: VmVerifier.Spec.Runtime
-// Imports: public import Init public meta import Init public import Fundamentals.Poseidon2.Raw public import Swirl.Protocol.Noninteractive.Runtime.RawInstances public import Swirl.Protocol.Noninteractive.Verifier.Runtime.Main public import Swirl.Protocol.Noninteractive.VerifierBabyBearPoseidon2 public import VmVerifier.Spec.Wire
+// Imports: public import Init public meta import Init public import Fundamentals.Spec.Poseidon2.Raw public import Swirl.Spec.ReferenceVerifier.Runtime.RawInstances public import Swirl.Spec.ReferenceVerifier.Verifier.Runtime.Main public import Swirl.Spec.ReferenceVerifier.VerifierBabyBearPoseidon2 public import VmVerifier.Spec.Wire
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -17,7 +17,7 @@ uint8_t lean_nat_dec_eq(lean_object*, lean_object*);
 lean_object* lean_nat_sub(lean_object*, lean_object*);
 lean_object* lean_nat_mul(lean_object*, lean_object*);
 lean_object* lean_nat_add(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_compressDigest(lean_object*, lean_object*);
 lean_object* l_List_reverse___redArg(lean_object*);
 lean_object* lp_workspace_Recursion_Spec_digestPrefixOf___redArg(lean_object*, lean_object*);
 lean_object* l_Array_ofFn___redArg(lean_object*, lean_object*);
@@ -32,24 +32,24 @@ lean_object* l_List_lengthTR___redArg(lean_object*);
 lean_object* lp_workspace_VmVerifier_MemoryDimensions_labelToIndex(lean_object*, lean_object*, lean_object*);
 lean_object* lean_nat_pow(lean_object*, lean_object*);
 lean_object* lean_nat_div(lean_object*, lean_object*);
-uint8_t lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_merkleVerify(lean_object*, lean_object*, lean_object*, lean_object*);
+uint8_t lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_merkleVerify(lean_object*, lean_object*, lean_object*, lean_object*);
 lean_object* l_instDecidableEqFin___boxed(lean_object*, lean_object*, lean_object*);
 uint8_t l_Array_instDecidableEqImpl___redArg(lean_object*, lean_object*, lean_object*);
 lean_object* l_List_get_x3fInternal___redArg(lean_object*, lean_object*);
 uint8_t l_Option_instDecidableEq___redArg(lean_object*, lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofBase(lean_object*);
-uint32_t lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_exitCode(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBearExt4_Raw_ofBase(lean_object*);
+uint32_t lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_exitCode(lean_object*);
 lean_object* lp_workspace_VmVerifier_parseVmProofData_x3f(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBear_FBB_Raw_ofNat(lean_object*);
 uint8_t lp_workspace_Recursion_Spec_instDecidableEqVkCommitData_decEq___redArg(lean_object*, lean_object*, lean_object*);
 uint8_t lean_nat_dec_lt(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_decodeAll(lean_object*, lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_decodeAll(lean_object*, lean_object*, lean_object*);
 lean_object* lp_workspace_VmVerifier_Spec_Wire_readBaseline(lean_object*);
 lean_object* lp_workspace_VmVerifier_Spec_Wire_readUserPvsProof(lean_object*);
-extern lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF;
-lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_hashSlice(lean_object*);
-extern lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_TranscriptM_init___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__0;
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_verify___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+extern lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF;
+lean_object* lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_hashSlice(lean_object*);
+extern lean_object* lp_swirl_x2drbr_x2dfv_Fundamentals_Runtime_TranscriptM_init___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__0;
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Verifier_Runtime_verify___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_rawZero;
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_rawOne;
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_rawZeroDigest___lam__0(lean_object*);
@@ -113,12 +113,12 @@ LEAN_EXPORT lean_object* lp_workspace_VmVerifier_VmStarkProofError_publicValues_
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_VmStarkProofError_publicValues_elim___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_instInhabitedVmStarkProofError_default;
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_instInhabitedVmStarkProofError;
-static const lean_closure_object lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_hashSlice, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_closure_object lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_hashSlice, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
 static const lean_object* lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__0_value;
-static const lean_closure_object lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
+static const lean_closure_object lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_compressDigest, .m_arity = 2, .m_num_fixed = 0, .m_objs = {} };
 static const lean_object* lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__1 = (const lean_object*)&lp_workspace_VmVerifier_vmStarkProtocolConfig___closed__1_value;
 LEAN_EXPORT lean_object* lp_workspace_VmVerifier_vmStarkProtocolConfig(lean_object*);
-static const lean_closure_object lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBearExt4_Raw_ofBase, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_closure_object lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBearExt4_Raw_ofBase, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
 static const lean_object* lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__0_value;
 static const lean_ctor_object lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1))}};
 static const lean_object* lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__1 = (const lean_object*)&lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__1_value;
@@ -191,7 +191,7 @@ _start:
 {
 lean_object* v___x_13_; lean_object* v___x_14_; 
 v___x_13_ = lp_workspace_VmVerifier_rawZeroDigest;
-v___x_14_ = lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest(v_values_12_, v___x_13_);
+v___x_14_ = lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_compressDigest(v_values_12_, v___x_13_);
 return v___x_14_;
 }
 }
@@ -222,7 +222,7 @@ v___x_26_ = lean_nat_add(v___x_24_, v_one_21_);
 lean_dec(v___x_24_);
 v___x_27_ = lp_workspace_VmVerifier_rawMerkleNode(v_n_22_, v_x_16_, v___x_26_);
 lean_dec(v_n_22_);
-v___x_28_ = lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest(v___x_25_, v___x_27_);
+v___x_28_ = lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_compressDigest(v___x_25_, v___x_27_);
 return v___x_28_;
 }
 }
@@ -567,9 +567,9 @@ v___x_148_ = lean_unsigned_to_nat(8u);
 v_paddedPc_149_ = l_Array_ofFn___redArg(v___x_148_, v___f_147_);
 v___x_150_ = lp_workspace_VmVerifier_rawLeafDigest(v_programCommit_144_);
 v___x_151_ = lp_workspace_VmVerifier_rawLeafDigest(v_initialRoot_145_);
-v___x_152_ = lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest(v___x_150_, v___x_151_);
+v___x_152_ = lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_compressDigest(v___x_150_, v___x_151_);
 v___x_153_ = lp_workspace_VmVerifier_rawLeafDigest(v_paddedPc_149_);
-v___x_154_ = lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_compressDigest(v___x_152_, v___x_153_);
+v___x_154_ = lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_compressDigest(v___x_152_, v___x_153_);
 return v___x_154_;
 }
 }
@@ -728,7 +728,7 @@ v___x_203_ = lean_nat_div(v___x_200_, v___x_202_);
 lean_dec(v___x_202_);
 lean_dec(v___x_200_);
 lean_inc_ref(v_publicValuesCommit_186_);
-v___x_204_ = lp_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw_merkleVerify(v_finalRoot_183_, v___x_203_, v_publicValuesCommit_186_, v_authenticationPath_184_);
+v___x_204_ = lp_swirl_x2drbr_x2dfv_Fundamentals_Poseidon2_Raw_merkleVerify(v_finalRoot_183_, v___x_203_, v_publicValuesCommit_186_, v_authenticationPath_184_);
 if (v___x_204_ == 0)
 {
 lean_del_object(v___x_191_);
@@ -783,7 +783,7 @@ _start:
 {
 lean_object* v___x_217_; lean_object* v___x_218_; 
 v___x_217_ = lean_unsigned_to_nat(2u);
-v___x_218_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_217_);
+v___x_218_ = lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_217_);
 return v___x_218_;
 }
 }
@@ -1381,10 +1381,10 @@ v_inner_389_ = lean_ctor_get(v_proof_387_, 0);
 lean_inc_ref(v_inner_389_);
 lean_dec_ref(v_proof_387_);
 v___f_390_ = ((lean_object*)(lp_workspace_VmVerifier_verifyVmStarkProofInner___closed__0));
-v___x_391_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF;
+v___x_391_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Runtime_RawInstances_rawFieldOpsEF;
 v___x_392_ = lp_workspace_VmVerifier_vmStarkProtocolConfig(v_vk_386_);
-v___x_393_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_TranscriptM_init___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__0;
-v___x_394_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_verify___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__1(v___x_391_, v___f_390_, v___x_392_, v_internalRecursiveVk_388_, v_inner_389_, v___x_393_);
+v___x_393_ = lp_swirl_x2drbr_x2dfv_Fundamentals_Runtime_TranscriptM_init___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__0;
+v___x_394_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Verifier_Runtime_verify___at___00Swirl_Protocol_Noninteractive_verifyBabyBearPoseidon2_spec__1(v___x_391_, v___f_390_, v___x_392_, v_internalRecursiveVk_388_, v_inner_389_, v___x_393_);
 if (lean_obj_tag(v___x_394_) == 0)
 {
 lean_object* v_a_395_; lean_object* v___x_397_; uint8_t v_isShared_398_; uint8_t v_isSharedCheck_402_; 
@@ -1517,7 +1517,7 @@ _start:
 lean_object* v___x_425_; uint32_t v___x_426_; 
 v___x_425_ = lean_alloc_ctor(0, 1, 0);
 lean_ctor_set(v___x_425_, 0, v_error_424_);
-v___x_426_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_exitCode(v___x_425_);
+v___x_426_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_exitCode(v___x_425_);
 lean_dec_ref_known(v___x_425_, 1);
 return v___x_426_;
 }
@@ -1535,7 +1535,7 @@ LEAN_EXPORT lean_object* lp_workspace_VmVerifier_decodeVmStarkProof(lean_object*
 _start:
 {
 lean_object* v___x_435_; 
-v___x_435_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_decodeAll(v_vkBytes_430_, v_proofBytes_432_, v_pvBytes_433_);
+v___x_435_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_decodeAll(v_vkBytes_430_, v_proofBytes_432_, v_pvBytes_433_);
 if (lean_obj_tag(v___x_435_) == 0)
 {
 lean_object* v_a_436_; lean_object* v___x_438_; uint8_t v_isShared_439_; uint8_t v_isSharedCheck_445_; 
@@ -1560,7 +1560,7 @@ goto v_resetjp_437_;
 v_resetjp_437_:
 {
 uint32_t v___x_440_; lean_object* v___x_441_; lean_object* v___x_443_; 
-v___x_440_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_exitCode(v_a_436_);
+v___x_440_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_exitCode(v_a_436_);
 lean_dec(v_a_436_);
 v___x_441_ = lean_box_uint32(v___x_440_);
 if (v_isShared_439_ == 0)
@@ -1965,7 +1965,7 @@ goto v_reusejp_527_;
 v_reusejp_527_:
 {
 uint32_t v___x_529_; lean_object* v___x_530_; lean_object* v___x_532_; 
-v___x_529_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_exitCode(v___x_528_);
+v___x_529_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_exitCode(v___x_528_);
 lean_dec_ref(v___x_528_);
 v___x_530_ = lean_box_uint32(v___x_529_);
 if (v_isShared_522_ == 0)
@@ -2044,10 +2044,10 @@ return v___x_543_;
 }
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_Main(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_VerifierBabyBearPoseidon2(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Fundamentals_Spec_Poseidon2_Raw(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Runtime_RawInstances(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Verifier_Runtime_Main(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_VerifierBabyBearPoseidon2(uint8_t builtin);
 lean_object* initialize_workspace_VmVerifier_Spec_Wire(uint8_t builtin);
 void lean_initialize_runtime_module();
 static bool _G_initialized = false;
@@ -2062,16 +2062,16 @@ lean_dec_ref(res);
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Fundamentals_Poseidon2_Raw(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Fundamentals_Spec_Poseidon2_Raw(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Runtime_RawInstances(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Runtime_RawInstances(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Verifier_Runtime_Main(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Verifier_Runtime_Main(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_VerifierBabyBearPoseidon2(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_VerifierBabyBearPoseidon2(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 res = initialize_workspace_VmVerifier_Spec_Wire(builtin);

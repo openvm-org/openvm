@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: VmVerifier.Spec.Wire
-// Imports: public import Init public meta import Init public import Swirl.Protocol.Noninteractive.Wire.RawToTyped public import VmVerifier.Spec.Types
+// Imports: public import Init public meta import Init public import Swirl.Spec.ReferenceVerifier.Wire.RawToTyped public import VmVerifier.Spec.Types
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -13,10 +13,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readDigest(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readDigest(lean_object*);
 lean_object* lean_array_fget_borrowed(lean_object*, lean_object*);
 lean_object* lean_uint32_to_nat(uint32_t);
-lean_object* lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBear_FBB_Raw_ofNat(lean_object*);
 lean_object* l_Array_ofFn___redArg(lean_object*, lean_object*);
 uint32_t lean_uint8_to_uint32(uint8_t);
 uint32_t lean_uint32_shift_left(uint32_t, uint32_t);
@@ -32,12 +32,12 @@ uint8_t lean_nat_dec_eq(lean_object*, lean_object*);
 lean_object* lean_nat_sub(lean_object*, lean_object*);
 lean_object* l_Nat_reprFast(lean_object*);
 lean_object* lean_string_append(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_asciiMagic(uint8_t, uint8_t, uint8_t, uint8_t);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readHeader(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readCanonicalFBB(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_runParser___redArg(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readArr___redArg(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_asciiMagic(uint8_t, uint8_t, uint8_t, uint8_t);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readHeader(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readCanonicalFBB(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_runParser___redArg(lean_object*, lean_object*);
+lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readArr___redArg(lean_object*, lean_object*);
 lean_object* lean_array_to_list(lean_object*);
 static lean_once_cell_t lp_workspace_VmVerifier_Spec_Wire_baselineMagic___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
 static lean_object* lp_workspace_VmVerifier_Spec_Wire_baselineMagic___closed__0;
@@ -77,7 +77,7 @@ v___x_1_ = 76;
 v___x_2_ = 66;
 v___x_3_ = 77;
 v___x_4_ = 86;
-v___x_5_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_asciiMagic(v___x_4_, v___x_3_, v___x_2_, v___x_1_);
+v___x_5_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_asciiMagic(v___x_4_, v___x_3_, v___x_2_, v___x_1_);
 return v___x_5_;
 }
 }
@@ -97,7 +97,7 @@ v___x_7_ = 83;
 v___x_8_ = 86;
 v___x_9_ = 80;
 v___x_10_ = 85;
-v___x_11_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_asciiMagic(v___x_10_, v___x_9_, v___x_8_, v___x_7_);
+v___x_11_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_asciiMagic(v___x_10_, v___x_9_, v___x_8_, v___x_7_);
 return v___x_11_;
 }
 }
@@ -152,7 +152,7 @@ lean_object* v___x_29_; uint32_t v___x_30_; lean_object* v___x_31_; lean_object*
 v___x_29_ = lean_array_fget_borrowed(v_a_27_, v_idx_28_);
 v___x_30_ = lean_unbox_uint32(v___x_29_);
 v___x_31_ = lean_uint32_to_nat(v___x_30_);
-v___x_32_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_31_);
+v___x_32_ = lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_31_);
 lean_dec(v___x_31_);
 return v___x_32_;
 }
@@ -171,7 +171,7 @@ LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Spec_Wire_readDigest(lean_objec
 _start:
 {
 lean_object* v___x_37_; 
-v___x_37_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readDigest(v_a_36_);
+v___x_37_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readDigest(v_a_36_);
 if (lean_obj_tag(v___x_37_) == 0)
 {
 lean_object* v_a_38_; lean_object* v_a_39_; lean_object* v___x_41_; uint8_t v_isShared_42_; uint8_t v_isSharedCheck_49_; 
@@ -426,7 +426,7 @@ _start:
 {
 lean_object* v___x_93_; lean_object* v___x_94_; 
 v___x_93_ = lp_workspace_VmVerifier_Spec_Wire_baselineMagic;
-v___x_94_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readHeader(v___x_93_, v_a_92_);
+v___x_94_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readHeader(v___x_93_, v_a_92_);
 if (lean_obj_tag(v___x_94_) == 0)
 {
 lean_object* v_a_95_; lean_object* v___x_96_; 
@@ -451,7 +451,7 @@ lean_inc(v_a_100_);
 v_a_101_ = lean_ctor_get(v___x_99_, 1);
 lean_inc(v_a_101_);
 lean_dec_ref_known(v___x_99_, 2);
-v___x_102_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readCanonicalFBB(v_a_101_);
+v___x_102_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readCanonicalFBB(v_a_101_);
 if (lean_obj_tag(v___x_102_) == 0)
 {
 lean_object* v_a_103_; lean_object* v_a_104_; lean_object* v___x_105_; 
@@ -460,7 +460,7 @@ lean_inc(v_a_103_);
 v_a_104_ = lean_ctor_get(v___x_102_, 1);
 lean_inc(v_a_104_);
 lean_dec_ref_known(v___x_102_, 2);
-v___x_105_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(v_a_104_);
+v___x_105_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(v_a_104_);
 if (lean_obj_tag(v___x_105_) == 0)
 {
 lean_object* v_a_106_; lean_object* v_a_107_; lean_object* v___x_108_; 
@@ -469,7 +469,7 @@ lean_inc(v_a_106_);
 v_a_107_ = lean_ctor_get(v___x_105_, 1);
 lean_inc(v_a_107_);
 lean_dec_ref_known(v___x_105_, 2);
-v___x_108_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(v_a_107_);
+v___x_108_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(v_a_107_);
 if (lean_obj_tag(v___x_108_) == 0)
 {
 lean_object* v_a_109_; lean_object* v_a_110_; lean_object* v___x_111_; 
@@ -478,7 +478,7 @@ lean_inc(v_a_109_);
 v_a_110_ = lean_ctor_get(v___x_108_, 1);
 lean_inc(v_a_110_);
 lean_dec_ref_known(v___x_108_, 2);
-v___x_111_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(v_a_110_);
+v___x_111_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readNat(v_a_110_);
 if (lean_obj_tag(v___x_111_) == 0)
 {
 lean_object* v_a_112_; lean_object* v_a_113_; lean_object* v___x_114_; 
@@ -552,7 +552,7 @@ uint32_t v___x_131_; lean_object* v___x_132_; lean_object* v___x_133_; lean_obje
 v___x_131_ = lean_unbox_uint32(v_a_103_);
 lean_dec(v_a_103_);
 v___x_132_ = lean_uint32_to_nat(v___x_131_);
-v___x_133_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_132_);
+v___x_133_ = lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_132_);
 lean_dec(v___x_132_);
 v___x_134_ = lean_alloc_ctor(0, 2, 0);
 lean_ctor_set(v___x_134_, 0, v_a_106_);
@@ -1189,7 +1189,7 @@ _start:
 {
 lean_object* v___x_250_; lean_object* v___x_251_; 
 v___x_250_ = lean_alloc_closure((void*)(lp_workspace_VmVerifier_Spec_Wire_readBaselineM), 1, 0);
-v___x_251_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_runParser___redArg(v___x_250_, v_data_249_);
+v___x_251_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_runParser___redArg(v___x_250_, v_data_249_);
 return v___x_251_;
 }
 }
@@ -1197,7 +1197,7 @@ LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Spec_Wire_readUserPvsProofM___l
 _start:
 {
 lean_object* v___x_253_; 
-v___x_253_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readCanonicalFBB(v___y_252_);
+v___x_253_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readCanonicalFBB(v___y_252_);
 if (lean_obj_tag(v___x_253_) == 0)
 {
 lean_object* v_a_254_; lean_object* v_a_255_; lean_object* v___x_257_; uint8_t v_isShared_258_; uint8_t v_isSharedCheck_265_; 
@@ -1225,7 +1225,7 @@ uint32_t v___x_259_; lean_object* v___x_260_; lean_object* v___x_261_; lean_obje
 v___x_259_ = lean_unbox_uint32(v_a_254_);
 lean_dec(v_a_254_);
 v___x_260_ = lean_uint32_to_nat(v___x_259_);
-v___x_261_ = lp_swirl_x2drbr_x2dformal_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_260_);
+v___x_261_ = lp_swirl_x2drbr_x2dfv_Fundamentals_BabyBear_FBB_Raw_ofNat(v___x_260_);
 lean_dec(v___x_260_);
 if (v_isShared_258_ == 0)
 {
@@ -1299,7 +1299,7 @@ _start:
 {
 lean_object* v___x_277_; lean_object* v___x_278_; 
 v___x_277_ = lp_workspace_VmVerifier_Spec_Wire_userPvsMagic;
-v___x_278_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readHeader(v___x_277_, v_a_276_);
+v___x_278_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readHeader(v___x_277_, v_a_276_);
 if (lean_obj_tag(v___x_278_) == 0)
 {
 lean_object* v_a_279_; lean_object* v___x_280_; lean_object* v___x_281_; 
@@ -1307,7 +1307,7 @@ v_a_279_ = lean_ctor_get(v___x_278_, 1);
 lean_inc(v_a_279_);
 lean_dec_ref_known(v___x_278_, 2);
 v___x_280_ = lean_alloc_closure((void*)(lp_workspace_VmVerifier_Spec_Wire_readDigest), 1, 0);
-v___x_281_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readArr___redArg(v___x_280_, v_a_279_);
+v___x_281_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readArr___redArg(v___x_280_, v_a_279_);
 if (lean_obj_tag(v___x_281_) == 0)
 {
 lean_object* v_a_282_; lean_object* v_a_283_; lean_object* v___f_284_; lean_object* v___x_285_; 
@@ -1317,7 +1317,7 @@ v_a_283_ = lean_ctor_get(v___x_281_, 1);
 lean_inc(v_a_283_);
 lean_dec_ref_known(v___x_281_, 2);
 v___f_284_ = ((lean_object*)(lp_workspace_VmVerifier_Spec_Wire_readUserPvsProofM___closed__0));
-v___x_285_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_readArr___redArg(v___f_284_, v_a_283_);
+v___x_285_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readArr___redArg(v___f_284_, v_a_283_);
 if (lean_obj_tag(v___x_285_) == 0)
 {
 lean_object* v_a_286_; lean_object* v_a_287_; lean_object* v___x_288_; 
@@ -1625,7 +1625,7 @@ _start:
 {
 lean_object* v___x_350_; lean_object* v___x_351_; 
 v___x_350_ = lean_alloc_closure((void*)(lp_workspace_VmVerifier_Spec_Wire_readUserPvsProofM), 1, 0);
-v___x_351_ = lp_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_Raw_runParser___redArg(v___x_350_, v_data_349_);
+v___x_351_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_runParser___redArg(v___x_350_, v_data_349_);
 return v___x_351_;
 }
 }
@@ -2282,7 +2282,7 @@ return v_res_529_;
 }
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_RawToTyped(uint8_t builtin);
+lean_object* initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Wire_RawToTyped(uint8_t builtin);
 lean_object* initialize_workspace_VmVerifier_Spec_Types(uint8_t builtin);
 void lean_initialize_runtime_module();
 static bool _G_initialized = false;
@@ -2297,7 +2297,7 @@ lean_dec_ref(res);
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_swirl_x2drbr_x2dformal_Swirl_Protocol_Noninteractive_Wire_RawToTyped(builtin);
+res = initialize_swirl_x2drbr_x2dfv_Swirl_Spec_ReferenceVerifier_Wire_RawToTyped(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 res = initialize_workspace_VmVerifier_Spec_Types(builtin);
