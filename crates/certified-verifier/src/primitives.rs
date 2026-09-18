@@ -4,6 +4,7 @@
 //! - `Bool`: 1 byte, `0x00`/`0x01`.
 //! - `Option<T>`: 1 byte tag (`0x00`/`0x01`), then `T` when some.
 //! - `Nat` / `UInt32`: 4 bytes little-endian `u32`.
+//! - Stored degree and proximity metadata: 8 bytes little-endian `u64`.
 //! - `Int`: 4 bytes little-endian sign-extended `i32`.
 //! - `List T`: `u32` length prefix, then values.
 //!
@@ -36,6 +37,12 @@ fn narrow_usize(value: usize) -> Result<u32> {
 #[inline]
 pub(crate) fn write_usize_as_u32<W: Write>(writer: &mut W, value: usize) -> Result<()> {
     write_u32(writer, narrow_usize(value)?)
+}
+
+/// Write a `usize` as an 8-byte wire `u64`.
+#[inline]
+pub(crate) fn write_usize_as_u64<W: Write>(writer: &mut W, value: usize) -> Result<()> {
+    writer.write_all(&(value as u64).to_le_bytes())
 }
 
 /// Write a Lean-side `Int` field as a 4-byte wire `i32`. Errors if the

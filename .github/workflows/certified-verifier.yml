@@ -32,7 +32,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   # TODO: Replace this commit with a ws-fv release tag once one is available.
-  WS_FV_REV: 1f92b767548bb8bb6a1c21a537f7d686c141909e
+  WS_FV_REV: b94bf5a2a38535d22a2e5a6633b7e6d8351b8a84
 
 jobs:
   openvm-tests:

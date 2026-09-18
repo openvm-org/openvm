@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     proof::Proof,
     test_utils::{FibFixture, TestFixture},
-    StarkEngine, SystemParams,
+    StarkEngine, SystemParams, WhirProximityStrategy,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2Config, BabyBearPoseidon2RefEngine, DuplexSponge, DIGEST_SIZE, F,
@@ -203,7 +203,9 @@ fn pv_digest_csv(public_values: &[Vec<F>]) -> String {
 
 fn baseline_digest(baseline: &VerificationBaseline) -> String {
     let mut parts = vec![
-        digest_csv(&baseline.app_exe_commit()),
+        digest_csv(&baseline.program_commit),
+        digest_csv(&baseline.initial_state),
+        baseline.initial_pc.to_string(),
         baseline.memory_dimensions.addr_space_height.to_string(),
         baseline.memory_dimensions.address_height.to_string(),
         baseline.num_user_pvs.to_string(),
@@ -269,17 +271,31 @@ fn green_proof() {
 
 #[test]
 fn green_vk() {
-    let fixture = fresh_fixture();
-    let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
-    assert_eq!(outcome.exit_code, 0, "vm_dump_proof rejected fixture");
-    let expected = format!("vk: {}", vk_digest_csv(&fixture.vk));
-    let found = outcome.stdout.lines().any(|line| line == expected.as_str());
-    assert!(
-        found,
-        "expected stdout to contain {expected:?}; stdout was:\n{}",
-        outcome.stdout
-    );
+    let mut fixture = fresh_fixture();
+    for proximity in [
+        WhirProximityStrategy::UniqueDecoding,
+        WhirProximityStrategy::SplitUniqueList {
+            m: usize::MAX,
+            list_start_round: 2,
+        },
+        WhirProximityStrategy::ListDecoding { m: 3 },
+    ] {
+        fixture.vk.inner.params.whir.proximity = proximity;
+        let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
+        let outcome = run_vm_dump_proof(&frame_vm_blobs(&vk_bytes, &proof_bytes, &pv_bytes));
+        assert_eq!(
+            outcome.exit_code, 0,
+            "vm_dump_proof rejected {proximity:?}: {}",
+            outcome.stderr
+        );
+        let expected = format!("vk: {}", vk_digest_csv(&fixture.vk));
+        let found = outcome.stdout.lines().any(|line| line == expected.as_str());
+        assert!(
+            found,
+            "expected stdout to contain {expected:?}; stdout was:\n{}",
+            outcome.stdout
+        );
+    }
 }
 
 #[test]
@@ -434,17 +450,28 @@ fn tampered_public_values() {
 fn tampered_vm_baseline() {
     let fixture = fresh_fixture();
     let (vk_bytes, proof_bytes, pv_bytes) = encode_fixture(&fixture);
-    let (mut baseline_bytes, user_pvs_bytes) = encode_vm_fixture();
-    baseline_bytes[HEADER_LEN + 3] ^= 0x80;
-    let outcome = run_vm_dump_proof(&frame_five_blobs([
-        &vk_bytes,
-        &baseline_bytes,
-        &proof_bytes,
-        &pv_bytes,
-        &user_pvs_bytes,
-    ]));
-    assert_eq!(outcome.exit_code, 13);
-    assert!(outcome.stderr.contains("baseline parse error"));
+    let (baseline_bytes, user_pvs_bytes) = encode_vm_fixture();
+    for (field, offset) in [
+        ("program commitment", HEADER_LEN),
+        ("initial state", HEADER_LEN + DIGEST_SIZE * 4),
+        ("initial PC", HEADER_LEN + 2 * DIGEST_SIZE * 4),
+    ] {
+        let mut invalid_baseline_bytes = baseline_bytes.clone();
+        invalid_baseline_bytes[offset..offset + 4].copy_from_slice(&F::ORDER_U32.to_le_bytes());
+        let outcome = run_vm_dump_proof(&frame_five_blobs([
+            &vk_bytes,
+            &invalid_baseline_bytes,
+            &proof_bytes,
+            &pv_bytes,
+            &user_pvs_bytes,
+        ]));
+        assert_eq!(outcome.exit_code, 13, "noncanonical {field}");
+        assert!(
+            outcome.stderr.contains("baseline parse error"),
+            "noncanonical {field}: {}",
+            outcome.stderr
+        );
+    }
 }
 
 #[test]
