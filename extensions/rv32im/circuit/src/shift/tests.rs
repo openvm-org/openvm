@@ -185,6 +185,27 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
+#[test]
+fn rv32_shift_limb_boundary_test() {
+
+    let b = [0xAB_u32, 0xCD, 0xEF, 0x12];
+    let c = [8_u32, 0, 0, 0];
+
+    let (sll_result, _, bit_shift) =
+        super::core::run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SLL, &b, &c);
+    assert_eq!(bit_shift, 0);
+    assert_eq!(sll_result, [0x00, 0xAB, 0xCD, 0xEF]);
+    let (srl_result, _, bit_shift) =
+        super::core::run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRL, &b, &c);
+    assert_eq!(bit_shift, 0);
+    assert_eq!(srl_result, [0xCD, 0xEF, 0x12, 0x00]);
+
+    let (sra_result, _, bit_shift) =
+        super::core::run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRA, &b, &c);
+    assert_eq!(bit_shift, 0);
+    assert_eq!(sra_result, [0xCD, 0xEF, 0x12, 0x00]);
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
