@@ -1,9 +1,8 @@
 # openvm-certified-verifier: vendored Lean certified verifiers
 
-> The contents of this crate are vendored from the private `ws-fv`
-> repo. That repo is the source of truth: do not edit in place without
-> upstreaming the change, and refresh the vendored copy (see below) when it
-> moves.
+> This crate's `csrc` is vendored from the [`openvm-fv`](https://github.com/axiom-crypto/openvm-fv)
+> repo. That repo is the source of truth: do not edit in place without upstreaming
+> the change, and refresh the vendored copy (see below) when it moves.
 
 This crate lets `openvm-sdk` (behind its `certified-verifier` feature) run the
 certified VM verifier extracted from its Lean formalization. It verifies both
@@ -42,7 +41,7 @@ any other executable.
 
 ## Regenerating csrc/
 
-From a checkout of `ws-fv` (requires elan/Lake):
+From a checkout of `openvm-fv` (requires elan/Lake):
 
 ```sh
 lake build vm_verify vm_dump_proof
@@ -54,20 +53,18 @@ Copy the `*.c` sources listed as `*.c.o.export` in the nested `inputs` of the tw
 - `.lake/build/bin/vm_dump_proof.trace`
 
 The consistency check resolves the object paths recorded in those traces, including sources built
-from `ws-fv`'s pinned dependencies.
+from `openvm-fv`'s pinned dependencies.
 
 ## Version coupling
 
 The wire format is a hand-written contract between the encoder and tests in
-`crates/certified-verifier/` and the Lean decoders in the pinned `ws-fv` revision. Validated at:
+`crates/certified-verifier/` and the Lean decoders in the pinned `openvm-fv` revision. Validated at:
 
-- `ws-fv` commit `b94bf5a2a38535d22a2e5a6633b7e6d8351b8a84`
-  (`main`)
-- `openvm-org/stark-backend` commit `d667af5929d0ea9e5194adf639d6bddeb8c10f9a`
-  (this workspace's pin).
+- `openvm-fv` tag `v1.0.0-rc.1`
+- `openvm-org/stark-backend` tag `v2.0.1`
 
 If either side moves (Lean structs, wire version, stark-backend proof
-shape, the Lean toolchain, or the verifier error mapping in `ws-fv`),
+shape, the Lean toolchain, or the verifier error mapping in `openvm-fv`),
 the encoder and the vendored C sources and vendored tests must be refreshed together.
 
 ## Testing standard examples
