@@ -23,73 +23,73 @@ lean_object* lean_get_stdout();
 lean_object* lean_get_stdin();
 lean_object* l_IO_FS_Stream_readBinToEnd(lean_object*);
 lean_object* lean_get_stderr();
-lean_object* lp_workspace_VmVerifier_Spec_Wire_parseFiveBlobs(lean_object*);
+lean_object* lp_openvm_x2dfv_VmVerifier_Spec_Wire_parseFiveBlobs(lean_object*);
 lean_object* lean_byte_array_size(lean_object*);
 lean_object* lean_string_append(lean_object*, lean_object*);
 lean_object* l_IO_FS_Stream_putStrLn(lean_object*, lean_object*);
-lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawVk(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(lean_object*);
-lean_object* lp_workspace_VmVerifier_Spec_Wire_readBaseline(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawProof(lean_object*);
-lean_object* lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawPublicValues(lean_object*, lean_object*);
-lean_object* lp_workspace_VmVerifier_Spec_Wire_readUserPvsProof(lean_object*);
+lean_object* lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawVk(lean_object*);
+lean_object* lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(lean_object*);
+lean_object* lp_openvm_x2dfv_VmVerifier_Spec_Wire_readBaseline(lean_object*);
+lean_object* lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawProof(lean_object*);
+lean_object* lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawPublicValues(lean_object*, lean_object*);
+lean_object* lp_openvm_x2dfv_VmVerifier_Spec_Wire_readUserPvsProof(lean_object*);
 lean_object* l_List_appendTR___redArg(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(lean_object*, lean_object*);
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ","};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0_value;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_rawDigestToCsv(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_rawFieldsToCsv(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_vkDigest(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_proofDigest(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_publicValuesDigest_spec__0(lean_object*, lean_object*);
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_publicValuesDigest___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "|"};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_publicValuesDigest___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_publicValuesDigest___closed__0_value;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_publicValuesDigest(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_digestToCsv(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_vkCommitDigest(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_baselineDigest(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_userPvsProofDigest_spec__0(lean_object*, lean_object*);
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_userPvsProofDigest___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ";"};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_userPvsProofDigest___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_userPvsProofDigest___closed__0_value;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_userPvsProofDigest(lean_object*);
-LEAN_EXPORT uint32_t lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_parseErrorExitCode___boxed(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0___boxed(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0___boxed(lean_object*, lean_object*);
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 46, .m_capacity = 46, .m_length = 45, .m_data = "vm_dump_proof: stdin framing error (received "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__0_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = " bytes)"};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__1 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__1_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 32, .m_capacity = 32, .m_length = 31, .m_data = "vm_dump_proof: vk parse error: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__2 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__2_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 38, .m_capacity = 38, .m_length = 37, .m_data = "vm_dump_proof: baseline parse error: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__3 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__3_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 35, .m_capacity = 35, .m_length = 34, .m_data = "vm_dump_proof: proof parse error: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__4 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__4_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 43, .m_capacity = 43, .m_length = 42, .m_data = "vm_dump_proof: public-values parse error: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__5 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__5_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 43, .m_capacity = 43, .m_length = 42, .m_data = "vm_dump_proof: user-PV proof parse error: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__6 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__6_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__7_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "vk: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__7 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__7_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 11, .m_capacity = 11, .m_length = 10, .m_data = "baseline: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__8 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__8_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__9_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = "proof: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__9 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__9_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "pv: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__10 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__10_value;
-static const lean_string_object lp_workspace_VmVerifier_DumpProof_main___closed__11_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 11, .m_capacity = 11, .m_length = 10, .m_data = "user-pvs: "};
-static const lean_object* lp_workspace_VmVerifier_DumpProof_main___closed__11 = (const lean_object*)&lp_workspace_VmVerifier_DumpProof_main___closed__11_value;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_main___boxed__const__1;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_main___boxed__const__2;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_main();
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_main___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(lean_object*, lean_object*);
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ","};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0_value;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_rawFieldsToCsv(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_vkDigest(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_proofDigest(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_publicValuesDigest_spec__0(lean_object*, lean_object*);
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "|"};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest___closed__0 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest___closed__0_value;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_vkCommitDigest(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_baselineDigest(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_userPvsProofDigest_spec__0(lean_object*, lean_object*);
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ";"};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest___closed__0 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest___closed__0_value;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest(lean_object*);
+LEAN_EXPORT uint32_t lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0___boxed(lean_object*, lean_object*);
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 46, .m_capacity = 46, .m_length = 45, .m_data = "vm_dump_proof: stdin framing error (received "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__0 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__0_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = " bytes)"};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__1 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__1_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 32, .m_capacity = 32, .m_length = 31, .m_data = "vm_dump_proof: vk parse error: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__2 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__2_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 38, .m_capacity = 38, .m_length = 37, .m_data = "vm_dump_proof: baseline parse error: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__3 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__3_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 35, .m_capacity = 35, .m_length = 34, .m_data = "vm_dump_proof: proof parse error: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__4 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__4_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 43, .m_capacity = 43, .m_length = 42, .m_data = "vm_dump_proof: public-values parse error: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__5 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__5_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 43, .m_capacity = 43, .m_length = 42, .m_data = "vm_dump_proof: user-PV proof parse error: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__6 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__6_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__7_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "vk: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__7 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__7_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 11, .m_capacity = 11, .m_length = 10, .m_data = "baseline: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__8 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__8_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__9_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = "proof: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__9 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__9_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "pv: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__10 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__10_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__11_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 11, .m_capacity = 11, .m_length = 10, .m_data = "user-pvs: "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__11 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__11_value;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__1;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__2;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main();
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed(lean_object*);
 LEAN_EXPORT lean_object* _lean_main();
-LEAN_EXPORT lean_object* lp_workspace_main___boxed(lean_object*);
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(lean_object* v_a_1_, lean_object* v_a_2_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_main___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(lean_object* v_a_1_, lean_object* v_a_2_){
 _start:
 {
 if (lean_obj_tag(v_a_1_) == 0)
@@ -152,53 +152,53 @@ goto _start;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_rawDigestToCsv(lean_object* v_digest_18_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv(lean_object* v_digest_18_){
 _start:
 {
 lean_object* v___x_19_; lean_object* v___x_20_; lean_object* v___x_21_; lean_object* v___x_22_; lean_object* v___x_23_; 
-v___x_19_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
+v___x_19_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
 v___x_20_ = lean_array_to_list(v_digest_18_);
 v___x_21_ = lean_box(0);
-v___x_22_ = lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(v___x_20_, v___x_21_);
+v___x_22_ = lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(v___x_20_, v___x_21_);
 v___x_23_ = l_String_intercalate(v___x_19_, v___x_22_);
 return v___x_23_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_rawFieldsToCsv(lean_object* v_values_24_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_rawFieldsToCsv(lean_object* v_values_24_){
 _start:
 {
 lean_object* v___x_25_; lean_object* v___x_26_; lean_object* v___x_27_; lean_object* v___x_28_; lean_object* v___x_29_; 
-v___x_25_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
+v___x_25_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
 v___x_26_ = lean_array_to_list(v_values_24_);
 v___x_27_ = lean_box(0);
-v___x_28_ = lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(v___x_26_, v___x_27_);
+v___x_28_ = lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_rawDigestToCsv_spec__0(v___x_26_, v___x_27_);
 v___x_29_ = l_String_intercalate(v___x_25_, v___x_28_);
 return v___x_29_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_vkDigest(lean_object* v_vk_30_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_vkDigest(lean_object* v_vk_30_){
 _start:
 {
 lean_object* v_preHash_31_; lean_object* v___x_32_; 
 v_preHash_31_ = lean_ctor_get(v_vk_30_, 1);
 lean_inc_ref(v_preHash_31_);
 lean_dec_ref(v_vk_30_);
-v___x_32_ = lp_workspace_VmVerifier_DumpProof_rawDigestToCsv(v_preHash_31_);
+v___x_32_ = lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv(v_preHash_31_);
 return v___x_32_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_proofDigest(lean_object* v_proof_33_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_proofDigest(lean_object* v_proof_33_){
 _start:
 {
 lean_object* v_commonMainCommit_34_; lean_object* v___x_35_; 
 v_commonMainCommit_34_ = lean_ctor_get(v_proof_33_, 0);
 lean_inc_ref(v_commonMainCommit_34_);
 lean_dec_ref(v_proof_33_);
-v___x_35_ = lp_workspace_VmVerifier_DumpProof_rawDigestToCsv(v_commonMainCommit_34_);
+v___x_35_ = lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv(v_commonMainCommit_34_);
 return v___x_35_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_publicValuesDigest_spec__0(lean_object* v_a_36_, lean_object* v_a_37_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_publicValuesDigest_spec__0(lean_object* v_a_36_, lean_object* v_a_37_){
 _start:
 {
 if (lean_obj_tag(v_a_36_) == 0)
@@ -231,7 +231,7 @@ goto v_resetjp_41_;
 v_resetjp_41_:
 {
 lean_object* v___x_44_; lean_object* v___x_46_; 
-v___x_44_ = lp_workspace_VmVerifier_DumpProof_rawFieldsToCsv(v_head_39_);
+v___x_44_ = lp_openvm_x2dfv_VmVerifier_DumpProof_rawFieldsToCsv(v_head_39_);
 if (v_isShared_43_ == 0)
 {
 lean_ctor_set(v___x_42_, 1, v_a_37_);
@@ -258,19 +258,19 @@ goto _start;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_publicValuesDigest(lean_object* v_publicValues_51_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest(lean_object* v_publicValues_51_){
 _start:
 {
 lean_object* v___x_52_; lean_object* v___x_53_; lean_object* v___x_54_; lean_object* v___x_55_; lean_object* v___x_56_; 
-v___x_52_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_publicValuesDigest___closed__0));
+v___x_52_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest___closed__0));
 v___x_53_ = lean_array_to_list(v_publicValues_51_);
 v___x_54_ = lean_box(0);
-v___x_55_ = lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_publicValuesDigest_spec__0(v___x_53_, v___x_54_);
+v___x_55_ = lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_publicValuesDigest_spec__0(v___x_53_, v___x_54_);
 v___x_56_ = l_String_intercalate(v___x_52_, v___x_55_);
 return v___x_56_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(lean_object* v_a_57_, lean_object* v_a_58_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(lean_object* v_a_57_, lean_object* v_a_58_){
 _start:
 {
 if (lean_obj_tag(v_a_57_) == 0)
@@ -330,19 +330,19 @@ goto _start;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_digestToCsv(lean_object* v_digest_71_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(lean_object* v_digest_71_){
 _start:
 {
 lean_object* v___x_72_; lean_object* v___x_73_; lean_object* v___x_74_; lean_object* v___x_75_; lean_object* v___x_76_; 
-v___x_72_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
+v___x_72_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
 v___x_73_ = lean_array_to_list(v_digest_71_);
 v___x_74_ = lean_box(0);
-v___x_75_ = lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(v___x_73_, v___x_74_);
+v___x_75_ = lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(v___x_73_, v___x_74_);
 v___x_76_ = l_String_intercalate(v___x_72_, v___x_75_);
 return v___x_76_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_vkCommitDigest(lean_object* v_commit_77_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_vkCommitDigest(lean_object* v_commit_77_){
 _start:
 {
 lean_object* v_cachedCommit_78_; lean_object* v_vkPreHash_79_; lean_object* v___x_81_; uint8_t v_isShared_82_; uint8_t v_isSharedCheck_90_; 
@@ -367,8 +367,8 @@ goto v_resetjp_80_;
 v_resetjp_80_:
 {
 lean_object* v___x_83_; lean_object* v___x_84_; lean_object* v___x_85_; lean_object* v___x_87_; 
-v___x_83_ = lp_workspace_VmVerifier_DumpProof_digestToCsv(v_cachedCommit_78_);
-v___x_84_ = lp_workspace_VmVerifier_DumpProof_digestToCsv(v_vkPreHash_79_);
+v___x_83_ = lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(v_cachedCommit_78_);
+v___x_84_ = lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(v_vkPreHash_79_);
 v___x_85_ = lean_box(0);
 if (v_isShared_82_ == 0)
 {
@@ -398,7 +398,7 @@ return v___x_88_;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_baselineDigest(lean_object* v_baseline_91_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_baselineDigest(lean_object* v_baseline_91_){
 _start:
 {
 lean_object* v_memoryDimensions_92_; lean_object* v_programCommit_93_; lean_object* v_initialState_94_; lean_object* v_initialPc_95_; lean_object* v_numUserPvs_96_; lean_object* v_appVkCommit_97_; lean_object* v_leafVkCommit_98_; lean_object* v_internalForLeafVkCommit_99_; lean_object* v_internalRecursiveVkCommit_100_; lean_object* v_addrSpaceHeight_101_; lean_object* v_addressHeight_102_; lean_object* v___x_104_; uint8_t v_isShared_105_; uint8_t v_isSharedCheck_131_; 
@@ -442,9 +442,9 @@ goto v_resetjp_103_;
 v_resetjp_103_:
 {
 lean_object* v___x_106_; lean_object* v___x_107_; lean_object* v___x_108_; lean_object* v___x_109_; lean_object* v___x_110_; lean_object* v___x_111_; lean_object* v___x_112_; lean_object* v___x_113_; lean_object* v___x_115_; 
-v___x_106_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_publicValuesDigest___closed__0));
-v___x_107_ = lp_workspace_VmVerifier_DumpProof_digestToCsv(v_programCommit_93_);
-v___x_108_ = lp_workspace_VmVerifier_DumpProof_digestToCsv(v_initialState_94_);
+v___x_106_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest___closed__0));
+v___x_107_ = lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(v_programCommit_93_);
+v___x_108_ = lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(v_initialState_94_);
 v___x_109_ = l_Nat_reprFast(v_initialPc_95_);
 v___x_110_ = l_Nat_reprFast(v_addrSpaceHeight_101_);
 v___x_111_ = l_Nat_reprFast(v_addressHeight_102_);
@@ -485,13 +485,13 @@ lean_ctor_set(v___x_119_, 1, v___x_118_);
 v___x_120_ = lean_alloc_ctor(1, 2, 0);
 lean_ctor_set(v___x_120_, 0, v___x_107_);
 lean_ctor_set(v___x_120_, 1, v___x_119_);
-v___x_121_ = lp_workspace_VmVerifier_DumpProof_vkCommitDigest(v_appVkCommit_97_);
+v___x_121_ = lp_openvm_x2dfv_VmVerifier_DumpProof_vkCommitDigest(v_appVkCommit_97_);
 v___x_122_ = l_List_appendTR___redArg(v___x_120_, v___x_121_);
-v___x_123_ = lp_workspace_VmVerifier_DumpProof_vkCommitDigest(v_leafVkCommit_98_);
+v___x_123_ = lp_openvm_x2dfv_VmVerifier_DumpProof_vkCommitDigest(v_leafVkCommit_98_);
 v___x_124_ = l_List_appendTR___redArg(v___x_122_, v___x_123_);
-v___x_125_ = lp_workspace_VmVerifier_DumpProof_vkCommitDigest(v_internalForLeafVkCommit_99_);
+v___x_125_ = lp_openvm_x2dfv_VmVerifier_DumpProof_vkCommitDigest(v_internalForLeafVkCommit_99_);
 v___x_126_ = l_List_appendTR___redArg(v___x_124_, v___x_125_);
-v___x_127_ = lp_workspace_VmVerifier_DumpProof_vkCommitDigest(v_internalRecursiveVkCommit_100_);
+v___x_127_ = lp_openvm_x2dfv_VmVerifier_DumpProof_vkCommitDigest(v_internalRecursiveVkCommit_100_);
 v___x_128_ = l_List_appendTR___redArg(v___x_126_, v___x_127_);
 v___x_129_ = l_String_intercalate(v___x_106_, v___x_128_);
 return v___x_129_;
@@ -499,7 +499,7 @@ return v___x_129_;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_userPvsProofDigest_spec__0(lean_object* v_a_132_, lean_object* v_a_133_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_userPvsProofDigest_spec__0(lean_object* v_a_132_, lean_object* v_a_133_){
 _start:
 {
 if (lean_obj_tag(v_a_132_) == 0)
@@ -532,7 +532,7 @@ goto v_resetjp_137_;
 v_resetjp_137_:
 {
 lean_object* v___x_140_; lean_object* v___x_142_; 
-v___x_140_ = lp_workspace_VmVerifier_DumpProof_digestToCsv(v_head_135_);
+v___x_140_ = lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(v_head_135_);
 if (v_isShared_139_ == 0)
 {
 lean_ctor_set(v___x_138_, 1, v_a_133_);
@@ -559,7 +559,7 @@ goto _start;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_userPvsProofDigest(lean_object* v_proof_147_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest(lean_object* v_proof_147_){
 _start:
 {
 lean_object* v_authenticationPath_148_; lean_object* v_publicValues_149_; lean_object* v_publicValuesCommit_150_; lean_object* v___x_151_; lean_object* v___x_152_; lean_object* v___x_153_; lean_object* v_authenticationPath_154_; lean_object* v___x_155_; lean_object* v___x_156_; lean_object* v_publicValues_157_; lean_object* v___x_158_; lean_object* v___x_159_; lean_object* v___x_160_; lean_object* v___x_161_; lean_object* v___x_162_; lean_object* v___x_163_; 
@@ -570,15 +570,15 @@ lean_inc(v_publicValues_149_);
 v_publicValuesCommit_150_ = lean_ctor_get(v_proof_147_, 2);
 lean_inc_ref(v_publicValuesCommit_150_);
 lean_dec_ref(v_proof_147_);
-v___x_151_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_userPvsProofDigest___closed__0));
+v___x_151_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest___closed__0));
 v___x_152_ = lean_box(0);
-v___x_153_ = lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_userPvsProofDigest_spec__0(v_authenticationPath_148_, v___x_152_);
+v___x_153_ = lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_userPvsProofDigest_spec__0(v_authenticationPath_148_, v___x_152_);
 v_authenticationPath_154_ = l_String_intercalate(v___x_151_, v___x_153_);
-v___x_155_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
-v___x_156_ = lp_workspace_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(v_publicValues_149_, v___x_152_);
+v___x_155_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_rawDigestToCsv___closed__0));
+v___x_156_ = lp_openvm_x2dfv_List_mapTR_loop___at___00VmVerifier_DumpProof_digestToCsv_spec__0(v_publicValues_149_, v___x_152_);
 v_publicValues_157_ = l_String_intercalate(v___x_155_, v___x_156_);
-v___x_158_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_publicValuesDigest___closed__0));
-v___x_159_ = lp_workspace_VmVerifier_DumpProof_digestToCsv(v_publicValuesCommit_150_);
+v___x_158_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest___closed__0));
+v___x_159_ = lp_openvm_x2dfv_VmVerifier_DumpProof_digestToCsv(v_publicValuesCommit_150_);
 v___x_160_ = lean_alloc_ctor(1, 2, 0);
 lean_ctor_set(v___x_160_, 0, v___x_159_);
 lean_ctor_set(v___x_160_, 1, v___x_152_);
@@ -592,7 +592,7 @@ v___x_163_ = l_String_intercalate(v___x_158_, v___x_162_);
 return v___x_163_;
 }
 }
-LEAN_EXPORT uint32_t lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(lean_object* v_x_164_){
+LEAN_EXPORT uint32_t lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(lean_object* v_x_164_){
 _start:
 {
 switch(lean_obj_tag(v_x_164_))
@@ -624,17 +624,17 @@ return v___x_168_;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_parseErrorExitCode___boxed(lean_object* v_x_169_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode___boxed(lean_object* v_x_169_){
 _start:
 {
 uint32_t v_res_170_; lean_object* v_r_171_; 
-v_res_170_ = lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(v_x_169_);
+v_res_170_ = lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(v_x_169_);
 lean_dec_ref(v_x_169_);
 v_r_171_ = lean_box_uint32(v_res_170_);
 return v_r_171_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(lean_object* v_s_172_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(lean_object* v_s_172_){
 _start:
 {
 lean_object* v___x_174_; lean_object* v_putStr_175_; lean_object* v___x_176_; 
@@ -646,33 +646,33 @@ v___x_176_ = lean_apply_2(v_putStr_175_, v_s_172_, lean_box(0));
 return v___x_176_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0___boxed(lean_object* v_s_177_, lean_object* v_a_178_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0___boxed(lean_object* v_s_177_, lean_object* v_a_178_){
 _start:
 {
 lean_object* v_res_179_; 
-v_res_179_ = lp_workspace_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(v_s_177_);
+v_res_179_ = lp_openvm_x2dfv_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(v_s_177_);
 return v_res_179_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(lean_object* v_s_180_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(lean_object* v_s_180_){
 _start:
 {
 uint32_t v___x_182_; lean_object* v___x_183_; lean_object* v___x_184_; 
 v___x_182_ = 10;
 v___x_183_ = lean_string_push(v_s_180_, v___x_182_);
-v___x_184_ = lp_workspace_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(v___x_183_);
+v___x_184_ = lp_openvm_x2dfv_IO_print___at___00IO_println___at___00VmVerifier_DumpProof_main_spec__0_spec__0(v___x_183_);
 return v___x_184_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0___boxed(lean_object* v_s_185_, lean_object* v_a_186_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0___boxed(lean_object* v_s_185_, lean_object* v_a_186_){
 _start:
 {
 lean_object* v_res_187_; 
-v_res_187_ = lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v_s_185_);
+v_res_187_ = lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v_s_185_);
 return v_res_187_;
 }
 }
-static lean_object* _init_lp_workspace_VmVerifier_DumpProof_main___boxed__const__1(void){
+static lean_object* _init_lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__1(void){
 _start:
 {
 uint32_t v___x_200_; lean_object* v___x_201_; 
@@ -681,7 +681,7 @@ v___x_201_ = lean_box_uint32(v___x_200_);
 return v___x_201_;
 }
 }
-static lean_object* _init_lp_workspace_VmVerifier_DumpProof_main___boxed__const__2(void){
+static lean_object* _init_lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__2(void){
 _start:
 {
 uint32_t v___x_202_; lean_object* v___x_203_; 
@@ -690,7 +690,7 @@ v___x_203_ = lean_box_uint32(v___x_202_);
 return v___x_203_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_main(){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main(){
 _start:
 {
 lean_object* v___x_205_; lean_object* v___x_206_; 
@@ -703,17 +703,17 @@ v_a_207_ = lean_ctor_get(v___x_206_, 0);
 lean_inc(v_a_207_);
 lean_dec_ref_known(v___x_206_, 1);
 v___x_208_ = lean_get_stderr();
-v___x_209_ = lp_workspace_VmVerifier_Spec_Wire_parseFiveBlobs(v_a_207_);
+v___x_209_ = lp_openvm_x2dfv_VmVerifier_Spec_Wire_parseFiveBlobs(v_a_207_);
 if (lean_obj_tag(v___x_209_) == 0)
 {
 lean_object* v___x_210_; lean_object* v___x_211_; lean_object* v___x_212_; lean_object* v___x_213_; lean_object* v___x_214_; lean_object* v___x_215_; lean_object* v___x_216_; 
-v___x_210_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__0));
+v___x_210_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__0));
 v___x_211_ = lean_byte_array_size(v_a_207_);
 lean_dec(v_a_207_);
 v___x_212_ = l_Nat_reprFast(v___x_211_);
 v___x_213_ = lean_string_append(v___x_210_, v___x_212_);
 lean_dec_ref(v___x_212_);
-v___x_214_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__1));
+v___x_214_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__1));
 v___x_215_ = lean_string_append(v___x_213_, v___x_214_);
 v___x_216_ = l_IO_FS_Stream_putStrLn(v___x_208_, v___x_215_);
 if (lean_obj_tag(v___x_216_) == 0)
@@ -739,7 +739,7 @@ goto v_resetjp_217_;
 v_resetjp_217_:
 {
 lean_object* v___x_220_; lean_object* v___x_222_; 
-v___x_220_ = lp_workspace_VmVerifier_DumpProof_main___boxed__const__1;
+v___x_220_ = lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__1;
 if (v_isShared_219_ == 0)
 {
 lean_ctor_set(v___x_218_, 0, v___x_220_);
@@ -829,7 +829,7 @@ lean_inc(v_fst_241_);
 v_snd_242_ = lean_ctor_get(v_snd_237_, 1);
 lean_inc(v_snd_242_);
 lean_dec(v_snd_237_);
-v___x_243_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawVk(v_fst_238_);
+v___x_243_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawVk(v_fst_238_);
 if (lean_obj_tag(v___x_243_) == 0)
 {
 lean_object* v_a_244_; lean_object* v___x_245_; lean_object* v___x_246_; lean_object* v___x_247_; lean_object* v___x_248_; 
@@ -840,8 +840,8 @@ lean_dec(v_fst_239_);
 v_a_244_ = lean_ctor_get(v___x_243_, 0);
 lean_inc_n(v_a_244_, 2);
 lean_dec_ref_known(v___x_243_, 1);
-v___x_245_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__2));
-v___x_246_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_244_);
+v___x_245_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__2));
+v___x_246_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_244_);
 v___x_247_ = lean_string_append(v___x_245_, v___x_246_);
 lean_dec_ref(v___x_246_);
 v___x_248_ = l_IO_FS_Stream_putStrLn(v___x_208_, v___x_247_);
@@ -868,7 +868,7 @@ goto v_resetjp_249_;
 v_resetjp_249_:
 {
 uint32_t v___x_252_; lean_object* v___x_253_; lean_object* v___x_255_; 
-v___x_252_ = lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(v_a_244_);
+v___x_252_ = lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(v_a_244_);
 lean_dec(v_a_244_);
 v___x_253_ = lean_box_uint32(v___x_252_);
 if (v_isShared_251_ == 0)
@@ -940,7 +940,7 @@ lean_object* v_a_267_; lean_object* v___x_268_;
 v_a_267_ = lean_ctor_get(v___x_243_, 0);
 lean_inc(v_a_267_);
 lean_dec_ref_known(v___x_243_, 1);
-v___x_268_ = lp_workspace_VmVerifier_Spec_Wire_readBaseline(v_fst_239_);
+v___x_268_ = lp_openvm_x2dfv_VmVerifier_Spec_Wire_readBaseline(v_fst_239_);
 if (lean_obj_tag(v___x_268_) == 0)
 {
 lean_object* v_a_269_; lean_object* v___x_270_; lean_object* v___x_271_; lean_object* v___x_272_; lean_object* v___x_273_; 
@@ -951,8 +951,8 @@ lean_dec(v_fst_240_);
 v_a_269_ = lean_ctor_get(v___x_268_, 0);
 lean_inc_n(v_a_269_, 2);
 lean_dec_ref_known(v___x_268_, 1);
-v___x_270_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__3));
-v___x_271_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_269_);
+v___x_270_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__3));
+v___x_271_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_269_);
 v___x_272_ = lean_string_append(v___x_270_, v___x_271_);
 lean_dec_ref(v___x_271_);
 v___x_273_ = l_IO_FS_Stream_putStrLn(v___x_208_, v___x_272_);
@@ -979,7 +979,7 @@ goto v_resetjp_274_;
 v_resetjp_274_:
 {
 uint32_t v___x_277_; lean_object* v___x_278_; lean_object* v___x_280_; 
-v___x_277_ = lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(v_a_269_);
+v___x_277_ = lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(v_a_269_);
 lean_dec(v_a_269_);
 v___x_278_ = lean_box_uint32(v___x_277_);
 if (v_isShared_276_ == 0)
@@ -1051,7 +1051,7 @@ lean_object* v_a_292_; lean_object* v___x_293_;
 v_a_292_ = lean_ctor_get(v___x_268_, 0);
 lean_inc(v_a_292_);
 lean_dec_ref_known(v___x_268_, 1);
-v___x_293_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawProof(v_fst_240_);
+v___x_293_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawProof(v_fst_240_);
 if (lean_obj_tag(v___x_293_) == 0)
 {
 lean_object* v_a_294_; lean_object* v___x_295_; lean_object* v___x_296_; lean_object* v___x_297_; lean_object* v___x_298_; 
@@ -1062,8 +1062,8 @@ lean_dec(v_fst_241_);
 v_a_294_ = lean_ctor_get(v___x_293_, 0);
 lean_inc_n(v_a_294_, 2);
 lean_dec_ref_known(v___x_293_, 1);
-v___x_295_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__4));
-v___x_296_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_294_);
+v___x_295_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__4));
+v___x_296_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_294_);
 v___x_297_ = lean_string_append(v___x_295_, v___x_296_);
 lean_dec_ref(v___x_296_);
 v___x_298_ = l_IO_FS_Stream_putStrLn(v___x_208_, v___x_297_);
@@ -1090,7 +1090,7 @@ goto v_resetjp_299_;
 v_resetjp_299_:
 {
 uint32_t v___x_302_; lean_object* v___x_303_; lean_object* v___x_305_; 
-v___x_302_ = lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(v_a_294_);
+v___x_302_ = lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(v_a_294_);
 lean_dec(v_a_294_);
 v___x_303_ = lean_box_uint32(v___x_302_);
 if (v_isShared_301_ == 0)
@@ -1163,7 +1163,7 @@ v_a_317_ = lean_ctor_get(v___x_293_, 0);
 lean_inc(v_a_317_);
 lean_dec_ref_known(v___x_293_, 1);
 lean_inc(v_a_267_);
-v___x_318_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawPublicValues(v_a_267_, v_fst_241_);
+v___x_318_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_readRawPublicValues(v_a_267_, v_fst_241_);
 if (lean_obj_tag(v___x_318_) == 0)
 {
 lean_object* v_a_319_; lean_object* v___x_320_; lean_object* v___x_321_; lean_object* v___x_322_; lean_object* v___x_323_; 
@@ -1174,8 +1174,8 @@ lean_dec(v_snd_242_);
 v_a_319_ = lean_ctor_get(v___x_318_, 0);
 lean_inc_n(v_a_319_, 2);
 lean_dec_ref_known(v___x_318_, 1);
-v___x_320_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__5));
-v___x_321_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_319_);
+v___x_320_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__5));
+v___x_321_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_319_);
 v___x_322_ = lean_string_append(v___x_320_, v___x_321_);
 lean_dec_ref(v___x_321_);
 v___x_323_ = l_IO_FS_Stream_putStrLn(v___x_208_, v___x_322_);
@@ -1202,7 +1202,7 @@ goto v_resetjp_324_;
 v_resetjp_324_:
 {
 uint32_t v___x_327_; lean_object* v___x_328_; lean_object* v___x_330_; 
-v___x_327_ = lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(v_a_319_);
+v___x_327_ = lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(v_a_319_);
 lean_dec(v_a_319_);
 v___x_328_ = lean_box_uint32(v___x_327_);
 if (v_isShared_326_ == 0)
@@ -1274,7 +1274,7 @@ lean_object* v_a_342_; lean_object* v___x_343_;
 v_a_342_ = lean_ctor_get(v___x_318_, 0);
 lean_inc(v_a_342_);
 lean_dec_ref_known(v___x_318_, 1);
-v___x_343_ = lp_workspace_VmVerifier_Spec_Wire_readUserPvsProof(v_snd_242_);
+v___x_343_ = lp_openvm_x2dfv_VmVerifier_Spec_Wire_readUserPvsProof(v_snd_242_);
 if (lean_obj_tag(v___x_343_) == 0)
 {
 lean_object* v_a_344_; lean_object* v___x_345_; lean_object* v___x_346_; lean_object* v___x_347_; lean_object* v___x_348_; 
@@ -1285,8 +1285,8 @@ lean_dec(v_a_267_);
 v_a_344_ = lean_ctor_get(v___x_343_, 0);
 lean_inc_n(v_a_344_, 2);
 lean_dec_ref_known(v___x_343_, 1);
-v___x_345_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__6));
-v___x_346_ = lp_swirl_x2drbr_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_344_);
+v___x_345_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__6));
+v___x_346_ = lp_swirl_x2dfv_Swirl_Protocol_Noninteractive_Wire_Raw_ParseError_toString(v_a_344_);
 v___x_347_ = lean_string_append(v___x_345_, v___x_346_);
 lean_dec_ref(v___x_346_);
 v___x_348_ = l_IO_FS_Stream_putStrLn(v___x_208_, v___x_347_);
@@ -1313,7 +1313,7 @@ goto v_resetjp_349_;
 v_resetjp_349_:
 {
 uint32_t v___x_352_; lean_object* v___x_353_; lean_object* v___x_355_; 
-v___x_352_ = lp_workspace_VmVerifier_DumpProof_parseErrorExitCode(v_a_344_);
+v___x_352_ = lp_openvm_x2dfv_VmVerifier_DumpProof_parseErrorExitCode(v_a_344_);
 lean_dec(v_a_344_);
 v___x_353_ = lean_box_uint32(v___x_352_);
 if (v_isShared_351_ == 0)
@@ -1386,47 +1386,47 @@ lean_dec_ref(v___x_208_);
 v_a_367_ = lean_ctor_get(v___x_343_, 0);
 lean_inc(v_a_367_);
 lean_dec_ref_known(v___x_343_, 1);
-v___x_368_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__7));
-v___x_369_ = lp_workspace_VmVerifier_DumpProof_vkDigest(v_a_267_);
+v___x_368_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__7));
+v___x_369_ = lp_openvm_x2dfv_VmVerifier_DumpProof_vkDigest(v_a_267_);
 v___x_370_ = lean_string_append(v___x_368_, v___x_369_);
 lean_dec_ref(v___x_369_);
-v___x_371_ = lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_370_);
+v___x_371_ = lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_370_);
 if (lean_obj_tag(v___x_371_) == 0)
 {
 lean_object* v___x_372_; lean_object* v___x_373_; lean_object* v___x_374_; lean_object* v___x_375_; 
 lean_dec_ref_known(v___x_371_, 1);
-v___x_372_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__8));
-v___x_373_ = lp_workspace_VmVerifier_DumpProof_baselineDigest(v_a_292_);
+v___x_372_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__8));
+v___x_373_ = lp_openvm_x2dfv_VmVerifier_DumpProof_baselineDigest(v_a_292_);
 v___x_374_ = lean_string_append(v___x_372_, v___x_373_);
 lean_dec_ref(v___x_373_);
-v___x_375_ = lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_374_);
+v___x_375_ = lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_374_);
 if (lean_obj_tag(v___x_375_) == 0)
 {
 lean_object* v___x_376_; lean_object* v___x_377_; lean_object* v___x_378_; lean_object* v___x_379_; 
 lean_dec_ref_known(v___x_375_, 1);
-v___x_376_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__9));
-v___x_377_ = lp_workspace_VmVerifier_DumpProof_proofDigest(v_a_317_);
+v___x_376_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__9));
+v___x_377_ = lp_openvm_x2dfv_VmVerifier_DumpProof_proofDigest(v_a_317_);
 v___x_378_ = lean_string_append(v___x_376_, v___x_377_);
 lean_dec_ref(v___x_377_);
-v___x_379_ = lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_378_);
+v___x_379_ = lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_378_);
 if (lean_obj_tag(v___x_379_) == 0)
 {
 lean_object* v___x_380_; lean_object* v___x_381_; lean_object* v___x_382_; lean_object* v___x_383_; 
 lean_dec_ref_known(v___x_379_, 1);
-v___x_380_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__10));
-v___x_381_ = lp_workspace_VmVerifier_DumpProof_publicValuesDigest(v_a_342_);
+v___x_380_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__10));
+v___x_381_ = lp_openvm_x2dfv_VmVerifier_DumpProof_publicValuesDigest(v_a_342_);
 v___x_382_ = lean_string_append(v___x_380_, v___x_381_);
 lean_dec_ref(v___x_381_);
-v___x_383_ = lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_382_);
+v___x_383_ = lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_382_);
 if (lean_obj_tag(v___x_383_) == 0)
 {
 lean_object* v___x_384_; lean_object* v___x_385_; lean_object* v___x_386_; lean_object* v___x_387_; 
 lean_dec_ref_known(v___x_383_, 1);
-v___x_384_ = ((lean_object*)(lp_workspace_VmVerifier_DumpProof_main___closed__11));
-v___x_385_ = lp_workspace_VmVerifier_DumpProof_userPvsProofDigest(v_a_367_);
+v___x_384_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_DumpProof_main___closed__11));
+v___x_385_ = lp_openvm_x2dfv_VmVerifier_DumpProof_userPvsProofDigest(v_a_367_);
 v___x_386_ = lean_string_append(v___x_384_, v___x_385_);
 lean_dec_ref(v___x_385_);
-v___x_387_ = lp_workspace_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_386_);
+v___x_387_ = lp_openvm_x2dfv_IO_println___at___00VmVerifier_DumpProof_main_spec__0(v___x_386_);
 if (lean_obj_tag(v___x_387_) == 0)
 {
 lean_object* v___x_389_; uint8_t v_isShared_390_; uint8_t v_isSharedCheck_395_; 
@@ -1450,7 +1450,7 @@ goto v_resetjp_388_;
 v_resetjp_388_:
 {
 lean_object* v___x_391_; lean_object* v___x_393_; 
-v___x_391_ = lp_workspace_VmVerifier_DumpProof_main___boxed__const__2;
+v___x_391_ = lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__2;
 if (v_isShared_390_ == 0)
 {
 lean_ctor_set(v___x_389_, 0, v___x_391_);
@@ -1740,11 +1740,11 @@ return v___x_442_;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_DumpProof_main___boxed(lean_object* v_a_445_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed(lean_object* v_a_445_){
 _start:
 {
 lean_object* v_res_446_; 
-v_res_446_ = lp_workspace_VmVerifier_DumpProof_main();
+v_res_446_ = lp_openvm_x2dfv_VmVerifier_DumpProof_main();
 return v_res_446_;
 }
 }
@@ -1752,11 +1752,11 @@ LEAN_EXPORT lean_object* _lean_main(){
 _start:
 {
 lean_object* v___x_448_; 
-v___x_448_ = lp_workspace_VmVerifier_DumpProof_main();
+v___x_448_ = lp_openvm_x2dfv_VmVerifier_DumpProof_main();
 return v___x_448_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_main___boxed(lean_object* v_a_449_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_main___boxed(lean_object* v_a_449_){
 _start:
 {
 lean_object* v_res_450_; 
@@ -1766,10 +1766,10 @@ return v_res_450_;
 }
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_workspace_VmVerifier_Spec_Wire(uint8_t builtin);
+lean_object* initialize_openvm_x2dfv_VmVerifier_Spec_Wire(uint8_t builtin);
 void lean_initialize_runtime_module();
 static bool _G_initialized = false;
-LEAN_EXPORT lean_object* initialize_workspace_VmVerifier_DumpProof(uint8_t builtin) {
+LEAN_EXPORT lean_object* initialize_openvm_x2dfv_VmVerifier_DumpProof(uint8_t builtin) {
 lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
@@ -1780,13 +1780,13 @@ lean_dec_ref(res);
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_workspace_VmVerifier_Spec_Wire(builtin);
+res = initialize_openvm_x2dfv_VmVerifier_Spec_Wire(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-lp_workspace_VmVerifier_DumpProof_main___boxed__const__1 = _init_lp_workspace_VmVerifier_DumpProof_main___boxed__const__1();
-lean_mark_persistent(lp_workspace_VmVerifier_DumpProof_main___boxed__const__1);
-lp_workspace_VmVerifier_DumpProof_main___boxed__const__2 = _init_lp_workspace_VmVerifier_DumpProof_main___boxed__const__2();
-lean_mark_persistent(lp_workspace_VmVerifier_DumpProof_main___boxed__const__2);
+lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__1 = _init_lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__1();
+lean_mark_persistent(lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__1);
+lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__2 = _init_lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__2();
+lean_mark_persistent(lp_openvm_x2dfv_VmVerifier_DumpProof_main___boxed__const__2);
 return lean_io_result_mk_ok(lean_box(0));
 }
 char ** lean_setup_args(int argc, char ** argv);
@@ -1803,7 +1803,7 @@ int main(int argc, char ** argv) {
 #endif
   lean_object* res;
   argv = lean_setup_args(argc, argv);
-  res = initialize_workspace_VmVerifier_DumpProof(1 /* builtin */);
+  res = initialize_openvm_x2dfv_VmVerifier_DumpProof(1 /* builtin */);
   lean_io_mark_end_initialization();
   if (lean_io_result_is_ok(res)) {
     lean_dec_ref(res);
