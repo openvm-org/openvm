@@ -9,7 +9,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     any_air_arc_vec,
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CommittedTraceData, TraceCommitter},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
@@ -281,6 +281,28 @@ fn check_boundary_columns(num_instructions: usize, corrupt: Option<(usize, usize
     } else {
         result.expect("valid boundary columns must verify");
     }
+}
+
+#[test]
+fn test_cached_trace_padding_pcs_skip_program_holes() {
+    let insn = Instruction::<BabyBear>::from_usize(LOADW, [0, 0, 0]);
+    let pc_base = 0x1000;
+    let program = Program::new_without_debug_infos_with_option(
+        &[Some(insn.clone()), None, Some(insn.clone()), Some(insn)],
+        pc_base,
+    );
+    let trace = generate_cached_trace(&program);
+    let pcs: Vec<u32> = (0..trace.height())
+        .map(|row| trace.row_slice(row).unwrap()[1].as_canonical_u32())
+        .collect();
+
+    assert_eq!(
+        &pcs[..3],
+        &[pc_base, pc_base + 2 * DEFAULT_PC_STEP, pc_base + 3 * DEFAULT_PC_STEP]
+    );
+    let padding_pc = pc_base + program.len() as u32 * DEFAULT_PC_STEP;
+    assert_eq!(pcs[3], padding_pc);
+    assert!(pcs.iter().filter(|pc| **pc == pcs[2]).count() == 1);
 }
 
 #[test_case::test_case(0; "empty")]
