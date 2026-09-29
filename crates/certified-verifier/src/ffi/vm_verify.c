@@ -12,8 +12,8 @@
 
 void *memcpy(void *dest, const void *src, size_t count);
 
-lean_object *initialize_workspace_VmVerifier_Spec_Runtime(uint8_t builtin);
-lean_object *lp_workspace_VmVerifier_verifyVmStarkProof(lean_object *vk, lean_object *baseline,
+lean_object *initialize_openvm_x2dfv_VmVerifier_Spec_Runtime(uint8_t builtin);
+lean_object *lp_openvm_x2dfv_VmVerifier_verifyVmStarkProof(lean_object *vk, lean_object *baseline,
                                              lean_object *proof, lean_object *public_values,
                                              lean_object *user_public_values);
 
@@ -53,7 +53,7 @@ static int32_t initialize_verifier(char *error_out, size_t error_capacity) {
     lean_setup_args(1, program_args);
     lean_initialize_runtime_module();
     lean_set_panic_messages(false);
-    lean_object *result = initialize_workspace_VmVerifier_Spec_Runtime(1 /* builtin */);
+    lean_object *result = initialize_openvm_x2dfv_VmVerifier_Spec_Runtime(1 /* builtin */);
     lean_set_panic_messages(true);
     lean_io_mark_end_initialization();
 
@@ -100,7 +100,7 @@ int32_t openvm_verify(const uint8_t *vk, size_t vk_len, const uint8_t *baseline,
         return init_code;
     }
 
-    lean_object *result = lp_workspace_VmVerifier_verifyVmStarkProof(
+    lean_object *result = lp_openvm_x2dfv_VmVerifier_verifyVmStarkProof(
         byte_array(vk, vk_len), byte_array(baseline, baseline_len),
         byte_array(proof, proof_len), byte_array(public_values, public_values_len),
         byte_array(user_public_values, user_public_values_len));
