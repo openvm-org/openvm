@@ -31,7 +31,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  OPENVM_FV_REV: v1.0.0-rc.1
+  OPENVM_FV_REV: v1.0.0-rc.2
 
 jobs:
   openvm-tests:

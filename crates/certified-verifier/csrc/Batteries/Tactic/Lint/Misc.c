@@ -1,0 +1,5719 @@
+// Lean compiler output
+// Module: Batteries.Tactic.Lint.Misc
+// Imports: public import Init public meta import Init public meta import Lean.Util.CollectFVars public meta import Lean.Util.CollectLevelParams public meta import Lean.Util.ForEachExpr public meta import Lean.Meta.Check public meta import Lean.Meta.Instances public meta import Lean.Util.Recognizers public meta import Lean.Linter.Deprecated public meta import Lean.DocString public meta import Batteries.Tactic.Lint.Basic
+#include <lean/lean.h>
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-label"
+#elif defined(__GNUC__) && !defined(__CLANG__)
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-label"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
+lean_object* lean_st_ref_get(lean_object*);
+uint8_t l_Lean_Name_isAnonymous(lean_object*);
+lean_object* l_Lean_Environment_setExporting(lean_object*, uint8_t);
+uint8_t l_Lean_Environment_contains(lean_object*, lean_object*, uint8_t);
+lean_object* l_Lean_PersistentHashMap_mkEmptyEntriesArray(lean_object*, lean_object*);
+lean_object* lean_mk_empty_array_with_capacity(lean_object*);
+extern lean_object* l_Lean_Options_empty;
+lean_object* l_Lean_MessageData_ofConstName(lean_object*, uint8_t);
+lean_object* l_Lean_Environment_getModuleIdxFor_x3f(lean_object*, lean_object*);
+lean_object* l_Lean_stringToMessageData(lean_object*);
+lean_object* l_Lean_MessageData_note(lean_object*);
+lean_object* l_Lean_Environment_header(lean_object*);
+lean_object* l_Lean_EnvironmentHeader_moduleNames(lean_object*);
+lean_object* lean_array_get(lean_object*, lean_object*, lean_object*);
+uint8_t l_Lean_isPrivateName(lean_object*);
+lean_object* l_Lean_MessageData_ofName(lean_object*);
+extern lean_object* l_Lean_unknownIdentifierMessageTag;
+uint8_t lean_expr_eqv(lean_object*, lean_object*);
+lean_object* l_Lean_Name_mkStr1(lean_object*);
+uint8_t l_Lean_Expr_isAppOfArity(lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_Expr_appFn_x21(lean_object*);
+lean_object* l_Lean_Expr_appArg_x21(lean_object*);
+lean_object* l_Lean_replaceRef(lean_object*, lean_object*);
+lean_object* lean_array_get_size(lean_object*);
+uint8_t lean_nat_dec_eq(lean_object*, lean_object*);
+lean_object* lean_array_to_list(lean_object*);
+lean_object* l_List_reverse___redArg(lean_object*);
+lean_object* l_Lean_MessageData_ofExpr(lean_object*);
+lean_object* l_Lean_MessageData_ofFormat(lean_object*);
+lean_object* l_Lean_MessageData_joinSep(lean_object*, lean_object*);
+uint8_t lean_nat_dec_lt(lean_object*, lean_object*);
+lean_object* lean_mk_array(lean_object*, lean_object*);
+lean_object* l_Lean_collectFVars(lean_object*, lean_object*);
+uint8_t lean_nat_dec_le(lean_object*, lean_object*);
+size_t lean_usize_of_nat(lean_object*);
+uint8_t lean_usize_dec_eq(size_t, size_t);
+lean_object* lean_array_uget_borrowed(lean_object*, size_t);
+lean_object* l_Lean_Meta_getFVarLocalDecl___redArg(lean_object*, lean_object*, lean_object*, lean_object*);
+size_t lean_usize_add(size_t, size_t);
+lean_object* l_Lean_Expr_fvarId_x21(lean_object*);
+uint8_t l___private_Lean_Data_Name_0__Lean_Name_quickCmpImpl(lean_object*, lean_object*);
+lean_object* lean_array_push(lean_object*, lean_object*);
+uint8_t l_Lean_LocalDecl_binderInfo(lean_object*);
+uint8_t l_Lean_BinderInfo_isExplicit(uint8_t);
+uint8_t lp_batteries_Lean_Environment_isAutoDecl(lean_object*, lean_object*);
+uint8_t l_Lean_Linter_isDeprecated(lean_object*, lean_object*);
+lean_object* l_Lean_Environment_find_x3f(lean_object*, lean_object*, uint8_t);
+lean_object* l_Lean_ConstantInfo_type(lean_object*);
+lean_object* l___private_Lean_Meta_Basic_0__Lean_Meta_forallTelescopeReducingAuxAux(lean_object*, uint8_t, lean_object*, lean_object*, lean_object*, uint8_t, uint8_t, lean_object*, lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_ConstantInfo_value_x3f(lean_object*, uint8_t);
+lean_object* l_Array_append___redArg(lean_object*, lean_object*);
+lean_object* l_Lean_LocalDecl_fvarId(lean_object*);
+lean_object* l_Lean_LocalDecl_userName(lean_object*);
+uint8_t l_Lean_Name_isInternal(lean_object*);
+uint8_t l_Lean_BinderInfo_isInstImplicit(uint8_t);
+uint8_t l_Lean_Name_hasMacroScopes(lean_object*);
+uint8_t lean_usize_dec_lt(size_t, size_t);
+lean_object* lean_array_uset(lean_object*, size_t, lean_object*);
+lean_object* lean_array_uget(lean_object*, size_t);
+lean_object* lean_nat_add(lean_object*, lean_object*);
+lean_object* l_Nat_reprFast(lean_object*);
+lean_object* l_Lean_Expr_fvar___override(lean_object*);
+lean_object* l_Lean_MessageData_bracket(lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_Meta_isTypeCorrect(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+uint8_t l_Lean_Environment_isProjectionFn(lean_object*, lean_object*);
+uint8_t l_Lean_Expr_hasSorry(lean_object*);
+uint8_t l_Lean_Expr_isAppOfArity_x27(lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_mkAppN(lean_object*, lean_object*);
+size_t lean_array_size(lean_object*);
+lean_object* l_Lean_Expr_headBeta(lean_object*);
+lean_object* l_Lean_Expr_app___override(lean_object*, lean_object*);
+lean_object* l_Lean_LocalDecl_type(lean_object*);
+lean_object* l_Lean_LocalDecl_value_x3f(lean_object*, uint8_t);
+lean_object* l_Array_zipIdx___redArg(lean_object*, lean_object*);
+lean_object* l_Lean_findDocString_x3f(lean_object*, lean_object*, uint8_t, lean_object*, lean_object*, lean_object*);
+lean_object* lean_io_error_to_string(lean_object*);
+lean_object* l_Lean_Meta_isProp(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+uint8_t lean_string_dec_eq(lean_object*, lean_object*);
+lean_object* l_Lean_Meta_isInstance___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg(lean_object*, lean_object*, uint8_t, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8(lean_object*, lean_object*, lean_object*, uint8_t, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg(size_t, size_t, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT uint8_t lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7(lean_object*, uint8_t, lean_object*, size_t, size_t, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 13, .m_capacity = 13, .m_length = 12, .m_data = "\n  argument "};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__0 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__0_value;
+static lean_once_cell_t lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__1;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 3, .m_capacity = 3, .m_length = 2, .m_data = ": "};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__2 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__2_value;
+static lean_once_cell_t lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__3;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 4, .m_capacity = 4, .m_length = 3, .m_data = " : "};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__4 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__4_value;
+static lean_once_cell_t lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "("};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__6 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__6_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__7_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ")"};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__7 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__7_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "{"};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__8 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__8_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__9_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "}"};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__9 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__9_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 4, .m_capacity = 4, .m_length = 1, .m_data = "⦃"};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__10 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__10_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__11_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 4, .m_capacity = 4, .m_length = 1, .m_data = "⦄"};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__11 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__11_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__12_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "["};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__12 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__12_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__13_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "]"};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__13 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__13_value;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__14_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "let "};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__14 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__14_value;
+static lean_once_cell_t lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__15_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__15;
+static const lean_string_object lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__16_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = " := "};
+static const lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__16 = (const lean_object*)&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__16_value;
+static lean_once_cell_t lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__17_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__17;
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg(lean_object*, size_t, size_t, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg(uint8_t, lean_object*, size_t, size_t, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 12, .m_capacity = 12, .m_length = 11, .m_data = "ProofWanted"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__0_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__0_value),LEAN_SCALAR_PTR_LITERAL(63, 117, 69, 142, 49, 121, 36, 13)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__1_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 10, .m_capacity = 10, .m_length = 9, .m_data = "DefWanted"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__2_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__2_value),LEAN_SCALAR_PTR_LITERAL(138, 226, 64, 6, 194, 147, 206, 17)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__3 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__3_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ":"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__4_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__5_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__5;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 17, .m_capacity = 17, .m_length = 16, .m_data = " unused argument"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__6 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__6_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__7;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "s"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__8 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__8_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__9_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 1, .m_capacity = 1, .m_length = 0, .m_data = ""};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__9 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__9_value;
+static const lean_array_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_array_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 246}, .m_size = 0, .m_capacity = 0, .m_data = {}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__10 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__10_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__11_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__11;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__13_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__13;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__0;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__2;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__3;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__4;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__5_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__5;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 24, .m_capacity = 24, .m_length = 23, .m_data = "A private declaration `"};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__6 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__6_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 79, .m_capacity = 79, .m_length = 78, .m_data = "` (from the current module) exists but would need to be public to access here."};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__8 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__8_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__9_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__9;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 23, .m_capacity = 23, .m_length = 22, .m_data = "A public declaration `"};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__10 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__10_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__11_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__11;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__12_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 68, .m_capacity = 68, .m_length = 67, .m_data = "` exists but is imported privately; consider adding `public import "};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__12 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__12_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__13_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__13;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__14_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 3, .m_capacity = 3, .m_length = 2, .m_data = "`."};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__14 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__14_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__15_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__15;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__16_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 10, .m_capacity = 10, .m_length = 9, .m_data = "` (from `"};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__16 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__16_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__17_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__17;
+static const lean_string_object lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__18_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 54, .m_capacity = 54, .m_length = 53, .m_data = "`) exists but would need to be public to access here."};
+static const lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__18 = (const lean_object*)&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__18_value;
+static lean_once_cell_t lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__19_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__19;
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 19, .m_capacity = 19, .m_length = 18, .m_data = "Unknown constant `"};
+static const lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__0 = (const lean_object*)&lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__0_value;
+static lean_once_cell_t lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__1;
+static const lean_string_object lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "`"};
+static const lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__2 = (const lean_object*)&lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__2_value;
+static lean_once_cell_t lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__3;
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__1___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__1___boxed, .m_arity = 6, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__0_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 21, .m_capacity = 21, .m_length = 20, .m_data = "No unused arguments."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__1_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__1_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__2_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__3;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 18, .m_capacity = 18, .m_length = 17, .m_data = "UNUSED ARGUMENTS."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__4_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__4_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__5_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__6;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__7;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments;
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2(size_t, size_t, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3(uint8_t, lean_object*, size_t, size_t, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4(lean_object*, size_t, size_t, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT uint8_t lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 30, .m_capacity = 30, .m_length = 29, .m_data = " missing documentation string"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__0_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 11, .m_capacity = 11, .m_length = 10, .m_data = "definition"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__2_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 6, .m_capacity = 6, .m_length = 5, .m_data = "axiom"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__3 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__3_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 9, .m_capacity = 9, .m_length = 8, .m_data = "constant"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__4_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 10, .m_capacity = 10, .m_length = 9, .m_data = "inductive"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__5_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 12, .m_capacity = 12, .m_length = 11, .m_data = "delaborator"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__6 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__6_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__7_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "quot"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__7 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__7_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 14, .m_capacity = 14, .m_length = 13, .m_data = "parenthesizer"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__8 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__8_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__9_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 10, .m_capacity = 10, .m_length = 9, .m_data = "formatter"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__9 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__9_value;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_docBlame___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___boxed, .m_arity = 6, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__0_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 42, .m_capacity = 42, .m_length = 41, .m_data = "No definitions are missing documentation."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__1_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_docBlame___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__1_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__2_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlame___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__3;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlame___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 47, .m_capacity = 47, .m_length = 46, .m_data = "DEFINITIONS ARE MISSING DOCUMENTATION STRINGS:"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__4_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_docBlame___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__4_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__5_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlame___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__6;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlame___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___closed__7;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 16, .m_capacity = 16, .m_length = 15, .m_data = "Prop projection"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__0_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = "theorem"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__1_value;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___boxed, .m_arity = 6, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__0_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 39, .m_capacity = 39, .m_length = 38, .m_data = "No theorems are missing documentation."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__1_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__1_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__2_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__3;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 44, .m_capacity = 44, .m_length = 43, .m_data = "THEOREMS ARE MISSING DOCUMENTATION STRINGS:"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__4_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__4_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__5_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__6;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__7;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 34, .m_capacity = 34, .m_length = 33, .m_data = "the statement doesn't type check."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__0_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__1;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__2;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_checkType___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___boxed, .m_arity = 6, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__0_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_checkType___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 82, .m_capacity = 82, .m_length = 81, .m_data = "The statements of all declarations type-check with default reducibility settings."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__1_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_checkType___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__1_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__2_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_checkType___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__3;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_checkType___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 64, .m_capacity = 64, .m_length = 63, .m_data = "THE STATEMENTS OF THE FOLLOWING DECLARATIONS DO NOT TYPE-CHECK."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__4_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_checkType___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__4_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_checkType___closed__5_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_checkType___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__6;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_checkType___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___closed__7;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_checkType;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 29, .m_capacity = 29, .m_length = 28, .m_data = "LHS equals RHS syntactically"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__0_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__1;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__2;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 3, .m_capacity = 3, .m_length = 2, .m_data = "Eq"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__3 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__3_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__3_value),LEAN_SCALAR_PTR_LITERAL(143, 37, 101, 248, 9, 246, 191, 223)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__4_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 4, .m_capacity = 4, .m_length = 3, .m_data = "Iff"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__5_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__5_value),LEAN_SCALAR_PTR_LITERAL(19, 54, 203, 28, 77, 25, 163, 137)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__6 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__6_value;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_synTaut___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___boxed, .m_arity = 7, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__0_value;
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_synTaut___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*1, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1___boxed, .m_arity = 7, .m_num_fixed = 1, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__0_value)} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__1_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_synTaut___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 43, .m_capacity = 43, .m_length = 42, .m_data = "No declarations are syntactic tautologies."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__2_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_synTaut___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__2_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__3 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__3_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_synTaut___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__4;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_synTaut___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 491, .m_capacity = 491, .m_length = 480, .m_data = "THE FOLLOWING DECLARATIONS ARE SYNTACTIC TAUTOLOGIES. This usually means that they are of the form `∀ a b ... z, e₁ = e₂` where `e₁` and `e₂` are identical expressions. We call declarations of this form syntactic tautologies. Such lemmas are (mostly) useless and sometimes introduced unintentionally when proving basic facts using `rfl`, when elaboration results in a different term than the user intended. You should check that the declaration really says what you think it does."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__5_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_synTaut___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__5_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__6 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__6_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_synTaut___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__7;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_synTaut___closed__8_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___closed__8;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut;
+static const lean_array_object lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_array_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 246}, .m_size = 0, .m_capacity = 0, .m_data = {}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg___closed__0_value;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg();
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 3, .m_capacity = 3, .m_length = 2, .m_data = ", "};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__0_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__0_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__1_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___boxed, .m_arity = 6, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__0_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 55, .m_capacity = 55, .m_length = 54, .m_data = "No declarations have unused term mode have statements."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__1_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__1_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__2_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__3;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 730, .m_capacity = 730, .m_length = 729, .m_data = "THE FOLLOWING DECLARATIONS HAVE INEFFECTUAL TERM MODE HAVE/SUFFICES BLOCKS. In the case of `have` this is a term of the form `have h := foo, bar` where `bar` does not refer to `foo`. Such statements have no effect on the generated proof, and can just be replaced by `bar`, in addition to being ineffectual, they may make unnecessary assumptions in proofs appear as if they are used. For `suffices` this is a term of the form `suffices h : foo, proof_of_goal, proof_of_foo` where `proof_of_goal` does not refer to `foo`. Such statements have no effect on the generated proof, and can just be replaced by `proof_of_goal`, in addition to being ineffectual, they may make unnecessary assumptions in proofs appear as if they are used."};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__4 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__4_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__4_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__5_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__6;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__7;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices;
+LEAN_EXPORT lean_object* lp_batteries_List_mapTR_loop___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg(lean_object*, lean_object*, lean_object*, size_t, size_t, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 26, .m_capacity = 26, .m_length = 25, .m_data = "should be made implicit: "};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__0_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__1;
+static const lean_array_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_array_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 246}, .m_size = 0, .m_capacity = 0, .m_data = {}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__2_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__3;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___boxed, .m_arity = 7, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__0 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__0_value;
+static const lean_closure_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*1, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1___boxed, .m_arity = 7, .m_num_fixed = 1, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__0_value)} };
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__1 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__1_value;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 43, .m_capacity = 43, .m_length = 42, .m_data = "No explicit variables on both sides of iff"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__2 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__2_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__2_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__3 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__3_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__4;
+static const lean_string_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 40, .m_capacity = 40, .m_length = 39, .m_data = "EXPLICIT VARIABLES ON BOTH SIDES OF IFF"};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__5 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__5_value;
+static const lean_ctor_object lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*1 + 0, .m_other = 1, .m_tag = 3}, .m_objs = {((lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__5_value)}};
+static const lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__6 = (const lean_object*)&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__6_value;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__7;
+static lean_once_cell_t lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__8_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__8;
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff;
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1(lean_object*, lean_object*, lean_object*, size_t, size_t, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(lean_object* v_declName_1_, lean_object* v___y_2_){
+_start:
+{
+lean_object* v___x_4_; lean_object* v_env_5_; uint8_t v___x_6_; lean_object* v___x_7_; lean_object* v___x_8_; 
+v___x_4_ = lean_st_ref_get(v___y_2_);
+v_env_5_ = lean_ctor_get(v___x_4_, 0);
+lean_inc_ref(v_env_5_);
+lean_dec(v___x_4_);
+v___x_6_ = l_Lean_Environment_isProjectionFn(v_env_5_, v_declName_1_);
+v___x_7_ = lean_box(v___x_6_);
+v___x_8_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_8_, 0, v___x_7_);
+return v___x_8_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg___boxed(lean_object* v_declName_9_, lean_object* v___y_10_, lean_object* v___y_11_){
+_start:
+{
+lean_object* v_res_12_; 
+v_res_12_ = lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(v_declName_9_, v___y_10_);
+lean_dec(v___y_10_);
+return v_res_12_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0(lean_object* v_declName_13_, lean_object* v___y_14_, lean_object* v___y_15_, lean_object* v___y_16_, lean_object* v___y_17_){
+_start:
+{
+lean_object* v___x_19_; 
+v___x_19_ = lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(v_declName_13_, v___y_17_);
+return v___x_19_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___boxed(lean_object* v_declName_20_, lean_object* v___y_21_, lean_object* v___y_22_, lean_object* v___y_23_, lean_object* v___y_24_, lean_object* v___y_25_){
+_start:
+{
+lean_object* v_res_26_; 
+v_res_26_ = lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0(v_declName_20_, v___y_21_, v___y_22_, v___y_23_, v___y_24_);
+lean_dec(v___y_24_);
+lean_dec_ref(v___y_23_);
+lean_dec(v___y_22_);
+lean_dec_ref(v___y_21_);
+return v_res_26_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5(lean_object* v_msgData_27_, lean_object* v___y_28_, lean_object* v___y_29_, lean_object* v___y_30_, lean_object* v___y_31_){
+_start:
+{
+lean_object* v___x_33_; lean_object* v_env_34_; lean_object* v___x_35_; lean_object* v_mctx_36_; lean_object* v_lctx_37_; lean_object* v_options_38_; lean_object* v___x_39_; lean_object* v___x_40_; lean_object* v___x_41_; 
+v___x_33_ = lean_st_ref_get(v___y_31_);
+v_env_34_ = lean_ctor_get(v___x_33_, 0);
+lean_inc_ref(v_env_34_);
+lean_dec(v___x_33_);
+v___x_35_ = lean_st_ref_get(v___y_29_);
+v_mctx_36_ = lean_ctor_get(v___x_35_, 0);
+lean_inc_ref(v_mctx_36_);
+lean_dec(v___x_35_);
+v_lctx_37_ = lean_ctor_get(v___y_28_, 2);
+v_options_38_ = lean_ctor_get(v___y_30_, 2);
+lean_inc_ref(v_options_38_);
+lean_inc_ref(v_lctx_37_);
+v___x_39_ = lean_alloc_ctor(0, 4, 0);
+lean_ctor_set(v___x_39_, 0, v_env_34_);
+lean_ctor_set(v___x_39_, 1, v_mctx_36_);
+lean_ctor_set(v___x_39_, 2, v_lctx_37_);
+lean_ctor_set(v___x_39_, 3, v_options_38_);
+v___x_40_ = lean_alloc_ctor(3, 2, 0);
+lean_ctor_set(v___x_40_, 0, v___x_39_);
+lean_ctor_set(v___x_40_, 1, v_msgData_27_);
+v___x_41_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_41_, 0, v___x_40_);
+return v___x_41_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5___boxed(lean_object* v_msgData_42_, lean_object* v___y_43_, lean_object* v___y_44_, lean_object* v___y_45_, lean_object* v___y_46_, lean_object* v___y_47_){
+_start:
+{
+lean_object* v_res_48_; 
+v_res_48_ = lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5(v_msgData_42_, v___y_43_, v___y_44_, v___y_45_, v___y_46_);
+lean_dec(v___y_46_);
+lean_dec_ref(v___y_45_);
+lean_dec(v___y_44_);
+lean_dec_ref(v___y_43_);
+return v_res_48_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___lam__0(lean_object* v_k_49_, lean_object* v_b_50_, lean_object* v_c_51_, lean_object* v___y_52_, lean_object* v___y_53_, lean_object* v___y_54_, lean_object* v___y_55_){
+_start:
+{
+lean_object* v___x_57_; 
+lean_inc(v___y_55_);
+lean_inc_ref(v___y_54_);
+lean_inc(v___y_53_);
+lean_inc_ref(v___y_52_);
+v___x_57_ = lean_apply_7(v_k_49_, v_b_50_, v_c_51_, v___y_52_, v___y_53_, v___y_54_, v___y_55_, lean_box(0));
+return v___x_57_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___lam__0___boxed(lean_object* v_k_58_, lean_object* v_b_59_, lean_object* v_c_60_, lean_object* v___y_61_, lean_object* v___y_62_, lean_object* v___y_63_, lean_object* v___y_64_, lean_object* v___y_65_){
+_start:
+{
+lean_object* v_res_66_; 
+v_res_66_ = lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___lam__0(v_k_58_, v_b_59_, v_c_60_, v___y_61_, v___y_62_, v___y_63_, v___y_64_);
+lean_dec(v___y_64_);
+lean_dec_ref(v___y_63_);
+lean_dec(v___y_62_);
+lean_dec_ref(v___y_61_);
+return v_res_66_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg(lean_object* v_type_67_, lean_object* v_k_68_, uint8_t v_cleanupAnnotations_69_, lean_object* v___y_70_, lean_object* v___y_71_, lean_object* v___y_72_, lean_object* v___y_73_){
+_start:
+{
+lean_object* v___f_75_; uint8_t v___x_76_; lean_object* v___x_77_; lean_object* v___x_78_; 
+v___f_75_ = lean_alloc_closure((void*)(lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___lam__0___boxed), 8, 1);
+lean_closure_set(v___f_75_, 0, v_k_68_);
+v___x_76_ = 0;
+v___x_77_ = lean_box(0);
+v___x_78_ = l___private_Lean_Meta_Basic_0__Lean_Meta_forallTelescopeReducingAuxAux(lean_box(0), v___x_76_, v___x_77_, v_type_67_, v___f_75_, v_cleanupAnnotations_69_, v___x_76_, v___y_70_, v___y_71_, v___y_72_, v___y_73_);
+if (lean_obj_tag(v___x_78_) == 0)
+{
+lean_object* v_a_79_; lean_object* v___x_81_; uint8_t v_isShared_82_; uint8_t v_isSharedCheck_86_; 
+v_a_79_ = lean_ctor_get(v___x_78_, 0);
+v_isSharedCheck_86_ = !lean_is_exclusive(v___x_78_);
+if (v_isSharedCheck_86_ == 0)
+{
+v___x_81_ = v___x_78_;
+v_isShared_82_ = v_isSharedCheck_86_;
+goto v_resetjp_80_;
+}
+else
+{
+lean_inc(v_a_79_);
+lean_dec(v___x_78_);
+v___x_81_ = lean_box(0);
+v_isShared_82_ = v_isSharedCheck_86_;
+goto v_resetjp_80_;
+}
+v_resetjp_80_:
+{
+lean_object* v___x_84_; 
+if (v_isShared_82_ == 0)
+{
+v___x_84_ = v___x_81_;
+goto v_reusejp_83_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_85_; 
+v_reuseFailAlloc_85_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_85_, 0, v_a_79_);
+v___x_84_ = v_reuseFailAlloc_85_;
+goto v_reusejp_83_;
+}
+v_reusejp_83_:
+{
+return v___x_84_;
+}
+}
+}
+else
+{
+lean_object* v_a_87_; lean_object* v___x_89_; uint8_t v_isShared_90_; uint8_t v_isSharedCheck_94_; 
+v_a_87_ = lean_ctor_get(v___x_78_, 0);
+v_isSharedCheck_94_ = !lean_is_exclusive(v___x_78_);
+if (v_isSharedCheck_94_ == 0)
+{
+v___x_89_ = v___x_78_;
+v_isShared_90_ = v_isSharedCheck_94_;
+goto v_resetjp_88_;
+}
+else
+{
+lean_inc(v_a_87_);
+lean_dec(v___x_78_);
+v___x_89_ = lean_box(0);
+v_isShared_90_ = v_isSharedCheck_94_;
+goto v_resetjp_88_;
+}
+v_resetjp_88_:
+{
+lean_object* v___x_92_; 
+if (v_isShared_90_ == 0)
+{
+v___x_92_ = v___x_89_;
+goto v_reusejp_91_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_93_; 
+v_reuseFailAlloc_93_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_93_, 0, v_a_87_);
+v___x_92_ = v_reuseFailAlloc_93_;
+goto v_reusejp_91_;
+}
+v_reusejp_91_:
+{
+return v___x_92_;
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg___boxed(lean_object* v_type_95_, lean_object* v_k_96_, lean_object* v_cleanupAnnotations_97_, lean_object* v___y_98_, lean_object* v___y_99_, lean_object* v___y_100_, lean_object* v___y_101_, lean_object* v___y_102_){
+_start:
+{
+uint8_t v_cleanupAnnotations_boxed_103_; lean_object* v_res_104_; 
+v_cleanupAnnotations_boxed_103_ = lean_unbox(v_cleanupAnnotations_97_);
+v_res_104_ = lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg(v_type_95_, v_k_96_, v_cleanupAnnotations_boxed_103_, v___y_98_, v___y_99_, v___y_100_, v___y_101_);
+lean_dec(v___y_101_);
+lean_dec_ref(v___y_100_);
+lean_dec(v___y_99_);
+lean_dec_ref(v___y_98_);
+return v_res_104_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8(lean_object* v_00_u03b1_105_, lean_object* v_type_106_, lean_object* v_k_107_, uint8_t v_cleanupAnnotations_108_, lean_object* v___y_109_, lean_object* v___y_110_, lean_object* v___y_111_, lean_object* v___y_112_){
+_start:
+{
+lean_object* v___x_114_; 
+v___x_114_ = lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg(v_type_106_, v_k_107_, v_cleanupAnnotations_108_, v___y_109_, v___y_110_, v___y_111_, v___y_112_);
+return v___x_114_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___boxed(lean_object* v_00_u03b1_115_, lean_object* v_type_116_, lean_object* v_k_117_, lean_object* v_cleanupAnnotations_118_, lean_object* v___y_119_, lean_object* v___y_120_, lean_object* v___y_121_, lean_object* v___y_122_, lean_object* v___y_123_){
+_start:
+{
+uint8_t v_cleanupAnnotations_boxed_124_; lean_object* v_res_125_; 
+v_cleanupAnnotations_boxed_124_ = lean_unbox(v_cleanupAnnotations_118_);
+v_res_125_ = lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8(v_00_u03b1_115_, v_type_116_, v_k_117_, v_cleanupAnnotations_boxed_124_, v___y_119_, v___y_120_, v___y_121_, v___y_122_);
+lean_dec(v___y_122_);
+lean_dec_ref(v___y_121_);
+lean_dec(v___y_120_);
+lean_dec_ref(v___y_119_);
+return v_res_125_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg(size_t v_sz_126_, size_t v_i_127_, lean_object* v_bs_128_, lean_object* v___y_129_, lean_object* v___y_130_, lean_object* v___y_131_){
+_start:
+{
+uint8_t v___x_133_; 
+v___x_133_ = lean_usize_dec_lt(v_i_127_, v_sz_126_);
+if (v___x_133_ == 0)
+{
+lean_object* v___x_134_; 
+v___x_134_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_134_, 0, v_bs_128_);
+return v___x_134_;
+}
+else
+{
+lean_object* v_v_135_; lean_object* v___x_136_; 
+v_v_135_ = lean_array_uget_borrowed(v_bs_128_, v_i_127_);
+v___x_136_ = l_Lean_Meta_getFVarLocalDecl___redArg(v_v_135_, v___y_129_, v___y_130_, v___y_131_);
+if (lean_obj_tag(v___x_136_) == 0)
+{
+lean_object* v_a_137_; lean_object* v___x_138_; lean_object* v_bs_x27_139_; size_t v___x_140_; size_t v___x_141_; lean_object* v___x_142_; 
+v_a_137_ = lean_ctor_get(v___x_136_, 0);
+lean_inc(v_a_137_);
+lean_dec_ref_known(v___x_136_, 1);
+v___x_138_ = lean_unsigned_to_nat(0u);
+v_bs_x27_139_ = lean_array_uset(v_bs_128_, v_i_127_, v___x_138_);
+v___x_140_ = ((size_t)1ULL);
+v___x_141_ = lean_usize_add(v_i_127_, v___x_140_);
+v___x_142_ = lean_array_uset(v_bs_x27_139_, v_i_127_, v_a_137_);
+v_i_127_ = v___x_141_;
+v_bs_128_ = v___x_142_;
+goto _start;
+}
+else
+{
+lean_object* v_a_144_; lean_object* v___x_146_; uint8_t v_isShared_147_; uint8_t v_isSharedCheck_151_; 
+lean_dec_ref(v_bs_128_);
+v_a_144_ = lean_ctor_get(v___x_136_, 0);
+v_isSharedCheck_151_ = !lean_is_exclusive(v___x_136_);
+if (v_isSharedCheck_151_ == 0)
+{
+v___x_146_ = v___x_136_;
+v_isShared_147_ = v_isSharedCheck_151_;
+goto v_resetjp_145_;
+}
+else
+{
+lean_inc(v_a_144_);
+lean_dec(v___x_136_);
+v___x_146_ = lean_box(0);
+v_isShared_147_ = v_isSharedCheck_151_;
+goto v_resetjp_145_;
+}
+v_resetjp_145_:
+{
+lean_object* v___x_149_; 
+if (v_isShared_147_ == 0)
+{
+v___x_149_ = v___x_146_;
+goto v_reusejp_148_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_150_; 
+v_reuseFailAlloc_150_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_150_, 0, v_a_144_);
+v___x_149_ = v_reuseFailAlloc_150_;
+goto v_reusejp_148_;
+}
+v_reusejp_148_:
+{
+return v___x_149_;
+}
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg___boxed(lean_object* v_sz_152_, lean_object* v_i_153_, lean_object* v_bs_154_, lean_object* v___y_155_, lean_object* v___y_156_, lean_object* v___y_157_, lean_object* v___y_158_){
+_start:
+{
+size_t v_sz_boxed_159_; size_t v_i_boxed_160_; lean_object* v_res_161_; 
+v_sz_boxed_159_ = lean_unbox_usize(v_sz_152_);
+lean_dec(v_sz_152_);
+v_i_boxed_160_ = lean_unbox_usize(v_i_153_);
+lean_dec(v_i_153_);
+v_res_161_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg(v_sz_boxed_159_, v_i_boxed_160_, v_bs_154_, v___y_155_, v___y_156_, v___y_157_);
+lean_dec(v___y_157_);
+lean_dec_ref(v___y_156_);
+lean_dec_ref(v___y_155_);
+return v_res_161_;
+}
+}
+LEAN_EXPORT uint8_t lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(lean_object* v_k_162_, lean_object* v_t_163_){
+_start:
+{
+if (lean_obj_tag(v_t_163_) == 0)
+{
+lean_object* v_k_164_; lean_object* v_l_165_; lean_object* v_r_166_; uint8_t v___x_167_; 
+v_k_164_ = lean_ctor_get(v_t_163_, 1);
+v_l_165_ = lean_ctor_get(v_t_163_, 3);
+v_r_166_ = lean_ctor_get(v_t_163_, 4);
+v___x_167_ = l___private_Lean_Data_Name_0__Lean_Name_quickCmpImpl(v_k_162_, v_k_164_);
+switch(v___x_167_)
+{
+case 0:
+{
+v_t_163_ = v_l_165_;
+goto _start;
+}
+case 1:
+{
+uint8_t v___x_169_; 
+v___x_169_ = 1;
+return v___x_169_;
+}
+default: 
+{
+v_t_163_ = v_r_166_;
+goto _start;
+}
+}
+}
+else
+{
+uint8_t v___x_171_; 
+v___x_171_ = 0;
+return v___x_171_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg___boxed(lean_object* v_k_172_, lean_object* v_t_173_){
+_start:
+{
+uint8_t v_res_174_; lean_object* v_r_175_; 
+v_res_174_ = lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(v_k_172_, v_t_173_);
+lean_dec(v_t_173_);
+lean_dec(v_k_172_);
+v_r_175_ = lean_box(v_res_174_);
+return v_r_175_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7(lean_object* v___x_176_, uint8_t v___x_177_, lean_object* v_as_178_, size_t v_i_179_, size_t v_stop_180_, lean_object* v_b_181_){
+_start:
+{
+lean_object* v___y_183_; uint8_t v___x_187_; 
+v___x_187_ = lean_usize_dec_eq(v_i_179_, v_stop_180_);
+if (v___x_187_ == 0)
+{
+lean_object* v___x_188_; lean_object* v_fst_189_; uint8_t v___y_195_; lean_object* v___x_196_; uint8_t v___x_197_; 
+v___x_188_ = lean_array_uget_borrowed(v_as_178_, v_i_179_);
+v_fst_189_ = lean_ctor_get(v___x_188_, 0);
+v___x_196_ = l_Lean_LocalDecl_userName(v_fst_189_);
+v___x_197_ = l_Lean_Name_isInternal(v___x_196_);
+if (v___x_197_ == 0)
+{
+lean_dec(v___x_196_);
+goto v___jp_190_;
+}
+else
+{
+if (v___x_177_ == 0)
+{
+uint8_t v___x_198_; uint8_t v___x_199_; 
+v___x_198_ = l_Lean_LocalDecl_binderInfo(v_fst_189_);
+v___x_199_ = l_Lean_BinderInfo_isInstImplicit(v___x_198_);
+if (v___x_199_ == 0)
+{
+lean_dec(v___x_196_);
+v___y_195_ = v___x_199_;
+goto v___jp_194_;
+}
+else
+{
+uint8_t v___x_200_; 
+v___x_200_ = l_Lean_Name_hasMacroScopes(v___x_196_);
+lean_dec(v___x_196_);
+v___y_195_ = v___x_200_;
+goto v___jp_194_;
+}
+}
+else
+{
+lean_dec(v___x_196_);
+goto v___jp_190_;
+}
+}
+v___jp_190_:
+{
+lean_object* v___x_191_; uint8_t v___x_192_; 
+v___x_191_ = l_Lean_LocalDecl_fvarId(v_fst_189_);
+v___x_192_ = lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(v___x_191_, v___x_176_);
+lean_dec(v___x_191_);
+if (v___x_192_ == 0)
+{
+lean_object* v___x_193_; 
+lean_inc(v___x_188_);
+v___x_193_ = lean_array_push(v_b_181_, v___x_188_);
+v___y_183_ = v___x_193_;
+goto v___jp_182_;
+}
+else
+{
+v___y_183_ = v_b_181_;
+goto v___jp_182_;
+}
+}
+v___jp_194_:
+{
+if (v___y_195_ == 0)
+{
+v___y_183_ = v_b_181_;
+goto v___jp_182_;
+}
+else
+{
+goto v___jp_190_;
+}
+}
+}
+else
+{
+return v_b_181_;
+}
+v___jp_182_:
+{
+size_t v___x_184_; size_t v___x_185_; 
+v___x_184_ = ((size_t)1ULL);
+v___x_185_ = lean_usize_add(v_i_179_, v___x_184_);
+v_i_179_ = v___x_185_;
+v_b_181_ = v___y_183_;
+goto _start;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7___boxed(lean_object* v___x_201_, lean_object* v___x_202_, lean_object* v_as_203_, lean_object* v_i_204_, lean_object* v_stop_205_, lean_object* v_b_206_){
+_start:
+{
+uint8_t v___x_16579__boxed_207_; size_t v_i_boxed_208_; size_t v_stop_boxed_209_; lean_object* v_res_210_; 
+v___x_16579__boxed_207_ = lean_unbox(v___x_202_);
+v_i_boxed_208_ = lean_unbox_usize(v_i_204_);
+lean_dec(v_i_204_);
+v_stop_boxed_209_ = lean_unbox_usize(v_stop_205_);
+lean_dec(v_stop_205_);
+v_res_210_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7(v___x_201_, v___x_16579__boxed_207_, v_as_203_, v_i_boxed_208_, v_stop_boxed_209_, v_b_206_);
+lean_dec_ref(v_as_203_);
+lean_dec(v___x_201_);
+return v_res_210_;
+}
+}
+static lean_object* _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__1(void){
+_start:
+{
+lean_object* v___x_212_; lean_object* v___x_213_; 
+v___x_212_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__0));
+v___x_213_ = l_Lean_stringToMessageData(v___x_212_);
+return v___x_213_;
+}
+}
+static lean_object* _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__3(void){
+_start:
+{
+lean_object* v___x_215_; lean_object* v___x_216_; 
+v___x_215_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__2));
+v___x_216_ = l_Lean_stringToMessageData(v___x_215_);
+return v___x_216_;
+}
+}
+static lean_object* _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5(void){
+_start:
+{
+lean_object* v___x_218_; lean_object* v___x_219_; 
+v___x_218_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__4));
+v___x_219_ = l_Lean_stringToMessageData(v___x_218_);
+return v___x_219_;
+}
+}
+static lean_object* _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__15(void){
+_start:
+{
+lean_object* v___x_229_; lean_object* v___x_230_; 
+v___x_229_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__14));
+v___x_230_ = l_Lean_stringToMessageData(v___x_229_);
+return v___x_230_;
+}
+}
+static lean_object* _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__17(void){
+_start:
+{
+lean_object* v___x_232_; lean_object* v___x_233_; 
+v___x_232_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__16));
+v___x_233_ = l_Lean_stringToMessageData(v___x_232_);
+return v___x_233_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg(lean_object* v_as_234_, size_t v_sz_235_, size_t v_i_236_, lean_object* v_b_237_){
+_start:
+{
+uint8_t v___x_239_; 
+v___x_239_ = lean_usize_dec_lt(v_i_236_, v_sz_235_);
+if (v___x_239_ == 0)
+{
+lean_object* v___x_240_; 
+v___x_240_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_240_, 0, v_b_237_);
+return v___x_240_;
+}
+else
+{
+lean_object* v_a_241_; lean_object* v_fst_242_; lean_object* v_snd_243_; lean_object* v___x_245_; uint8_t v_isShared_246_; uint8_t v_isSharedCheck_310_; 
+v_a_241_ = lean_array_uget(v_as_234_, v_i_236_);
+v_fst_242_ = lean_ctor_get(v_a_241_, 0);
+v_snd_243_ = lean_ctor_get(v_a_241_, 1);
+v_isSharedCheck_310_ = !lean_is_exclusive(v_a_241_);
+if (v_isSharedCheck_310_ == 0)
+{
+v___x_245_ = v_a_241_;
+v_isShared_246_ = v_isSharedCheck_310_;
+goto v_resetjp_244_;
+}
+else
+{
+lean_inc(v_snd_243_);
+lean_inc(v_fst_242_);
+lean_dec(v_a_241_);
+v___x_245_ = lean_box(0);
+v_isShared_246_ = v_isSharedCheck_310_;
+goto v_resetjp_244_;
+}
+v_resetjp_244_:
+{
+lean_object* v___x_247_; lean_object* v___y_249_; 
+v___x_247_ = lean_unsigned_to_nat(1u);
+if (lean_obj_tag(v_fst_242_) == 0)
+{
+lean_object* v_fvarId_265_; lean_object* v_userName_266_; lean_object* v_type_267_; uint8_t v_bi_268_; lean_object* v___y_270_; lean_object* v___y_271_; uint8_t v___y_272_; lean_object* v_fst_283_; lean_object* v_snd_284_; 
+v_fvarId_265_ = lean_ctor_get(v_fst_242_, 1);
+lean_inc(v_fvarId_265_);
+v_userName_266_ = lean_ctor_get(v_fst_242_, 2);
+lean_inc(v_userName_266_);
+v_type_267_ = lean_ctor_get(v_fst_242_, 3);
+lean_inc_ref(v_type_267_);
+v_bi_268_ = lean_ctor_get_uint8(v_fst_242_, sizeof(void*)*4);
+lean_dec_ref_known(v_fst_242_, 4);
+switch(v_bi_268_)
+{
+case 0:
+{
+lean_object* v___x_287_; lean_object* v___x_288_; 
+v___x_287_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__6));
+v___x_288_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__7));
+v_fst_283_ = v___x_287_;
+v_snd_284_ = v___x_288_;
+goto v___jp_282_;
+}
+case 1:
+{
+lean_object* v___x_289_; lean_object* v___x_290_; 
+v___x_289_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__8));
+v___x_290_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__9));
+v_fst_283_ = v___x_289_;
+v_snd_284_ = v___x_290_;
+goto v___jp_282_;
+}
+case 2:
+{
+lean_object* v___x_291_; lean_object* v___x_292_; 
+v___x_291_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__10));
+v___x_292_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__11));
+v_fst_283_ = v___x_291_;
+v_snd_284_ = v___x_292_;
+goto v___jp_282_;
+}
+default: 
+{
+lean_object* v___x_293_; lean_object* v___x_294_; 
+v___x_293_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__12));
+v___x_294_ = ((lean_object*)(lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__13));
+v_fst_283_ = v___x_293_;
+v_snd_284_ = v___x_294_;
+goto v___jp_282_;
+}
+}
+v___jp_269_:
+{
+if (v___y_272_ == 0)
+{
+lean_object* v___x_273_; lean_object* v___x_274_; lean_object* v___x_275_; lean_object* v___x_276_; lean_object* v___x_277_; lean_object* v___x_278_; lean_object* v___x_279_; 
+v___x_273_ = l_Lean_Expr_fvar___override(v_fvarId_265_);
+v___x_274_ = l_Lean_MessageData_ofExpr(v___x_273_);
+v___x_275_ = lean_obj_once(&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5, &lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5_once, _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5);
+v___x_276_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_276_, 0, v___x_274_);
+lean_ctor_set(v___x_276_, 1, v___x_275_);
+v___x_277_ = l_Lean_MessageData_ofExpr(v_type_267_);
+v___x_278_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_278_, 0, v___x_276_);
+lean_ctor_set(v___x_278_, 1, v___x_277_);
+lean_inc_ref(v___y_271_);
+lean_inc_ref(v___y_270_);
+v___x_279_ = l_Lean_MessageData_bracket(v___y_270_, v___x_278_, v___y_271_);
+v___y_249_ = v___x_279_;
+goto v___jp_248_;
+}
+else
+{
+lean_object* v___x_280_; lean_object* v___x_281_; 
+lean_dec(v_fvarId_265_);
+v___x_280_ = l_Lean_MessageData_ofExpr(v_type_267_);
+lean_inc_ref(v___y_271_);
+lean_inc_ref(v___y_270_);
+v___x_281_ = l_Lean_MessageData_bracket(v___y_270_, v___x_280_, v___y_271_);
+v___y_249_ = v___x_281_;
+goto v___jp_248_;
+}
+}
+v___jp_282_:
+{
+uint8_t v___x_285_; 
+v___x_285_ = l_Lean_BinderInfo_isInstImplicit(v_bi_268_);
+if (v___x_285_ == 0)
+{
+lean_dec(v_userName_266_);
+v___y_270_ = v_fst_283_;
+v___y_271_ = v_snd_284_;
+v___y_272_ = v___x_285_;
+goto v___jp_269_;
+}
+else
+{
+uint8_t v___x_286_; 
+v___x_286_ = l_Lean_Name_hasMacroScopes(v_userName_266_);
+lean_dec(v_userName_266_);
+v___y_270_ = v_fst_283_;
+v___y_271_ = v_snd_284_;
+v___y_272_ = v___x_286_;
+goto v___jp_269_;
+}
+}
+}
+else
+{
+lean_object* v_fvarId_295_; lean_object* v_type_296_; lean_object* v_value_297_; lean_object* v___x_298_; lean_object* v___x_299_; lean_object* v___x_300_; lean_object* v___x_301_; lean_object* v___x_302_; lean_object* v___x_303_; lean_object* v___x_304_; lean_object* v___x_305_; lean_object* v___x_306_; lean_object* v___x_307_; lean_object* v___x_308_; lean_object* v___x_309_; 
+v_fvarId_295_ = lean_ctor_get(v_fst_242_, 1);
+lean_inc(v_fvarId_295_);
+v_type_296_ = lean_ctor_get(v_fst_242_, 3);
+lean_inc_ref(v_type_296_);
+v_value_297_ = lean_ctor_get(v_fst_242_, 4);
+lean_inc_ref(v_value_297_);
+lean_dec_ref_known(v_fst_242_, 5);
+v___x_298_ = lean_obj_once(&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__15, &lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__15_once, _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__15);
+v___x_299_ = l_Lean_Expr_fvar___override(v_fvarId_295_);
+v___x_300_ = l_Lean_MessageData_ofExpr(v___x_299_);
+v___x_301_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_301_, 0, v___x_298_);
+lean_ctor_set(v___x_301_, 1, v___x_300_);
+v___x_302_ = lean_obj_once(&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5, &lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5_once, _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__5);
+v___x_303_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_303_, 0, v___x_301_);
+lean_ctor_set(v___x_303_, 1, v___x_302_);
+v___x_304_ = l_Lean_MessageData_ofExpr(v_type_296_);
+v___x_305_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_305_, 0, v___x_303_);
+lean_ctor_set(v___x_305_, 1, v___x_304_);
+v___x_306_ = lean_obj_once(&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__17, &lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__17_once, _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__17);
+v___x_307_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_307_, 0, v___x_305_);
+lean_ctor_set(v___x_307_, 1, v___x_306_);
+v___x_308_ = l_Lean_MessageData_ofExpr(v_value_297_);
+v___x_309_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_309_, 0, v___x_307_);
+lean_ctor_set(v___x_309_, 1, v___x_308_);
+v___y_249_ = v___x_309_;
+goto v___jp_248_;
+}
+v___jp_248_:
+{
+lean_object* v___x_250_; lean_object* v___x_252_; 
+v___x_250_ = lean_obj_once(&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__1, &lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__1_once, _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__1);
+if (v_isShared_246_ == 0)
+{
+lean_ctor_set_tag(v___x_245_, 7);
+lean_ctor_set(v___x_245_, 1, v___x_250_);
+lean_ctor_set(v___x_245_, 0, v_b_237_);
+v___x_252_ = v___x_245_;
+goto v_reusejp_251_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_264_; 
+v_reuseFailAlloc_264_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v_reuseFailAlloc_264_, 0, v_b_237_);
+lean_ctor_set(v_reuseFailAlloc_264_, 1, v___x_250_);
+v___x_252_ = v_reuseFailAlloc_264_;
+goto v_reusejp_251_;
+}
+v_reusejp_251_:
+{
+lean_object* v___x_253_; lean_object* v___x_254_; lean_object* v___x_255_; lean_object* v___x_256_; lean_object* v___x_257_; lean_object* v___x_258_; lean_object* v___x_259_; lean_object* v___x_260_; size_t v___x_261_; size_t v___x_262_; 
+v___x_253_ = lean_nat_add(v_snd_243_, v___x_247_);
+lean_dec(v_snd_243_);
+v___x_254_ = l_Nat_reprFast(v___x_253_);
+v___x_255_ = lean_alloc_ctor(3, 1, 0);
+lean_ctor_set(v___x_255_, 0, v___x_254_);
+v___x_256_ = l_Lean_MessageData_ofFormat(v___x_255_);
+v___x_257_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_257_, 0, v___x_252_);
+lean_ctor_set(v___x_257_, 1, v___x_256_);
+v___x_258_ = lean_obj_once(&lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__3, &lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__3_once, _init_lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___closed__3);
+v___x_259_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_259_, 0, v___x_257_);
+lean_ctor_set(v___x_259_, 1, v___x_258_);
+v___x_260_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_260_, 0, v___x_259_);
+lean_ctor_set(v___x_260_, 1, v___y_249_);
+v___x_261_ = ((size_t)1ULL);
+v___x_262_ = lean_usize_add(v_i_236_, v___x_261_);
+v_i_236_ = v___x_262_;
+v_b_237_ = v___x_260_;
+goto _start;
+}
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg___boxed(lean_object* v_as_311_, lean_object* v_sz_312_, lean_object* v_i_313_, lean_object* v_b_314_, lean_object* v___y_315_){
+_start:
+{
+size_t v_sz_boxed_316_; size_t v_i_boxed_317_; lean_object* v_res_318_; 
+v_sz_boxed_316_ = lean_unbox_usize(v_sz_312_);
+lean_dec(v_sz_312_);
+v_i_boxed_317_ = lean_unbox_usize(v_i_313_);
+lean_dec(v_i_313_);
+v_res_318_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg(v_as_311_, v_sz_boxed_316_, v_i_boxed_317_, v_b_314_);
+lean_dec_ref(v_as_311_);
+return v_res_318_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg(uint8_t v___x_319_, lean_object* v_as_320_, size_t v_sz_321_, size_t v_i_322_, lean_object* v_b_323_){
+_start:
+{
+lean_object* v_a_326_; uint8_t v___x_330_; 
+v___x_330_ = lean_usize_dec_lt(v_i_322_, v_sz_321_);
+if (v___x_330_ == 0)
+{
+lean_object* v___x_331_; 
+v___x_331_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_331_, 0, v_b_323_);
+return v___x_331_;
+}
+else
+{
+lean_object* v_a_332_; lean_object* v___x_333_; lean_object* v___x_334_; lean_object* v___x_335_; 
+v_a_332_ = lean_array_uget_borrowed(v_as_320_, v_i_322_);
+v___x_333_ = l_Lean_LocalDecl_type(v_a_332_);
+v___x_334_ = l_Lean_Expr_app___override(v_b_323_, v___x_333_);
+v___x_335_ = l_Lean_LocalDecl_value_x3f(v_a_332_, v___x_319_);
+if (lean_obj_tag(v___x_335_) == 1)
+{
+lean_object* v_val_336_; lean_object* v___x_337_; 
+v_val_336_ = lean_ctor_get(v___x_335_, 0);
+lean_inc(v_val_336_);
+lean_dec_ref_known(v___x_335_, 1);
+v___x_337_ = l_Lean_Expr_app___override(v___x_334_, v_val_336_);
+v_a_326_ = v___x_337_;
+goto v___jp_325_;
+}
+else
+{
+lean_dec(v___x_335_);
+v_a_326_ = v___x_334_;
+goto v___jp_325_;
+}
+}
+v___jp_325_:
+{
+size_t v___x_327_; size_t v___x_328_; 
+v___x_327_ = ((size_t)1ULL);
+v___x_328_ = lean_usize_add(v_i_322_, v___x_327_);
+v_i_322_ = v___x_328_;
+v_b_323_ = v_a_326_;
+goto _start;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg___boxed(lean_object* v___x_338_, lean_object* v_as_339_, lean_object* v_sz_340_, lean_object* v_i_341_, lean_object* v_b_342_, lean_object* v___y_343_){
+_start:
+{
+uint8_t v___x_16846__boxed_344_; size_t v_sz_boxed_345_; size_t v_i_boxed_346_; lean_object* v_res_347_; 
+v___x_16846__boxed_344_ = lean_unbox(v___x_338_);
+v_sz_boxed_345_ = lean_unbox_usize(v_sz_340_);
+lean_dec(v_sz_340_);
+v_i_boxed_346_ = lean_unbox_usize(v_i_341_);
+lean_dec(v_i_341_);
+v_res_347_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg(v___x_16846__boxed_344_, v_as_339_, v_sz_boxed_345_, v_i_boxed_346_, v_b_342_);
+lean_dec_ref(v_as_339_);
+return v_res_347_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__5(void){
+_start:
+{
+lean_object* v___x_355_; lean_object* v___x_356_; 
+v___x_355_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__4));
+v___x_356_ = l_Lean_stringToMessageData(v___x_355_);
+return v___x_356_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__7(void){
+_start:
+{
+lean_object* v___x_358_; lean_object* v___x_359_; 
+v___x_358_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__6));
+v___x_359_ = l_Lean_stringToMessageData(v___x_358_);
+return v___x_359_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__11(void){
+_start:
+{
+lean_object* v___x_364_; lean_object* v___x_365_; lean_object* v___x_366_; 
+v___x_364_ = lean_box(0);
+v___x_365_ = lean_unsigned_to_nat(16u);
+v___x_366_ = lean_mk_array(v___x_365_, v___x_364_);
+return v___x_366_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12(void){
+_start:
+{
+lean_object* v___x_367_; lean_object* v___x_368_; lean_object* v___x_369_; 
+v___x_367_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__11, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__11_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__11);
+v___x_368_ = lean_unsigned_to_nat(0u);
+v___x_369_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_369_, 0, v___x_368_);
+lean_ctor_set(v___x_369_, 1, v___x_367_);
+return v___x_369_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__13(void){
+_start:
+{
+lean_object* v___x_370_; lean_object* v___x_371_; lean_object* v___x_372_; lean_object* v___x_373_; 
+v___x_370_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__10));
+v___x_371_ = lean_box(1);
+v___x_372_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12);
+v___x_373_ = lean_alloc_ctor(0, 3, 0);
+lean_ctor_set(v___x_373_, 0, v___x_372_);
+lean_ctor_set(v___x_373_, 1, v___x_371_);
+lean_ctor_set(v___x_373_, 2, v___x_370_);
+return v___x_373_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0(lean_object* v_val_374_, lean_object* v_args_375_, lean_object* v_ty_376_, lean_object* v___y_377_, lean_object* v___y_378_, lean_object* v___y_379_, lean_object* v___y_380_){
+_start:
+{
+lean_object* v___x_385_; lean_object* v___x_386_; uint8_t v___x_387_; 
+v___x_385_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__1));
+v___x_386_ = lean_unsigned_to_nat(1u);
+v___x_387_ = l_Lean_Expr_isAppOfArity_x27(v_ty_376_, v___x_385_, v___x_386_);
+if (v___x_387_ == 0)
+{
+lean_object* v___x_388_; uint8_t v___x_389_; 
+v___x_388_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__3));
+v___x_389_ = l_Lean_Expr_isAppOfArity_x27(v_ty_376_, v___x_388_, v___x_386_);
+if (v___x_389_ == 0)
+{
+lean_object* v___x_390_; size_t v_sz_391_; size_t v___x_392_; lean_object* v___x_393_; 
+v___x_390_ = l_Lean_mkAppN(v_val_374_, v_args_375_);
+v_sz_391_ = lean_array_size(v_args_375_);
+v___x_392_ = ((size_t)0ULL);
+v___x_393_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg(v_sz_391_, v___x_392_, v_args_375_, v___y_377_, v___y_379_, v___y_380_);
+if (lean_obj_tag(v___x_393_) == 0)
+{
+lean_object* v_a_394_; lean_object* v___x_395_; lean_object* v___x_396_; size_t v_sz_397_; lean_object* v___x_398_; 
+v_a_394_ = lean_ctor_get(v___x_393_, 0);
+lean_inc(v_a_394_);
+lean_dec_ref_known(v___x_393_, 1);
+v___x_395_ = l_Lean_Expr_headBeta(v___x_390_);
+v___x_396_ = l_Lean_Expr_app___override(v___x_395_, v_ty_376_);
+v_sz_397_ = lean_array_size(v_a_394_);
+v___x_398_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg(v___x_389_, v_a_394_, v_sz_397_, v___x_392_, v___x_396_);
+if (lean_obj_tag(v___x_398_) == 0)
+{
+lean_object* v_a_399_; lean_object* v___x_401_; uint8_t v_isShared_402_; uint8_t v_isSharedCheck_462_; 
+v_a_399_ = lean_ctor_get(v___x_398_, 0);
+v_isSharedCheck_462_ = !lean_is_exclusive(v___x_398_);
+if (v_isSharedCheck_462_ == 0)
+{
+v___x_401_ = v___x_398_;
+v_isShared_402_ = v_isSharedCheck_462_;
+goto v_resetjp_400_;
+}
+else
+{
+lean_inc(v_a_399_);
+lean_dec(v___x_398_);
+v___x_401_ = lean_box(0);
+v_isShared_402_ = v_isSharedCheck_462_;
+goto v_resetjp_400_;
+}
+v_resetjp_400_:
+{
+lean_object* v___y_404_; lean_object* v___y_405_; lean_object* v___y_406_; lean_object* v___y_433_; lean_object* v___x_449_; lean_object* v___x_450_; lean_object* v___x_451_; lean_object* v___x_452_; uint8_t v___x_453_; 
+v___x_449_ = lean_unsigned_to_nat(0u);
+v___x_450_ = l_Array_zipIdx___redArg(v_a_394_, v___x_449_);
+v___x_451_ = lean_array_get_size(v___x_450_);
+v___x_452_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__10));
+v___x_453_ = lean_nat_dec_lt(v___x_449_, v___x_451_);
+if (v___x_453_ == 0)
+{
+lean_dec_ref(v___x_450_);
+lean_dec(v_a_399_);
+v___y_433_ = v___x_452_;
+goto v___jp_432_;
+}
+else
+{
+lean_object* v___x_454_; lean_object* v___x_455_; lean_object* v_fvarSet_456_; uint8_t v___x_457_; 
+v___x_454_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__13, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__13_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__13);
+v___x_455_ = l_Lean_collectFVars(v___x_454_, v_a_399_);
+v_fvarSet_456_ = lean_ctor_get(v___x_455_, 1);
+lean_inc(v_fvarSet_456_);
+lean_dec_ref(v___x_455_);
+v___x_457_ = lean_nat_dec_le(v___x_451_, v___x_451_);
+if (v___x_457_ == 0)
+{
+if (v___x_453_ == 0)
+{
+lean_dec(v_fvarSet_456_);
+lean_dec_ref(v___x_450_);
+v___y_433_ = v___x_452_;
+goto v___jp_432_;
+}
+else
+{
+size_t v___x_458_; lean_object* v___x_459_; 
+v___x_458_ = lean_usize_of_nat(v___x_451_);
+v___x_459_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7(v_fvarSet_456_, v___x_389_, v___x_450_, v___x_392_, v___x_458_, v___x_452_);
+lean_dec_ref(v___x_450_);
+lean_dec(v_fvarSet_456_);
+v___y_433_ = v___x_459_;
+goto v___jp_432_;
+}
+}
+else
+{
+size_t v___x_460_; lean_object* v___x_461_; 
+v___x_460_ = lean_usize_of_nat(v___x_451_);
+v___x_461_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_unusedArguments_spec__7(v_fvarSet_456_, v___x_389_, v___x_450_, v___x_392_, v___x_460_, v___x_452_);
+lean_dec_ref(v___x_450_);
+lean_dec(v_fvarSet_456_);
+v___y_433_ = v___x_461_;
+goto v___jp_432_;
+}
+}
+v___jp_403_:
+{
+lean_object* v___x_407_; lean_object* v___x_408_; lean_object* v___x_409_; lean_object* v___x_410_; size_t v_sz_411_; lean_object* v___x_412_; 
+lean_inc_ref(v___y_406_);
+v___x_407_ = l_Lean_stringToMessageData(v___y_406_);
+v___x_408_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_408_, 0, v___y_405_);
+lean_ctor_set(v___x_408_, 1, v___x_407_);
+v___x_409_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__5, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__5_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__5);
+v___x_410_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_410_, 0, v___x_408_);
+lean_ctor_set(v___x_410_, 1, v___x_409_);
+v_sz_411_ = lean_array_size(v___y_404_);
+v___x_412_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg(v___y_404_, v_sz_411_, v___x_392_, v___x_410_);
+lean_dec_ref(v___y_404_);
+if (lean_obj_tag(v___x_412_) == 0)
+{
+lean_object* v_a_413_; lean_object* v___x_414_; lean_object* v_a_415_; lean_object* v___x_417_; uint8_t v_isShared_418_; uint8_t v_isSharedCheck_423_; 
+v_a_413_ = lean_ctor_get(v___x_412_, 0);
+lean_inc(v_a_413_);
+lean_dec_ref_known(v___x_412_, 1);
+v___x_414_ = lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5(v_a_413_, v___y_377_, v___y_378_, v___y_379_, v___y_380_);
+v_a_415_ = lean_ctor_get(v___x_414_, 0);
+v_isSharedCheck_423_ = !lean_is_exclusive(v___x_414_);
+if (v_isSharedCheck_423_ == 0)
+{
+v___x_417_ = v___x_414_;
+v_isShared_418_ = v_isSharedCheck_423_;
+goto v_resetjp_416_;
+}
+else
+{
+lean_inc(v_a_415_);
+lean_dec(v___x_414_);
+v___x_417_ = lean_box(0);
+v_isShared_418_ = v_isSharedCheck_423_;
+goto v_resetjp_416_;
+}
+v_resetjp_416_:
+{
+lean_object* v___x_419_; lean_object* v___x_421_; 
+v___x_419_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_419_, 0, v_a_415_);
+if (v_isShared_418_ == 0)
+{
+lean_ctor_set(v___x_417_, 0, v___x_419_);
+v___x_421_ = v___x_417_;
+goto v_reusejp_420_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_422_; 
+v_reuseFailAlloc_422_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_422_, 0, v___x_419_);
+v___x_421_ = v_reuseFailAlloc_422_;
+goto v_reusejp_420_;
+}
+v_reusejp_420_:
+{
+return v___x_421_;
+}
+}
+}
+else
+{
+lean_object* v_a_424_; lean_object* v___x_426_; uint8_t v_isShared_427_; uint8_t v_isSharedCheck_431_; 
+v_a_424_ = lean_ctor_get(v___x_412_, 0);
+v_isSharedCheck_431_ = !lean_is_exclusive(v___x_412_);
+if (v_isSharedCheck_431_ == 0)
+{
+v___x_426_ = v___x_412_;
+v_isShared_427_ = v_isSharedCheck_431_;
+goto v_resetjp_425_;
+}
+else
+{
+lean_inc(v_a_424_);
+lean_dec(v___x_412_);
+v___x_426_ = lean_box(0);
+v_isShared_427_ = v_isSharedCheck_431_;
+goto v_resetjp_425_;
+}
+v_resetjp_425_:
+{
+lean_object* v___x_429_; 
+if (v_isShared_427_ == 0)
+{
+v___x_429_ = v___x_426_;
+goto v_reusejp_428_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_430_; 
+v_reuseFailAlloc_430_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_430_, 0, v_a_424_);
+v___x_429_ = v_reuseFailAlloc_430_;
+goto v_reusejp_428_;
+}
+v_reusejp_428_:
+{
+return v___x_429_;
+}
+}
+}
+}
+v___jp_432_:
+{
+lean_object* v___x_434_; lean_object* v___x_435_; uint8_t v___x_436_; 
+v___x_434_ = lean_array_get_size(v___y_433_);
+v___x_435_ = lean_unsigned_to_nat(0u);
+v___x_436_ = lean_nat_dec_eq(v___x_434_, v___x_435_);
+if (v___x_436_ == 0)
+{
+lean_object* v___x_437_; lean_object* v___x_438_; lean_object* v___x_439_; lean_object* v___x_440_; lean_object* v___x_441_; uint8_t v___x_442_; 
+lean_del_object(v___x_401_);
+v___x_437_ = l_Nat_reprFast(v___x_434_);
+v___x_438_ = lean_alloc_ctor(3, 1, 0);
+lean_ctor_set(v___x_438_, 0, v___x_437_);
+v___x_439_ = l_Lean_MessageData_ofFormat(v___x_438_);
+v___x_440_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__7, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__7);
+v___x_441_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_441_, 0, v___x_439_);
+lean_ctor_set(v___x_441_, 1, v___x_440_);
+v___x_442_ = lean_nat_dec_eq(v___x_434_, v___x_386_);
+if (v___x_442_ == 0)
+{
+lean_object* v___x_443_; 
+v___x_443_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__8));
+v___y_404_ = v___y_433_;
+v___y_405_ = v___x_441_;
+v___y_406_ = v___x_443_;
+goto v___jp_403_;
+}
+else
+{
+lean_object* v___x_444_; 
+v___x_444_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__9));
+v___y_404_ = v___y_433_;
+v___y_405_ = v___x_441_;
+v___y_406_ = v___x_444_;
+goto v___jp_403_;
+}
+}
+else
+{
+lean_object* v___x_445_; lean_object* v___x_447_; 
+lean_dec_ref(v___y_433_);
+v___x_445_ = lean_box(0);
+if (v_isShared_402_ == 0)
+{
+lean_ctor_set(v___x_401_, 0, v___x_445_);
+v___x_447_ = v___x_401_;
+goto v_reusejp_446_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_448_; 
+v_reuseFailAlloc_448_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_448_, 0, v___x_445_);
+v___x_447_ = v_reuseFailAlloc_448_;
+goto v_reusejp_446_;
+}
+v_reusejp_446_:
+{
+return v___x_447_;
+}
+}
+}
+}
+}
+else
+{
+lean_object* v_a_463_; lean_object* v___x_465_; uint8_t v_isShared_466_; uint8_t v_isSharedCheck_470_; 
+lean_dec(v_a_394_);
+v_a_463_ = lean_ctor_get(v___x_398_, 0);
+v_isSharedCheck_470_ = !lean_is_exclusive(v___x_398_);
+if (v_isSharedCheck_470_ == 0)
+{
+v___x_465_ = v___x_398_;
+v_isShared_466_ = v_isSharedCheck_470_;
+goto v_resetjp_464_;
+}
+else
+{
+lean_inc(v_a_463_);
+lean_dec(v___x_398_);
+v___x_465_ = lean_box(0);
+v_isShared_466_ = v_isSharedCheck_470_;
+goto v_resetjp_464_;
+}
+v_resetjp_464_:
+{
+lean_object* v___x_468_; 
+if (v_isShared_466_ == 0)
+{
+v___x_468_ = v___x_465_;
+goto v_reusejp_467_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_469_; 
+v_reuseFailAlloc_469_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_469_, 0, v_a_463_);
+v___x_468_ = v_reuseFailAlloc_469_;
+goto v_reusejp_467_;
+}
+v_reusejp_467_:
+{
+return v___x_468_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_471_; lean_object* v___x_473_; uint8_t v_isShared_474_; uint8_t v_isSharedCheck_478_; 
+lean_dec_ref(v___x_390_);
+lean_dec_ref(v_ty_376_);
+v_a_471_ = lean_ctor_get(v___x_393_, 0);
+v_isSharedCheck_478_ = !lean_is_exclusive(v___x_393_);
+if (v_isSharedCheck_478_ == 0)
+{
+v___x_473_ = v___x_393_;
+v_isShared_474_ = v_isSharedCheck_478_;
+goto v_resetjp_472_;
+}
+else
+{
+lean_inc(v_a_471_);
+lean_dec(v___x_393_);
+v___x_473_ = lean_box(0);
+v_isShared_474_ = v_isSharedCheck_478_;
+goto v_resetjp_472_;
+}
+v_resetjp_472_:
+{
+lean_object* v___x_476_; 
+if (v_isShared_474_ == 0)
+{
+v___x_476_ = v___x_473_;
+goto v_reusejp_475_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_477_; 
+v_reuseFailAlloc_477_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_477_, 0, v_a_471_);
+v___x_476_ = v_reuseFailAlloc_477_;
+goto v_reusejp_475_;
+}
+v_reusejp_475_:
+{
+return v___x_476_;
+}
+}
+}
+}
+else
+{
+lean_dec_ref(v_ty_376_);
+lean_dec_ref(v_args_375_);
+lean_dec_ref(v_val_374_);
+goto v___jp_382_;
+}
+}
+else
+{
+lean_dec_ref(v_ty_376_);
+lean_dec_ref(v_args_375_);
+lean_dec_ref(v_val_374_);
+goto v___jp_382_;
+}
+v___jp_382_:
+{
+lean_object* v___x_383_; lean_object* v___x_384_; 
+v___x_383_ = lean_box(0);
+v___x_384_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_384_, 0, v___x_383_);
+return v___x_384_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___boxed(lean_object* v_val_479_, lean_object* v_args_480_, lean_object* v_ty_481_, lean_object* v___y_482_, lean_object* v___y_483_, lean_object* v___y_484_, lean_object* v___y_485_, lean_object* v___y_486_){
+_start:
+{
+lean_object* v_res_487_; 
+v_res_487_ = lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0(v_val_479_, v_args_480_, v_ty_481_, v___y_482_, v___y_483_, v___y_484_, v___y_485_);
+lean_dec(v___y_485_);
+lean_dec_ref(v___y_484_);
+lean_dec(v___y_483_);
+lean_dec_ref(v___y_482_);
+return v_res_487_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__0(void){
+_start:
+{
+lean_object* v___x_488_; 
+v___x_488_ = l_Lean_PersistentHashMap_mkEmptyEntriesArray(lean_box(0), lean_box(0));
+return v___x_488_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1(void){
+_start:
+{
+lean_object* v___x_489_; lean_object* v___x_490_; 
+v___x_489_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__0, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__0_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__0);
+v___x_490_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_490_, 0, v___x_489_);
+return v___x_490_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__2(void){
+_start:
+{
+lean_object* v___x_491_; lean_object* v___x_492_; lean_object* v___x_493_; 
+v___x_491_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1);
+v___x_492_ = lean_unsigned_to_nat(0u);
+v___x_493_ = lean_alloc_ctor(0, 10, 0);
+lean_ctor_set(v___x_493_, 0, v___x_492_);
+lean_ctor_set(v___x_493_, 1, v___x_492_);
+lean_ctor_set(v___x_493_, 2, v___x_492_);
+lean_ctor_set(v___x_493_, 3, v___x_492_);
+lean_ctor_set(v___x_493_, 4, v___x_491_);
+lean_ctor_set(v___x_493_, 5, v___x_491_);
+lean_ctor_set(v___x_493_, 6, v___x_491_);
+lean_ctor_set(v___x_493_, 7, v___x_491_);
+lean_ctor_set(v___x_493_, 8, v___x_491_);
+lean_ctor_set(v___x_493_, 9, v___x_491_);
+return v___x_493_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__3(void){
+_start:
+{
+lean_object* v___x_494_; lean_object* v___x_495_; lean_object* v___x_496_; 
+v___x_494_ = lean_unsigned_to_nat(32u);
+v___x_495_ = lean_mk_empty_array_with_capacity(v___x_494_);
+v___x_496_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_496_, 0, v___x_495_);
+return v___x_496_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__4(void){
+_start:
+{
+size_t v___x_497_; lean_object* v___x_498_; lean_object* v___x_499_; lean_object* v___x_500_; lean_object* v___x_501_; lean_object* v___x_502_; 
+v___x_497_ = ((size_t)5ULL);
+v___x_498_ = lean_unsigned_to_nat(0u);
+v___x_499_ = lean_unsigned_to_nat(32u);
+v___x_500_ = lean_mk_empty_array_with_capacity(v___x_499_);
+v___x_501_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__3, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__3_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__3);
+v___x_502_ = lean_alloc_ctor(0, 4, sizeof(size_t)*1);
+lean_ctor_set(v___x_502_, 0, v___x_501_);
+lean_ctor_set(v___x_502_, 1, v___x_500_);
+lean_ctor_set(v___x_502_, 2, v___x_498_);
+lean_ctor_set(v___x_502_, 3, v___x_498_);
+lean_ctor_set_usize(v___x_502_, 4, v___x_497_);
+return v___x_502_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__5(void){
+_start:
+{
+lean_object* v___x_503_; lean_object* v___x_504_; lean_object* v___x_505_; lean_object* v___x_506_; 
+v___x_503_ = lean_box(1);
+v___x_504_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__4, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__4_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__4);
+v___x_505_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__1);
+v___x_506_ = lean_alloc_ctor(0, 3, 0);
+lean_ctor_set(v___x_506_, 0, v___x_505_);
+lean_ctor_set(v___x_506_, 1, v___x_504_);
+lean_ctor_set(v___x_506_, 2, v___x_503_);
+return v___x_506_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7(void){
+_start:
+{
+lean_object* v___x_508_; lean_object* v___x_509_; 
+v___x_508_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__6));
+v___x_509_ = l_Lean_stringToMessageData(v___x_508_);
+return v___x_509_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__9(void){
+_start:
+{
+lean_object* v___x_511_; lean_object* v___x_512_; 
+v___x_511_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__8));
+v___x_512_ = l_Lean_stringToMessageData(v___x_511_);
+return v___x_512_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__11(void){
+_start:
+{
+lean_object* v___x_514_; lean_object* v___x_515_; 
+v___x_514_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__10));
+v___x_515_ = l_Lean_stringToMessageData(v___x_514_);
+return v___x_515_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__13(void){
+_start:
+{
+lean_object* v___x_517_; lean_object* v___x_518_; 
+v___x_517_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__12));
+v___x_518_ = l_Lean_stringToMessageData(v___x_517_);
+return v___x_518_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__15(void){
+_start:
+{
+lean_object* v___x_520_; lean_object* v___x_521_; 
+v___x_520_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__14));
+v___x_521_ = l_Lean_stringToMessageData(v___x_520_);
+return v___x_521_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__17(void){
+_start:
+{
+lean_object* v___x_523_; lean_object* v___x_524_; 
+v___x_523_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__16));
+v___x_524_ = l_Lean_stringToMessageData(v___x_523_);
+return v___x_524_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__19(void){
+_start:
+{
+lean_object* v___x_526_; lean_object* v___x_527_; 
+v___x_526_ = ((lean_object*)(lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__18));
+v___x_527_ = l_Lean_stringToMessageData(v___x_526_);
+return v___x_527_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg(lean_object* v_msg_528_, lean_object* v_declHint_529_, lean_object* v___y_530_){
+_start:
+{
+lean_object* v___x_532_; lean_object* v_env_533_; uint8_t v___x_534_; 
+v___x_532_ = lean_st_ref_get(v___y_530_);
+v_env_533_ = lean_ctor_get(v___x_532_, 0);
+lean_inc_ref(v_env_533_);
+lean_dec(v___x_532_);
+v___x_534_ = l_Lean_Name_isAnonymous(v_declHint_529_);
+if (v___x_534_ == 0)
+{
+uint8_t v_isExporting_535_; 
+v_isExporting_535_ = lean_ctor_get_uint8(v_env_533_, sizeof(void*)*8);
+if (v_isExporting_535_ == 0)
+{
+lean_object* v___x_536_; 
+lean_dec_ref(v_env_533_);
+lean_dec(v_declHint_529_);
+v___x_536_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_536_, 0, v_msg_528_);
+return v___x_536_;
+}
+else
+{
+lean_object* v___x_537_; uint8_t v___x_538_; 
+lean_inc_ref(v_env_533_);
+v___x_537_ = l_Lean_Environment_setExporting(v_env_533_, v___x_534_);
+lean_inc(v_declHint_529_);
+lean_inc_ref(v___x_537_);
+v___x_538_ = l_Lean_Environment_contains(v___x_537_, v_declHint_529_, v_isExporting_535_);
+if (v___x_538_ == 0)
+{
+lean_object* v___x_539_; 
+lean_dec_ref(v___x_537_);
+lean_dec_ref(v_env_533_);
+lean_dec(v_declHint_529_);
+v___x_539_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_539_, 0, v_msg_528_);
+return v___x_539_;
+}
+else
+{
+lean_object* v___x_540_; lean_object* v___x_541_; lean_object* v___x_542_; lean_object* v___x_543_; lean_object* v___x_544_; lean_object* v_c_545_; lean_object* v___x_546_; 
+v___x_540_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__2, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__2_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__2);
+v___x_541_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__5, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__5_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__5);
+v___x_542_ = l_Lean_Options_empty;
+v___x_543_ = lean_alloc_ctor(0, 4, 0);
+lean_ctor_set(v___x_543_, 0, v___x_537_);
+lean_ctor_set(v___x_543_, 1, v___x_540_);
+lean_ctor_set(v___x_543_, 2, v___x_541_);
+lean_ctor_set(v___x_543_, 3, v___x_542_);
+lean_inc(v_declHint_529_);
+v___x_544_ = l_Lean_MessageData_ofConstName(v_declHint_529_, v___x_534_);
+v_c_545_ = lean_alloc_ctor(3, 2, 0);
+lean_ctor_set(v_c_545_, 0, v___x_543_);
+lean_ctor_set(v_c_545_, 1, v___x_544_);
+v___x_546_ = l_Lean_Environment_getModuleIdxFor_x3f(v_env_533_, v_declHint_529_);
+if (lean_obj_tag(v___x_546_) == 0)
+{
+lean_object* v___x_547_; lean_object* v___x_548_; lean_object* v___x_549_; lean_object* v___x_550_; lean_object* v___x_551_; lean_object* v___x_552_; lean_object* v___x_553_; 
+lean_dec_ref(v_env_533_);
+lean_dec(v_declHint_529_);
+v___x_547_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7);
+v___x_548_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_548_, 0, v___x_547_);
+lean_ctor_set(v___x_548_, 1, v_c_545_);
+v___x_549_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__9, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__9_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__9);
+v___x_550_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_550_, 0, v___x_548_);
+lean_ctor_set(v___x_550_, 1, v___x_549_);
+v___x_551_ = l_Lean_MessageData_note(v___x_550_);
+v___x_552_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_552_, 0, v_msg_528_);
+lean_ctor_set(v___x_552_, 1, v___x_551_);
+v___x_553_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_553_, 0, v___x_552_);
+return v___x_553_;
+}
+else
+{
+lean_object* v_val_554_; lean_object* v___x_556_; uint8_t v_isShared_557_; uint8_t v_isSharedCheck_589_; 
+v_val_554_ = lean_ctor_get(v___x_546_, 0);
+v_isSharedCheck_589_ = !lean_is_exclusive(v___x_546_);
+if (v_isSharedCheck_589_ == 0)
+{
+v___x_556_ = v___x_546_;
+v_isShared_557_ = v_isSharedCheck_589_;
+goto v_resetjp_555_;
+}
+else
+{
+lean_inc(v_val_554_);
+lean_dec(v___x_546_);
+v___x_556_ = lean_box(0);
+v_isShared_557_ = v_isSharedCheck_589_;
+goto v_resetjp_555_;
+}
+v_resetjp_555_:
+{
+lean_object* v___x_558_; lean_object* v___x_559_; lean_object* v___x_560_; lean_object* v_mod_561_; uint8_t v___x_562_; 
+v___x_558_ = lean_box(0);
+v___x_559_ = l_Lean_Environment_header(v_env_533_);
+lean_dec_ref(v_env_533_);
+v___x_560_ = l_Lean_EnvironmentHeader_moduleNames(v___x_559_);
+v_mod_561_ = lean_array_get(v___x_558_, v___x_560_, v_val_554_);
+lean_dec(v_val_554_);
+lean_dec_ref(v___x_560_);
+v___x_562_ = l_Lean_isPrivateName(v_declHint_529_);
+lean_dec(v_declHint_529_);
+if (v___x_562_ == 0)
+{
+lean_object* v___x_563_; lean_object* v___x_564_; lean_object* v___x_565_; lean_object* v___x_566_; lean_object* v___x_567_; lean_object* v___x_568_; lean_object* v___x_569_; lean_object* v___x_570_; lean_object* v___x_571_; lean_object* v___x_572_; lean_object* v___x_574_; 
+v___x_563_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__11, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__11_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__11);
+v___x_564_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_564_, 0, v___x_563_);
+lean_ctor_set(v___x_564_, 1, v_c_545_);
+v___x_565_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__13, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__13_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__13);
+v___x_566_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_566_, 0, v___x_564_);
+lean_ctor_set(v___x_566_, 1, v___x_565_);
+v___x_567_ = l_Lean_MessageData_ofName(v_mod_561_);
+v___x_568_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_568_, 0, v___x_566_);
+lean_ctor_set(v___x_568_, 1, v___x_567_);
+v___x_569_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__15, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__15_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__15);
+v___x_570_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_570_, 0, v___x_568_);
+lean_ctor_set(v___x_570_, 1, v___x_569_);
+v___x_571_ = l_Lean_MessageData_note(v___x_570_);
+v___x_572_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_572_, 0, v_msg_528_);
+lean_ctor_set(v___x_572_, 1, v___x_571_);
+if (v_isShared_557_ == 0)
+{
+lean_ctor_set_tag(v___x_556_, 0);
+lean_ctor_set(v___x_556_, 0, v___x_572_);
+v___x_574_ = v___x_556_;
+goto v_reusejp_573_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_575_; 
+v_reuseFailAlloc_575_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_575_, 0, v___x_572_);
+v___x_574_ = v_reuseFailAlloc_575_;
+goto v_reusejp_573_;
+}
+v_reusejp_573_:
+{
+return v___x_574_;
+}
+}
+else
+{
+lean_object* v___x_576_; lean_object* v___x_577_; lean_object* v___x_578_; lean_object* v___x_579_; lean_object* v___x_580_; lean_object* v___x_581_; lean_object* v___x_582_; lean_object* v___x_583_; lean_object* v___x_584_; lean_object* v___x_585_; lean_object* v___x_587_; 
+v___x_576_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__7);
+v___x_577_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_577_, 0, v___x_576_);
+lean_ctor_set(v___x_577_, 1, v_c_545_);
+v___x_578_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__17, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__17_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__17);
+v___x_579_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_579_, 0, v___x_577_);
+lean_ctor_set(v___x_579_, 1, v___x_578_);
+v___x_580_ = l_Lean_MessageData_ofName(v_mod_561_);
+v___x_581_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_581_, 0, v___x_579_);
+lean_ctor_set(v___x_581_, 1, v___x_580_);
+v___x_582_ = lean_obj_once(&lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__19, &lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__19_once, _init_lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___closed__19);
+v___x_583_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_583_, 0, v___x_581_);
+lean_ctor_set(v___x_583_, 1, v___x_582_);
+v___x_584_ = l_Lean_MessageData_note(v___x_583_);
+v___x_585_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_585_, 0, v_msg_528_);
+lean_ctor_set(v___x_585_, 1, v___x_584_);
+if (v_isShared_557_ == 0)
+{
+lean_ctor_set_tag(v___x_556_, 0);
+lean_ctor_set(v___x_556_, 0, v___x_585_);
+v___x_587_ = v___x_556_;
+goto v_reusejp_586_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_588_; 
+v_reuseFailAlloc_588_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_588_, 0, v___x_585_);
+v___x_587_ = v_reuseFailAlloc_588_;
+goto v_reusejp_586_;
+}
+v_reusejp_586_:
+{
+return v___x_587_;
+}
+}
+}
+}
+}
+}
+}
+else
+{
+lean_object* v___x_590_; 
+lean_dec_ref(v_env_533_);
+lean_dec(v_declHint_529_);
+v___x_590_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_590_, 0, v_msg_528_);
+return v___x_590_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg___boxed(lean_object* v_msg_591_, lean_object* v_declHint_592_, lean_object* v___y_593_, lean_object* v___y_594_){
+_start:
+{
+lean_object* v_res_595_; 
+v_res_595_ = lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg(v_msg_591_, v_declHint_592_, v___y_593_);
+lean_dec(v___y_593_);
+return v_res_595_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11(lean_object* v_msg_596_, lean_object* v_declHint_597_, lean_object* v___y_598_, lean_object* v___y_599_, lean_object* v___y_600_, lean_object* v___y_601_){
+_start:
+{
+lean_object* v___x_603_; lean_object* v_a_604_; lean_object* v___x_606_; uint8_t v_isShared_607_; uint8_t v_isSharedCheck_613_; 
+v___x_603_ = lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg(v_msg_596_, v_declHint_597_, v___y_601_);
+v_a_604_ = lean_ctor_get(v___x_603_, 0);
+v_isSharedCheck_613_ = !lean_is_exclusive(v___x_603_);
+if (v_isSharedCheck_613_ == 0)
+{
+v___x_606_ = v___x_603_;
+v_isShared_607_ = v_isSharedCheck_613_;
+goto v_resetjp_605_;
+}
+else
+{
+lean_inc(v_a_604_);
+lean_dec(v___x_603_);
+v___x_606_ = lean_box(0);
+v_isShared_607_ = v_isSharedCheck_613_;
+goto v_resetjp_605_;
+}
+v_resetjp_605_:
+{
+lean_object* v___x_608_; lean_object* v___x_609_; lean_object* v___x_611_; 
+v___x_608_ = l_Lean_unknownIdentifierMessageTag;
+v___x_609_ = lean_alloc_ctor(8, 2, 0);
+lean_ctor_set(v___x_609_, 0, v___x_608_);
+lean_ctor_set(v___x_609_, 1, v_a_604_);
+if (v_isShared_607_ == 0)
+{
+lean_ctor_set(v___x_606_, 0, v___x_609_);
+v___x_611_ = v___x_606_;
+goto v_reusejp_610_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_612_; 
+v_reuseFailAlloc_612_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_612_, 0, v___x_609_);
+v___x_611_ = v_reuseFailAlloc_612_;
+goto v_reusejp_610_;
+}
+v_reusejp_610_:
+{
+return v___x_611_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11___boxed(lean_object* v_msg_614_, lean_object* v_declHint_615_, lean_object* v___y_616_, lean_object* v___y_617_, lean_object* v___y_618_, lean_object* v___y_619_, lean_object* v___y_620_){
+_start:
+{
+lean_object* v_res_621_; 
+v_res_621_ = lp_batteries_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11(v_msg_614_, v_declHint_615_, v___y_616_, v___y_617_, v___y_618_, v___y_619_);
+lean_dec(v___y_619_);
+lean_dec_ref(v___y_618_);
+lean_dec(v___y_617_);
+lean_dec_ref(v___y_616_);
+return v_res_621_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg(lean_object* v_msg_622_, lean_object* v___y_623_, lean_object* v___y_624_, lean_object* v___y_625_, lean_object* v___y_626_){
+_start:
+{
+lean_object* v_ref_628_; lean_object* v___x_629_; lean_object* v_a_630_; lean_object* v___x_632_; uint8_t v_isShared_633_; uint8_t v_isSharedCheck_638_; 
+v_ref_628_ = lean_ctor_get(v___y_625_, 5);
+v___x_629_ = lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5(v_msg_622_, v___y_623_, v___y_624_, v___y_625_, v___y_626_);
+v_a_630_ = lean_ctor_get(v___x_629_, 0);
+v_isSharedCheck_638_ = !lean_is_exclusive(v___x_629_);
+if (v_isSharedCheck_638_ == 0)
+{
+v___x_632_ = v___x_629_;
+v_isShared_633_ = v_isSharedCheck_638_;
+goto v_resetjp_631_;
+}
+else
+{
+lean_inc(v_a_630_);
+lean_dec(v___x_629_);
+v___x_632_ = lean_box(0);
+v_isShared_633_ = v_isSharedCheck_638_;
+goto v_resetjp_631_;
+}
+v_resetjp_631_:
+{
+lean_object* v___x_634_; lean_object* v___x_636_; 
+lean_inc(v_ref_628_);
+v___x_634_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_634_, 0, v_ref_628_);
+lean_ctor_set(v___x_634_, 1, v_a_630_);
+if (v_isShared_633_ == 0)
+{
+lean_ctor_set_tag(v___x_632_, 1);
+lean_ctor_set(v___x_632_, 0, v___x_634_);
+v___x_636_ = v___x_632_;
+goto v_reusejp_635_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_637_; 
+v_reuseFailAlloc_637_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_637_, 0, v___x_634_);
+v___x_636_ = v_reuseFailAlloc_637_;
+goto v_reusejp_635_;
+}
+v_reusejp_635_:
+{
+return v___x_636_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg___boxed(lean_object* v_msg_639_, lean_object* v___y_640_, lean_object* v___y_641_, lean_object* v___y_642_, lean_object* v___y_643_, lean_object* v___y_644_){
+_start:
+{
+lean_object* v_res_645_; 
+v_res_645_ = lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg(v_msg_639_, v___y_640_, v___y_641_, v___y_642_, v___y_643_);
+lean_dec(v___y_643_);
+lean_dec_ref(v___y_642_);
+lean_dec(v___y_641_);
+lean_dec_ref(v___y_640_);
+return v_res_645_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg(lean_object* v_ref_646_, lean_object* v_msg_647_, lean_object* v___y_648_, lean_object* v___y_649_, lean_object* v___y_650_, lean_object* v___y_651_){
+_start:
+{
+lean_object* v_fileName_653_; lean_object* v_fileMap_654_; lean_object* v_options_655_; lean_object* v_currRecDepth_656_; lean_object* v_maxRecDepth_657_; lean_object* v_ref_658_; lean_object* v_currNamespace_659_; lean_object* v_openDecls_660_; lean_object* v_initHeartbeats_661_; lean_object* v_maxHeartbeats_662_; lean_object* v_quotContext_663_; lean_object* v_currMacroScope_664_; uint8_t v_diag_665_; lean_object* v_cancelTk_x3f_666_; uint8_t v_suppressElabErrors_667_; lean_object* v_inheritedTraceOptions_668_; lean_object* v_ref_669_; lean_object* v___x_670_; lean_object* v___x_671_; 
+v_fileName_653_ = lean_ctor_get(v___y_650_, 0);
+v_fileMap_654_ = lean_ctor_get(v___y_650_, 1);
+v_options_655_ = lean_ctor_get(v___y_650_, 2);
+v_currRecDepth_656_ = lean_ctor_get(v___y_650_, 3);
+v_maxRecDepth_657_ = lean_ctor_get(v___y_650_, 4);
+v_ref_658_ = lean_ctor_get(v___y_650_, 5);
+v_currNamespace_659_ = lean_ctor_get(v___y_650_, 6);
+v_openDecls_660_ = lean_ctor_get(v___y_650_, 7);
+v_initHeartbeats_661_ = lean_ctor_get(v___y_650_, 8);
+v_maxHeartbeats_662_ = lean_ctor_get(v___y_650_, 9);
+v_quotContext_663_ = lean_ctor_get(v___y_650_, 10);
+v_currMacroScope_664_ = lean_ctor_get(v___y_650_, 11);
+v_diag_665_ = lean_ctor_get_uint8(v___y_650_, sizeof(void*)*14);
+v_cancelTk_x3f_666_ = lean_ctor_get(v___y_650_, 12);
+v_suppressElabErrors_667_ = lean_ctor_get_uint8(v___y_650_, sizeof(void*)*14 + 1);
+v_inheritedTraceOptions_668_ = lean_ctor_get(v___y_650_, 13);
+v_ref_669_ = l_Lean_replaceRef(v_ref_646_, v_ref_658_);
+lean_inc_ref(v_inheritedTraceOptions_668_);
+lean_inc(v_cancelTk_x3f_666_);
+lean_inc(v_currMacroScope_664_);
+lean_inc(v_quotContext_663_);
+lean_inc(v_maxHeartbeats_662_);
+lean_inc(v_initHeartbeats_661_);
+lean_inc(v_openDecls_660_);
+lean_inc(v_currNamespace_659_);
+lean_inc(v_maxRecDepth_657_);
+lean_inc(v_currRecDepth_656_);
+lean_inc_ref(v_options_655_);
+lean_inc_ref(v_fileMap_654_);
+lean_inc_ref(v_fileName_653_);
+v___x_670_ = lean_alloc_ctor(0, 14, 2);
+lean_ctor_set(v___x_670_, 0, v_fileName_653_);
+lean_ctor_set(v___x_670_, 1, v_fileMap_654_);
+lean_ctor_set(v___x_670_, 2, v_options_655_);
+lean_ctor_set(v___x_670_, 3, v_currRecDepth_656_);
+lean_ctor_set(v___x_670_, 4, v_maxRecDepth_657_);
+lean_ctor_set(v___x_670_, 5, v_ref_669_);
+lean_ctor_set(v___x_670_, 6, v_currNamespace_659_);
+lean_ctor_set(v___x_670_, 7, v_openDecls_660_);
+lean_ctor_set(v___x_670_, 8, v_initHeartbeats_661_);
+lean_ctor_set(v___x_670_, 9, v_maxHeartbeats_662_);
+lean_ctor_set(v___x_670_, 10, v_quotContext_663_);
+lean_ctor_set(v___x_670_, 11, v_currMacroScope_664_);
+lean_ctor_set(v___x_670_, 12, v_cancelTk_x3f_666_);
+lean_ctor_set(v___x_670_, 13, v_inheritedTraceOptions_668_);
+lean_ctor_set_uint8(v___x_670_, sizeof(void*)*14, v_diag_665_);
+lean_ctor_set_uint8(v___x_670_, sizeof(void*)*14 + 1, v_suppressElabErrors_667_);
+v___x_671_ = lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg(v_msg_647_, v___y_648_, v___y_649_, v___x_670_, v___y_651_);
+lean_dec_ref_known(v___x_670_, 14);
+return v___x_671_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg___boxed(lean_object* v_ref_672_, lean_object* v_msg_673_, lean_object* v___y_674_, lean_object* v___y_675_, lean_object* v___y_676_, lean_object* v___y_677_, lean_object* v___y_678_){
+_start:
+{
+lean_object* v_res_679_; 
+v_res_679_ = lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg(v_ref_672_, v_msg_673_, v___y_674_, v___y_675_, v___y_676_, v___y_677_);
+lean_dec(v___y_677_);
+lean_dec_ref(v___y_676_);
+lean_dec(v___y_675_);
+lean_dec_ref(v___y_674_);
+lean_dec(v_ref_672_);
+return v_res_679_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg(lean_object* v_ref_680_, lean_object* v_msg_681_, lean_object* v_declHint_682_, lean_object* v___y_683_, lean_object* v___y_684_, lean_object* v___y_685_, lean_object* v___y_686_){
+_start:
+{
+lean_object* v___x_688_; lean_object* v_a_689_; lean_object* v___x_690_; 
+v___x_688_ = lp_batteries_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11(v_msg_681_, v_declHint_682_, v___y_683_, v___y_684_, v___y_685_, v___y_686_);
+v_a_689_ = lean_ctor_get(v___x_688_, 0);
+lean_inc(v_a_689_);
+lean_dec_ref(v___x_688_);
+v___x_690_ = lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg(v_ref_680_, v_a_689_, v___y_683_, v___y_684_, v___y_685_, v___y_686_);
+return v___x_690_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg___boxed(lean_object* v_ref_691_, lean_object* v_msg_692_, lean_object* v_declHint_693_, lean_object* v___y_694_, lean_object* v___y_695_, lean_object* v___y_696_, lean_object* v___y_697_, lean_object* v___y_698_){
+_start:
+{
+lean_object* v_res_699_; 
+v_res_699_ = lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg(v_ref_691_, v_msg_692_, v_declHint_693_, v___y_694_, v___y_695_, v___y_696_, v___y_697_);
+lean_dec(v___y_697_);
+lean_dec_ref(v___y_696_);
+lean_dec(v___y_695_);
+lean_dec_ref(v___y_694_);
+lean_dec(v_ref_691_);
+return v_res_699_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__1(void){
+_start:
+{
+lean_object* v___x_701_; lean_object* v___x_702_; 
+v___x_701_ = ((lean_object*)(lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__0));
+v___x_702_ = l_Lean_stringToMessageData(v___x_701_);
+return v___x_702_;
+}
+}
+static lean_object* _init_lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__3(void){
+_start:
+{
+lean_object* v___x_704_; lean_object* v___x_705_; 
+v___x_704_ = ((lean_object*)(lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__2));
+v___x_705_ = l_Lean_stringToMessageData(v___x_704_);
+return v___x_705_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg(lean_object* v_ref_706_, lean_object* v_constName_707_, lean_object* v___y_708_, lean_object* v___y_709_, lean_object* v___y_710_, lean_object* v___y_711_){
+_start:
+{
+lean_object* v___x_713_; uint8_t v___x_714_; lean_object* v___x_715_; lean_object* v___x_716_; lean_object* v___x_717_; lean_object* v___x_718_; lean_object* v___x_719_; 
+v___x_713_ = lean_obj_once(&lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__1, &lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__1_once, _init_lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__1);
+v___x_714_ = 0;
+lean_inc(v_constName_707_);
+v___x_715_ = l_Lean_MessageData_ofConstName(v_constName_707_, v___x_714_);
+v___x_716_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_716_, 0, v___x_713_);
+lean_ctor_set(v___x_716_, 1, v___x_715_);
+v___x_717_ = lean_obj_once(&lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__3, &lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__3_once, _init_lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___closed__3);
+v___x_718_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_718_, 0, v___x_716_);
+lean_ctor_set(v___x_718_, 1, v___x_717_);
+v___x_719_ = lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg(v_ref_706_, v___x_718_, v_constName_707_, v___y_708_, v___y_709_, v___y_710_, v___y_711_);
+return v___x_719_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg___boxed(lean_object* v_ref_720_, lean_object* v_constName_721_, lean_object* v___y_722_, lean_object* v___y_723_, lean_object* v___y_724_, lean_object* v___y_725_, lean_object* v___y_726_){
+_start:
+{
+lean_object* v_res_727_; 
+v_res_727_ = lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg(v_ref_720_, v_constName_721_, v___y_722_, v___y_723_, v___y_724_, v___y_725_);
+lean_dec(v___y_725_);
+lean_dec_ref(v___y_724_);
+lean_dec(v___y_723_);
+lean_dec_ref(v___y_722_);
+lean_dec(v_ref_720_);
+return v_res_727_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg(lean_object* v_constName_728_, lean_object* v___y_729_, lean_object* v___y_730_, lean_object* v___y_731_, lean_object* v___y_732_){
+_start:
+{
+lean_object* v_ref_734_; lean_object* v___x_735_; 
+v_ref_734_ = lean_ctor_get(v___y_731_, 5);
+v___x_735_ = lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg(v_ref_734_, v_constName_728_, v___y_729_, v___y_730_, v___y_731_, v___y_732_);
+return v___x_735_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg___boxed(lean_object* v_constName_736_, lean_object* v___y_737_, lean_object* v___y_738_, lean_object* v___y_739_, lean_object* v___y_740_, lean_object* v___y_741_){
+_start:
+{
+lean_object* v_res_742_; 
+v_res_742_ = lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg(v_constName_736_, v___y_737_, v___y_738_, v___y_739_, v___y_740_);
+lean_dec(v___y_740_);
+lean_dec_ref(v___y_739_);
+lean_dec(v___y_738_);
+lean_dec_ref(v___y_737_);
+return v_res_742_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(lean_object* v_constName_743_, lean_object* v___y_744_, lean_object* v___y_745_, lean_object* v___y_746_, lean_object* v___y_747_){
+_start:
+{
+lean_object* v___x_749_; lean_object* v_env_750_; uint8_t v___x_751_; lean_object* v___x_752_; 
+v___x_749_ = lean_st_ref_get(v___y_747_);
+v_env_750_ = lean_ctor_get(v___x_749_, 0);
+lean_inc_ref(v_env_750_);
+lean_dec(v___x_749_);
+v___x_751_ = 0;
+lean_inc(v_constName_743_);
+v___x_752_ = l_Lean_Environment_find_x3f(v_env_750_, v_constName_743_, v___x_751_);
+if (lean_obj_tag(v___x_752_) == 0)
+{
+lean_object* v___x_753_; 
+v___x_753_ = lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg(v_constName_743_, v___y_744_, v___y_745_, v___y_746_, v___y_747_);
+return v___x_753_;
+}
+else
+{
+lean_object* v_val_754_; lean_object* v___x_756_; uint8_t v_isShared_757_; uint8_t v_isSharedCheck_761_; 
+lean_dec(v_constName_743_);
+v_val_754_ = lean_ctor_get(v___x_752_, 0);
+v_isSharedCheck_761_ = !lean_is_exclusive(v___x_752_);
+if (v_isSharedCheck_761_ == 0)
+{
+v___x_756_ = v___x_752_;
+v_isShared_757_ = v_isSharedCheck_761_;
+goto v_resetjp_755_;
+}
+else
+{
+lean_inc(v_val_754_);
+lean_dec(v___x_752_);
+v___x_756_ = lean_box(0);
+v_isShared_757_ = v_isSharedCheck_761_;
+goto v_resetjp_755_;
+}
+v_resetjp_755_:
+{
+lean_object* v___x_759_; 
+if (v_isShared_757_ == 0)
+{
+lean_ctor_set_tag(v___x_756_, 0);
+v___x_759_ = v___x_756_;
+goto v_reusejp_758_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_760_; 
+v_reuseFailAlloc_760_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_760_, 0, v_val_754_);
+v___x_759_ = v_reuseFailAlloc_760_;
+goto v_reusejp_758_;
+}
+v_reusejp_758_:
+{
+return v___x_759_;
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1___boxed(lean_object* v_constName_762_, lean_object* v___y_763_, lean_object* v___y_764_, lean_object* v___y_765_, lean_object* v___y_766_, lean_object* v___y_767_){
+_start:
+{
+lean_object* v_res_768_; 
+v_res_768_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_constName_762_, v___y_763_, v___y_764_, v___y_765_, v___y_766_);
+lean_dec(v___y_766_);
+lean_dec_ref(v___y_765_);
+lean_dec(v___y_764_);
+lean_dec_ref(v___y_763_);
+return v_res_768_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__1(lean_object* v_declName_769_, lean_object* v___y_770_, lean_object* v___y_771_, lean_object* v___y_772_, lean_object* v___y_773_){
+_start:
+{
+lean_object* v___x_778_; lean_object* v_env_779_; uint8_t v___x_780_; 
+v___x_778_ = lean_st_ref_get(v___y_773_);
+v_env_779_ = lean_ctor_get(v___x_778_, 0);
+lean_inc_ref(v_env_779_);
+lean_dec(v___x_778_);
+lean_inc(v_declName_769_);
+v___x_780_ = lp_batteries_Lean_Environment_isAutoDecl(v_env_779_, v_declName_769_);
+if (v___x_780_ == 0)
+{
+lean_object* v___x_781_; lean_object* v_a_782_; lean_object* v___x_784_; uint8_t v_isShared_785_; uint8_t v_isSharedCheck_831_; 
+lean_inc(v_declName_769_);
+v___x_781_ = lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(v_declName_769_, v___y_773_);
+v_a_782_ = lean_ctor_get(v___x_781_, 0);
+v_isSharedCheck_831_ = !lean_is_exclusive(v___x_781_);
+if (v_isSharedCheck_831_ == 0)
+{
+v___x_784_ = v___x_781_;
+v_isShared_785_ = v_isSharedCheck_831_;
+goto v_resetjp_783_;
+}
+else
+{
+lean_inc(v_a_782_);
+lean_dec(v___x_781_);
+v___x_784_ = lean_box(0);
+v_isShared_785_ = v_isSharedCheck_831_;
+goto v_resetjp_783_;
+}
+v_resetjp_783_:
+{
+uint8_t v___x_786_; 
+v___x_786_ = lean_unbox(v_a_782_);
+lean_dec(v_a_782_);
+if (v___x_786_ == 0)
+{
+lean_object* v___x_787_; lean_object* v_env_788_; uint8_t v___x_789_; 
+v___x_787_ = lean_st_ref_get(v___y_773_);
+v_env_788_ = lean_ctor_get(v___x_787_, 0);
+lean_inc_ref(v_env_788_);
+lean_dec(v___x_787_);
+lean_inc(v_declName_769_);
+v___x_789_ = l_Lean_Linter_isDeprecated(v_env_788_, v_declName_769_);
+if (v___x_789_ == 0)
+{
+lean_object* v___x_790_; 
+lean_del_object(v___x_784_);
+v___x_790_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_declName_769_, v___y_770_, v___y_771_, v___y_772_, v___y_773_);
+if (lean_obj_tag(v___x_790_) == 0)
+{
+lean_object* v_a_791_; lean_object* v___x_793_; uint8_t v_isShared_794_; uint8_t v_isSharedCheck_814_; 
+v_a_791_ = lean_ctor_get(v___x_790_, 0);
+v_isSharedCheck_814_ = !lean_is_exclusive(v___x_790_);
+if (v_isSharedCheck_814_ == 0)
+{
+v___x_793_ = v___x_790_;
+v_isShared_794_ = v_isSharedCheck_814_;
+goto v_resetjp_792_;
+}
+else
+{
+lean_inc(v_a_791_);
+lean_dec(v___x_790_);
+v___x_793_ = lean_box(0);
+v_isShared_794_ = v_isSharedCheck_814_;
+goto v_resetjp_792_;
+}
+v_resetjp_792_:
+{
+lean_object* v___x_795_; lean_object* v_val_797_; lean_object* v___y_798_; lean_object* v___y_799_; lean_object* v___y_800_; lean_object* v___y_801_; 
+v___x_795_ = l_Lean_ConstantInfo_type(v_a_791_);
+switch(lean_obj_tag(v_a_791_))
+{
+case 1:
+{
+lean_object* v_val_806_; lean_object* v_value_807_; 
+lean_del_object(v___x_793_);
+v_val_806_ = lean_ctor_get(v_a_791_, 0);
+lean_inc_ref(v_val_806_);
+lean_dec_ref_known(v_a_791_, 1);
+v_value_807_ = lean_ctor_get(v_val_806_, 1);
+lean_inc_ref(v_value_807_);
+lean_dec_ref(v_val_806_);
+v_val_797_ = v_value_807_;
+v___y_798_ = v___y_770_;
+v___y_799_ = v___y_771_;
+v___y_800_ = v___y_772_;
+v___y_801_ = v___y_773_;
+goto v___jp_796_;
+}
+case 2:
+{
+lean_object* v_val_808_; lean_object* v_value_809_; 
+lean_del_object(v___x_793_);
+v_val_808_ = lean_ctor_get(v_a_791_, 0);
+lean_inc_ref(v_val_808_);
+lean_dec_ref_known(v_a_791_, 1);
+v_value_809_ = lean_ctor_get(v_val_808_, 1);
+lean_inc_ref(v_value_809_);
+lean_dec_ref(v_val_808_);
+v_val_797_ = v_value_809_;
+v___y_798_ = v___y_770_;
+v___y_799_ = v___y_771_;
+v___y_800_ = v___y_772_;
+v___y_801_ = v___y_773_;
+goto v___jp_796_;
+}
+default: 
+{
+lean_object* v___x_810_; lean_object* v___x_812_; 
+lean_dec_ref(v___x_795_);
+lean_dec(v_a_791_);
+v___x_810_ = lean_box(0);
+if (v_isShared_794_ == 0)
+{
+lean_ctor_set(v___x_793_, 0, v___x_810_);
+v___x_812_ = v___x_793_;
+goto v_reusejp_811_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_813_; 
+v_reuseFailAlloc_813_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_813_, 0, v___x_810_);
+v___x_812_ = v_reuseFailAlloc_813_;
+goto v_reusejp_811_;
+}
+v_reusejp_811_:
+{
+return v___x_812_;
+}
+}
+}
+v___jp_796_:
+{
+uint8_t v___x_802_; 
+v___x_802_ = l_Lean_Expr_hasSorry(v_val_797_);
+if (v___x_802_ == 0)
+{
+uint8_t v___x_803_; 
+v___x_803_ = l_Lean_Expr_hasSorry(v___x_795_);
+if (v___x_803_ == 0)
+{
+lean_object* v___f_804_; lean_object* v___x_805_; 
+v___f_804_ = lean_alloc_closure((void*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___boxed), 8, 1);
+lean_closure_set(v___f_804_, 0, v_val_797_);
+v___x_805_ = lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg(v___x_795_, v___f_804_, v___x_803_, v___y_798_, v___y_799_, v___y_800_, v___y_801_);
+return v___x_805_;
+}
+else
+{
+lean_dec_ref(v_val_797_);
+lean_dec_ref(v___x_795_);
+goto v___jp_775_;
+}
+}
+else
+{
+lean_dec_ref(v_val_797_);
+lean_dec_ref(v___x_795_);
+goto v___jp_775_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_815_; lean_object* v___x_817_; uint8_t v_isShared_818_; uint8_t v_isSharedCheck_822_; 
+v_a_815_ = lean_ctor_get(v___x_790_, 0);
+v_isSharedCheck_822_ = !lean_is_exclusive(v___x_790_);
+if (v_isSharedCheck_822_ == 0)
+{
+v___x_817_ = v___x_790_;
+v_isShared_818_ = v_isSharedCheck_822_;
+goto v_resetjp_816_;
+}
+else
+{
+lean_inc(v_a_815_);
+lean_dec(v___x_790_);
+v___x_817_ = lean_box(0);
+v_isShared_818_ = v_isSharedCheck_822_;
+goto v_resetjp_816_;
+}
+v_resetjp_816_:
+{
+lean_object* v___x_820_; 
+if (v_isShared_818_ == 0)
+{
+v___x_820_ = v___x_817_;
+goto v_reusejp_819_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_821_; 
+v_reuseFailAlloc_821_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_821_, 0, v_a_815_);
+v___x_820_ = v_reuseFailAlloc_821_;
+goto v_reusejp_819_;
+}
+v_reusejp_819_:
+{
+return v___x_820_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_823_; lean_object* v___x_825_; 
+lean_dec(v_declName_769_);
+v___x_823_ = lean_box(0);
+if (v_isShared_785_ == 0)
+{
+lean_ctor_set(v___x_784_, 0, v___x_823_);
+v___x_825_ = v___x_784_;
+goto v_reusejp_824_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_826_; 
+v_reuseFailAlloc_826_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_826_, 0, v___x_823_);
+v___x_825_ = v_reuseFailAlloc_826_;
+goto v_reusejp_824_;
+}
+v_reusejp_824_:
+{
+return v___x_825_;
+}
+}
+}
+else
+{
+lean_object* v___x_827_; lean_object* v___x_829_; 
+lean_dec(v_declName_769_);
+v___x_827_ = lean_box(0);
+if (v_isShared_785_ == 0)
+{
+lean_ctor_set(v___x_784_, 0, v___x_827_);
+v___x_829_ = v___x_784_;
+goto v_reusejp_828_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_830_; 
+v_reuseFailAlloc_830_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_830_, 0, v___x_827_);
+v___x_829_ = v_reuseFailAlloc_830_;
+goto v_reusejp_828_;
+}
+v_reusejp_828_:
+{
+return v___x_829_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_832_; lean_object* v___x_833_; 
+lean_dec(v_declName_769_);
+v___x_832_ = lean_box(0);
+v___x_833_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_833_, 0, v___x_832_);
+return v___x_833_;
+}
+v___jp_775_:
+{
+lean_object* v___x_776_; lean_object* v___x_777_; 
+v___x_776_ = lean_box(0);
+v___x_777_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_777_, 0, v___x_776_);
+return v___x_777_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__1___boxed(lean_object* v_declName_834_, lean_object* v___y_835_, lean_object* v___y_836_, lean_object* v___y_837_, lean_object* v___y_838_, lean_object* v___y_839_){
+_start:
+{
+lean_object* v_res_840_; 
+v_res_840_ = lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__1(v_declName_834_, v___y_835_, v___y_836_, v___y_837_, v___y_838_);
+lean_dec(v___y_838_);
+lean_dec_ref(v___y_837_);
+lean_dec(v___y_836_);
+lean_dec_ref(v___y_835_);
+return v_res_840_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__3(void){
+_start:
+{
+lean_object* v___x_845_; lean_object* v___x_846_; 
+v___x_845_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__2));
+v___x_846_ = l_Lean_MessageData_ofFormat(v___x_845_);
+return v___x_846_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__6(void){
+_start:
+{
+lean_object* v___x_850_; lean_object* v___x_851_; 
+v___x_850_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__5));
+v___x_851_ = l_Lean_MessageData_ofFormat(v___x_850_);
+return v___x_851_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__7(void){
+_start:
+{
+uint8_t v___x_852_; lean_object* v___x_853_; lean_object* v___x_854_; lean_object* v___f_855_; lean_object* v___x_856_; 
+v___x_852_ = 1;
+v___x_853_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__6, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__6_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__6);
+v___x_854_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__3, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__3_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__3);
+v___f_855_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__0));
+v___x_856_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_856_, 0, v___f_855_);
+lean_ctor_set(v___x_856_, 1, v___x_854_);
+lean_ctor_set(v___x_856_, 2, v___x_853_);
+lean_ctor_set_uint8(v___x_856_, sizeof(void*)*3, v___x_852_);
+return v___x_856_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments(void){
+_start:
+{
+lean_object* v___x_857_; 
+v___x_857_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__7, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___closed__7);
+return v___x_857_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2(size_t v_sz_858_, size_t v_i_859_, lean_object* v_bs_860_, lean_object* v___y_861_, lean_object* v___y_862_, lean_object* v___y_863_, lean_object* v___y_864_){
+_start:
+{
+lean_object* v___x_866_; 
+v___x_866_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___redArg(v_sz_858_, v_i_859_, v_bs_860_, v___y_861_, v___y_863_, v___y_864_);
+return v___x_866_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2___boxed(lean_object* v_sz_867_, lean_object* v_i_868_, lean_object* v_bs_869_, lean_object* v___y_870_, lean_object* v___y_871_, lean_object* v___y_872_, lean_object* v___y_873_, lean_object* v___y_874_){
+_start:
+{
+size_t v_sz_boxed_875_; size_t v_i_boxed_876_; lean_object* v_res_877_; 
+v_sz_boxed_875_ = lean_unbox_usize(v_sz_867_);
+lean_dec(v_sz_867_);
+v_i_boxed_876_ = lean_unbox_usize(v_i_868_);
+lean_dec(v_i_868_);
+v_res_877_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_mapMUnsafe_map___at___00Batteries_Tactic_Lint_unusedArguments_spec__2(v_sz_boxed_875_, v_i_boxed_876_, v_bs_869_, v___y_870_, v___y_871_, v___y_872_, v___y_873_);
+lean_dec(v___y_873_);
+lean_dec_ref(v___y_872_);
+lean_dec(v___y_871_);
+lean_dec_ref(v___y_870_);
+return v_res_877_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3(uint8_t v___x_878_, lean_object* v_as_879_, size_t v_sz_880_, size_t v_i_881_, lean_object* v_b_882_, lean_object* v___y_883_, lean_object* v___y_884_, lean_object* v___y_885_, lean_object* v___y_886_){
+_start:
+{
+lean_object* v___x_888_; 
+v___x_888_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___redArg(v___x_878_, v_as_879_, v_sz_880_, v_i_881_, v_b_882_);
+return v___x_888_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3___boxed(lean_object* v___x_889_, lean_object* v_as_890_, lean_object* v_sz_891_, lean_object* v_i_892_, lean_object* v_b_893_, lean_object* v___y_894_, lean_object* v___y_895_, lean_object* v___y_896_, lean_object* v___y_897_, lean_object* v___y_898_){
+_start:
+{
+uint8_t v___x_17832__boxed_899_; size_t v_sz_boxed_900_; size_t v_i_boxed_901_; lean_object* v_res_902_; 
+v___x_17832__boxed_899_ = lean_unbox(v___x_889_);
+v_sz_boxed_900_ = lean_unbox_usize(v_sz_891_);
+lean_dec(v_sz_891_);
+v_i_boxed_901_ = lean_unbox_usize(v_i_892_);
+lean_dec(v_i_892_);
+v_res_902_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__3(v___x_17832__boxed_899_, v_as_890_, v_sz_boxed_900_, v_i_boxed_901_, v_b_893_, v___y_894_, v___y_895_, v___y_896_, v___y_897_);
+lean_dec(v___y_897_);
+lean_dec_ref(v___y_896_);
+lean_dec(v___y_895_);
+lean_dec_ref(v___y_894_);
+lean_dec_ref(v_as_890_);
+return v_res_902_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4(lean_object* v_as_903_, size_t v_sz_904_, size_t v_i_905_, lean_object* v_b_906_, lean_object* v___y_907_, lean_object* v___y_908_, lean_object* v___y_909_, lean_object* v___y_910_){
+_start:
+{
+lean_object* v___x_912_; 
+v___x_912_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___redArg(v_as_903_, v_sz_904_, v_i_905_, v_b_906_);
+return v___x_912_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4___boxed(lean_object* v_as_913_, lean_object* v_sz_914_, lean_object* v_i_915_, lean_object* v_b_916_, lean_object* v___y_917_, lean_object* v___y_918_, lean_object* v___y_919_, lean_object* v___y_920_, lean_object* v___y_921_){
+_start:
+{
+size_t v_sz_boxed_922_; size_t v_i_boxed_923_; lean_object* v_res_924_; 
+v_sz_boxed_922_ = lean_unbox_usize(v_sz_914_);
+lean_dec(v_sz_914_);
+v_i_boxed_923_ = lean_unbox_usize(v_i_915_);
+lean_dec(v_i_915_);
+v_res_924_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_forIn_x27Unsafe_loop___at___00Batteries_Tactic_Lint_unusedArguments_spec__4(v_as_913_, v_sz_boxed_922_, v_i_boxed_923_, v_b_916_, v___y_917_, v___y_918_, v___y_919_, v___y_920_);
+lean_dec(v___y_920_);
+lean_dec_ref(v___y_919_);
+lean_dec(v___y_918_);
+lean_dec_ref(v___y_917_);
+lean_dec_ref(v_as_913_);
+return v_res_924_;
+}
+}
+LEAN_EXPORT uint8_t lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6(lean_object* v_00_u03b2_925_, lean_object* v_k_926_, lean_object* v_t_927_){
+_start:
+{
+uint8_t v___x_928_; 
+v___x_928_ = lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(v_k_926_, v_t_927_);
+return v___x_928_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___boxed(lean_object* v_00_u03b2_929_, lean_object* v_k_930_, lean_object* v_t_931_){
+_start:
+{
+uint8_t v_res_932_; lean_object* v_r_933_; 
+v_res_932_ = lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6(v_00_u03b2_929_, v_k_930_, v_t_931_);
+lean_dec(v_t_931_);
+lean_dec(v_k_930_);
+v_r_933_ = lean_box(v_res_932_);
+return v_r_933_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1(lean_object* v_00_u03b1_934_, lean_object* v_constName_935_, lean_object* v___y_936_, lean_object* v___y_937_, lean_object* v___y_938_, lean_object* v___y_939_){
+_start:
+{
+lean_object* v___x_941_; 
+v___x_941_ = lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___redArg(v_constName_935_, v___y_936_, v___y_937_, v___y_938_, v___y_939_);
+return v___x_941_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1___boxed(lean_object* v_00_u03b1_942_, lean_object* v_constName_943_, lean_object* v___y_944_, lean_object* v___y_945_, lean_object* v___y_946_, lean_object* v___y_947_, lean_object* v___y_948_){
+_start:
+{
+lean_object* v_res_949_; 
+v_res_949_ = lp_batteries_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1(v_00_u03b1_942_, v_constName_943_, v___y_944_, v___y_945_, v___y_946_, v___y_947_);
+lean_dec(v___y_947_);
+lean_dec_ref(v___y_946_);
+lean_dec(v___y_945_);
+lean_dec_ref(v___y_944_);
+return v_res_949_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4(lean_object* v_00_u03b1_950_, lean_object* v_ref_951_, lean_object* v_constName_952_, lean_object* v___y_953_, lean_object* v___y_954_, lean_object* v___y_955_, lean_object* v___y_956_){
+_start:
+{
+lean_object* v___x_958_; 
+v___x_958_ = lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___redArg(v_ref_951_, v_constName_952_, v___y_953_, v___y_954_, v___y_955_, v___y_956_);
+return v___x_958_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4___boxed(lean_object* v_00_u03b1_959_, lean_object* v_ref_960_, lean_object* v_constName_961_, lean_object* v___y_962_, lean_object* v___y_963_, lean_object* v___y_964_, lean_object* v___y_965_, lean_object* v___y_966_){
+_start:
+{
+lean_object* v_res_967_; 
+v_res_967_ = lp_batteries_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4(v_00_u03b1_959_, v_ref_960_, v_constName_961_, v___y_962_, v___y_963_, v___y_964_, v___y_965_);
+lean_dec(v___y_965_);
+lean_dec_ref(v___y_964_);
+lean_dec(v___y_963_);
+lean_dec_ref(v___y_962_);
+lean_dec(v_ref_960_);
+return v_res_967_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10(lean_object* v_00_u03b1_968_, lean_object* v_ref_969_, lean_object* v_msg_970_, lean_object* v_declHint_971_, lean_object* v___y_972_, lean_object* v___y_973_, lean_object* v___y_974_, lean_object* v___y_975_){
+_start:
+{
+lean_object* v___x_977_; 
+v___x_977_ = lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___redArg(v_ref_969_, v_msg_970_, v_declHint_971_, v___y_972_, v___y_973_, v___y_974_, v___y_975_);
+return v___x_977_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10___boxed(lean_object* v_00_u03b1_978_, lean_object* v_ref_979_, lean_object* v_msg_980_, lean_object* v_declHint_981_, lean_object* v___y_982_, lean_object* v___y_983_, lean_object* v___y_984_, lean_object* v___y_985_, lean_object* v___y_986_){
+_start:
+{
+lean_object* v_res_987_; 
+v_res_987_ = lp_batteries_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10(v_00_u03b1_978_, v_ref_979_, v_msg_980_, v_declHint_981_, v___y_982_, v___y_983_, v___y_984_, v___y_985_);
+lean_dec(v___y_985_);
+lean_dec_ref(v___y_984_);
+lean_dec(v___y_983_);
+lean_dec_ref(v___y_982_);
+lean_dec(v_ref_979_);
+return v_res_987_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12(lean_object* v_msg_988_, lean_object* v_declHint_989_, lean_object* v___y_990_, lean_object* v___y_991_, lean_object* v___y_992_, lean_object* v___y_993_){
+_start:
+{
+lean_object* v___x_995_; 
+v___x_995_ = lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___redArg(v_msg_988_, v_declHint_989_, v___y_993_);
+return v___x_995_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12___boxed(lean_object* v_msg_996_, lean_object* v_declHint_997_, lean_object* v___y_998_, lean_object* v___y_999_, lean_object* v___y_1000_, lean_object* v___y_1001_, lean_object* v___y_1002_){
+_start:
+{
+lean_object* v_res_1003_; 
+v_res_1003_ = lp_batteries_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__11_spec__12(v_msg_996_, v_declHint_997_, v___y_998_, v___y_999_, v___y_1000_, v___y_1001_);
+lean_dec(v___y_1001_);
+lean_dec_ref(v___y_1000_);
+lean_dec(v___y_999_);
+lean_dec_ref(v___y_998_);
+return v_res_1003_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12(lean_object* v_00_u03b1_1004_, lean_object* v_ref_1005_, lean_object* v_msg_1006_, lean_object* v___y_1007_, lean_object* v___y_1008_, lean_object* v___y_1009_, lean_object* v___y_1010_){
+_start:
+{
+lean_object* v___x_1012_; 
+v___x_1012_ = lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___redArg(v_ref_1005_, v_msg_1006_, v___y_1007_, v___y_1008_, v___y_1009_, v___y_1010_);
+return v___x_1012_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12___boxed(lean_object* v_00_u03b1_1013_, lean_object* v_ref_1014_, lean_object* v_msg_1015_, lean_object* v___y_1016_, lean_object* v___y_1017_, lean_object* v___y_1018_, lean_object* v___y_1019_, lean_object* v___y_1020_){
+_start:
+{
+lean_object* v_res_1021_; 
+v_res_1021_ = lp_batteries_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12(v_00_u03b1_1013_, v_ref_1014_, v_msg_1015_, v___y_1016_, v___y_1017_, v___y_1018_, v___y_1019_);
+lean_dec(v___y_1019_);
+lean_dec_ref(v___y_1018_);
+lean_dec(v___y_1017_);
+lean_dec_ref(v___y_1016_);
+lean_dec(v_ref_1014_);
+return v_res_1021_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14(lean_object* v_00_u03b1_1022_, lean_object* v_msg_1023_, lean_object* v___y_1024_, lean_object* v___y_1025_, lean_object* v___y_1026_, lean_object* v___y_1027_){
+_start:
+{
+lean_object* v___x_1029_; 
+v___x_1029_ = lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___redArg(v_msg_1023_, v___y_1024_, v___y_1025_, v___y_1026_, v___y_1027_);
+return v___x_1029_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14___boxed(lean_object* v_00_u03b1_1030_, lean_object* v_msg_1031_, lean_object* v___y_1032_, lean_object* v___y_1033_, lean_object* v___y_1034_, lean_object* v___y_1035_, lean_object* v___y_1036_){
+_start:
+{
+lean_object* v_res_1037_; 
+v_res_1037_ = lp_batteries_Lean_throwError___at___00Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1_spec__1_spec__4_spec__10_spec__12_spec__14(v_00_u03b1_1030_, v_msg_1031_, v___y_1032_, v___y_1033_, v___y_1034_, v___y_1035_);
+lean_dec(v___y_1035_);
+lean_dec_ref(v___y_1034_);
+lean_dec(v___y_1033_);
+lean_dec_ref(v___y_1032_);
+return v_res_1037_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1(void){
+_start:
+{
+lean_object* v___x_1039_; lean_object* v___x_1040_; 
+v___x_1039_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__0));
+v___x_1040_ = l_Lean_stringToMessageData(v___x_1039_);
+return v___x_1040_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0(lean_object* v_declName_1049_, lean_object* v___y_1050_, lean_object* v___y_1051_, lean_object* v___y_1052_, lean_object* v___y_1053_){
+_start:
+{
+uint8_t v___y_1056_; lean_object* v_kind_1057_; lean_object* v___y_1058_; lean_object* v___y_1059_; lean_object* v___y_1096_; lean_object* v___y_1097_; uint8_t v___y_1098_; lean_object* v___y_1099_; uint8_t v___y_1120_; lean_object* v___y_1121_; lean_object* v___y_1122_; lean_object* v___y_1123_; lean_object* v___y_1124_; lean_object* v___y_1160_; lean_object* v___y_1161_; lean_object* v___y_1162_; lean_object* v___y_1163_; uint8_t v___y_1164_; lean_object* v___y_1165_; uint8_t v___y_1166_; uint8_t v___y_1172_; lean_object* v___y_1173_; lean_object* v___y_1174_; lean_object* v___y_1175_; lean_object* v___y_1176_; lean_object* v___x_1182_; uint8_t v_a_1184_; uint8_t v___x_1217_; 
+v___x_1182_ = lean_st_ref_get(v___y_1053_);
+v___x_1217_ = l_Lean_isPrivateName(v_declName_1049_);
+if (v___x_1217_ == 0)
+{
+lean_object* v_env_1218_; uint8_t v___x_1219_; 
+v_env_1218_ = lean_ctor_get(v___x_1182_, 0);
+lean_inc_ref(v_env_1218_);
+lean_dec(v___x_1182_);
+lean_inc(v_declName_1049_);
+v___x_1219_ = lp_batteries_Lean_Environment_isAutoDecl(v_env_1218_, v_declName_1049_);
+v_a_1184_ = v___x_1219_;
+goto v___jp_1183_;
+}
+else
+{
+lean_dec(v___x_1182_);
+v_a_1184_ = v___x_1217_;
+goto v___jp_1183_;
+}
+v___jp_1055_:
+{
+lean_object* v___x_1060_; lean_object* v_env_1061_; lean_object* v___x_1062_; lean_object* v___x_1063_; lean_object* v___x_1064_; lean_object* v___x_1065_; 
+v___x_1060_ = lean_st_ref_get(v___y_1059_);
+v_env_1061_ = lean_ctor_get(v___x_1060_, 0);
+lean_inc_ref(v_env_1061_);
+lean_dec(v___x_1060_);
+v___x_1062_ = l_Lean_Options_empty;
+v___x_1063_ = lean_box(0);
+v___x_1064_ = lean_box(0);
+v___x_1065_ = l_Lean_findDocString_x3f(v_env_1061_, v_declName_1049_, v___y_1056_, v___x_1062_, v___x_1063_, v___x_1064_);
+if (lean_obj_tag(v___x_1065_) == 0)
+{
+lean_object* v_a_1066_; lean_object* v___x_1068_; uint8_t v_isShared_1069_; uint8_t v_isSharedCheck_1081_; 
+v_a_1066_ = lean_ctor_get(v___x_1065_, 0);
+v_isSharedCheck_1081_ = !lean_is_exclusive(v___x_1065_);
+if (v_isSharedCheck_1081_ == 0)
+{
+v___x_1068_ = v___x_1065_;
+v_isShared_1069_ = v_isSharedCheck_1081_;
+goto v_resetjp_1067_;
+}
+else
+{
+lean_inc(v_a_1066_);
+lean_dec(v___x_1065_);
+v___x_1068_ = lean_box(0);
+v_isShared_1069_ = v_isSharedCheck_1081_;
+goto v_resetjp_1067_;
+}
+v_resetjp_1067_:
+{
+if (lean_obj_tag(v_a_1066_) == 0)
+{
+lean_object* v___x_1070_; lean_object* v___x_1071_; lean_object* v___x_1072_; lean_object* v___x_1073_; lean_object* v___x_1075_; 
+lean_inc_ref(v_kind_1057_);
+v___x_1070_ = l_Lean_stringToMessageData(v_kind_1057_);
+v___x_1071_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1, &lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1);
+v___x_1072_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_1072_, 0, v___x_1070_);
+lean_ctor_set(v___x_1072_, 1, v___x_1071_);
+v___x_1073_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_1073_, 0, v___x_1072_);
+if (v_isShared_1069_ == 0)
+{
+lean_ctor_set(v___x_1068_, 0, v___x_1073_);
+v___x_1075_ = v___x_1068_;
+goto v_reusejp_1074_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1076_; 
+v_reuseFailAlloc_1076_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1076_, 0, v___x_1073_);
+v___x_1075_ = v_reuseFailAlloc_1076_;
+goto v_reusejp_1074_;
+}
+v_reusejp_1074_:
+{
+return v___x_1075_;
+}
+}
+else
+{
+lean_object* v___x_1077_; lean_object* v___x_1079_; 
+lean_dec(v_a_1066_);
+v___x_1077_ = lean_box(0);
+if (v_isShared_1069_ == 0)
+{
+lean_ctor_set(v___x_1068_, 0, v___x_1077_);
+v___x_1079_ = v___x_1068_;
+goto v_reusejp_1078_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1080_; 
+v_reuseFailAlloc_1080_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1080_, 0, v___x_1077_);
+v___x_1079_ = v_reuseFailAlloc_1080_;
+goto v_reusejp_1078_;
+}
+v_reusejp_1078_:
+{
+return v___x_1079_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1082_; lean_object* v___x_1084_; uint8_t v_isShared_1085_; uint8_t v_isSharedCheck_1094_; 
+v_a_1082_ = lean_ctor_get(v___x_1065_, 0);
+v_isSharedCheck_1094_ = !lean_is_exclusive(v___x_1065_);
+if (v_isSharedCheck_1094_ == 0)
+{
+v___x_1084_ = v___x_1065_;
+v_isShared_1085_ = v_isSharedCheck_1094_;
+goto v_resetjp_1083_;
+}
+else
+{
+lean_inc(v_a_1082_);
+lean_dec(v___x_1065_);
+v___x_1084_ = lean_box(0);
+v_isShared_1085_ = v_isSharedCheck_1094_;
+goto v_resetjp_1083_;
+}
+v_resetjp_1083_:
+{
+lean_object* v_ref_1086_; lean_object* v___x_1087_; lean_object* v___x_1088_; lean_object* v___x_1089_; lean_object* v___x_1090_; lean_object* v___x_1092_; 
+v_ref_1086_ = lean_ctor_get(v___y_1058_, 5);
+v___x_1087_ = lean_io_error_to_string(v_a_1082_);
+v___x_1088_ = lean_alloc_ctor(3, 1, 0);
+lean_ctor_set(v___x_1088_, 0, v___x_1087_);
+v___x_1089_ = l_Lean_MessageData_ofFormat(v___x_1088_);
+lean_inc(v_ref_1086_);
+v___x_1090_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_1090_, 0, v_ref_1086_);
+lean_ctor_set(v___x_1090_, 1, v___x_1089_);
+if (v_isShared_1085_ == 0)
+{
+lean_ctor_set(v___x_1084_, 0, v___x_1090_);
+v___x_1092_ = v___x_1084_;
+goto v_reusejp_1091_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1093_; 
+v_reuseFailAlloc_1093_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1093_, 0, v___x_1090_);
+v___x_1092_ = v_reuseFailAlloc_1093_;
+goto v_reusejp_1091_;
+}
+v_reusejp_1091_:
+{
+return v___x_1092_;
+}
+}
+}
+}
+v___jp_1095_:
+{
+if (lean_obj_tag(v___y_1099_) == 0)
+{
+lean_object* v_a_1100_; lean_object* v___x_1102_; uint8_t v_isShared_1103_; uint8_t v_isSharedCheck_1110_; 
+v_a_1100_ = lean_ctor_get(v___y_1099_, 0);
+v_isSharedCheck_1110_ = !lean_is_exclusive(v___y_1099_);
+if (v_isSharedCheck_1110_ == 0)
+{
+v___x_1102_ = v___y_1099_;
+v_isShared_1103_ = v_isSharedCheck_1110_;
+goto v_resetjp_1101_;
+}
+else
+{
+lean_inc(v_a_1100_);
+lean_dec(v___y_1099_);
+v___x_1102_ = lean_box(0);
+v_isShared_1103_ = v_isSharedCheck_1110_;
+goto v_resetjp_1101_;
+}
+v_resetjp_1101_:
+{
+uint8_t v___x_1104_; 
+v___x_1104_ = lean_unbox(v_a_1100_);
+lean_dec(v_a_1100_);
+if (v___x_1104_ == 0)
+{
+lean_object* v___x_1105_; 
+lean_del_object(v___x_1102_);
+v___x_1105_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__2));
+v___y_1056_ = v___y_1098_;
+v_kind_1057_ = v___x_1105_;
+v___y_1058_ = v___y_1096_;
+v___y_1059_ = v___y_1097_;
+goto v___jp_1055_;
+}
+else
+{
+lean_object* v___x_1106_; lean_object* v___x_1108_; 
+lean_dec(v_declName_1049_);
+v___x_1106_ = lean_box(0);
+if (v_isShared_1103_ == 0)
+{
+lean_ctor_set(v___x_1102_, 0, v___x_1106_);
+v___x_1108_ = v___x_1102_;
+goto v_reusejp_1107_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1109_; 
+v_reuseFailAlloc_1109_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1109_, 0, v___x_1106_);
+v___x_1108_ = v_reuseFailAlloc_1109_;
+goto v_reusejp_1107_;
+}
+v_reusejp_1107_:
+{
+return v___x_1108_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1111_; lean_object* v___x_1113_; uint8_t v_isShared_1114_; uint8_t v_isSharedCheck_1118_; 
+lean_dec(v_declName_1049_);
+v_a_1111_ = lean_ctor_get(v___y_1099_, 0);
+v_isSharedCheck_1118_ = !lean_is_exclusive(v___y_1099_);
+if (v_isSharedCheck_1118_ == 0)
+{
+v___x_1113_ = v___y_1099_;
+v_isShared_1114_ = v_isSharedCheck_1118_;
+goto v_resetjp_1112_;
+}
+else
+{
+lean_inc(v_a_1111_);
+lean_dec(v___y_1099_);
+v___x_1113_ = lean_box(0);
+v_isShared_1114_ = v_isSharedCheck_1118_;
+goto v_resetjp_1112_;
+}
+v_resetjp_1112_:
+{
+lean_object* v___x_1116_; 
+if (v_isShared_1114_ == 0)
+{
+v___x_1116_ = v___x_1113_;
+goto v_reusejp_1115_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1117_; 
+v_reuseFailAlloc_1117_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1117_, 0, v_a_1111_);
+v___x_1116_ = v_reuseFailAlloc_1117_;
+goto v_reusejp_1115_;
+}
+v_reusejp_1115_:
+{
+return v___x_1116_;
+}
+}
+}
+}
+v___jp_1119_:
+{
+lean_object* v___x_1125_; 
+lean_inc(v_declName_1049_);
+v___x_1125_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_declName_1049_, v___y_1121_, v___y_1122_, v___y_1123_, v___y_1124_);
+if (lean_obj_tag(v___x_1125_) == 0)
+{
+lean_object* v_a_1126_; lean_object* v___x_1128_; uint8_t v_isShared_1129_; uint8_t v_isSharedCheck_1144_; 
+v_a_1126_ = lean_ctor_get(v___x_1125_, 0);
+v_isSharedCheck_1144_ = !lean_is_exclusive(v___x_1125_);
+if (v_isSharedCheck_1144_ == 0)
+{
+v___x_1128_ = v___x_1125_;
+v_isShared_1129_ = v_isSharedCheck_1144_;
+goto v_resetjp_1127_;
+}
+else
+{
+lean_inc(v_a_1126_);
+lean_dec(v___x_1125_);
+v___x_1128_ = lean_box(0);
+v_isShared_1129_ = v_isSharedCheck_1144_;
+goto v_resetjp_1127_;
+}
+v_resetjp_1127_:
+{
+switch(lean_obj_tag(v_a_1126_))
+{
+case 0:
+{
+lean_object* v___x_1130_; 
+lean_dec_ref_known(v_a_1126_, 1);
+lean_del_object(v___x_1128_);
+v___x_1130_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__3));
+v___y_1056_ = v___y_1120_;
+v_kind_1057_ = v___x_1130_;
+v___y_1058_ = v___y_1123_;
+v___y_1059_ = v___y_1124_;
+goto v___jp_1055_;
+}
+case 3:
+{
+lean_object* v___x_1131_; 
+lean_dec_ref_known(v_a_1126_, 1);
+lean_del_object(v___x_1128_);
+v___x_1131_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__4));
+v___y_1056_ = v___y_1120_;
+v_kind_1057_ = v___x_1131_;
+v___y_1058_ = v___y_1123_;
+v___y_1059_ = v___y_1124_;
+goto v___jp_1055_;
+}
+case 1:
+{
+lean_object* v_val_1132_; lean_object* v___x_1133_; lean_object* v_a_1134_; uint8_t v___x_1135_; 
+lean_del_object(v___x_1128_);
+v_val_1132_ = lean_ctor_get(v_a_1126_, 0);
+lean_inc_ref(v_val_1132_);
+lean_dec_ref_known(v_a_1126_, 1);
+lean_inc(v_declName_1049_);
+v___x_1133_ = lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(v_declName_1049_, v___y_1124_);
+v_a_1134_ = lean_ctor_get(v___x_1133_, 0);
+lean_inc(v_a_1134_);
+v___x_1135_ = lean_unbox(v_a_1134_);
+lean_dec(v_a_1134_);
+if (v___x_1135_ == 0)
+{
+lean_dec_ref(v_val_1132_);
+v___y_1096_ = v___y_1123_;
+v___y_1097_ = v___y_1124_;
+v___y_1098_ = v___y_1120_;
+v___y_1099_ = v___x_1133_;
+goto v___jp_1095_;
+}
+else
+{
+lean_object* v_toConstantVal_1136_; lean_object* v_type_1137_; lean_object* v___x_1138_; 
+lean_dec_ref(v___x_1133_);
+v_toConstantVal_1136_ = lean_ctor_get(v_val_1132_, 0);
+lean_inc_ref(v_toConstantVal_1136_);
+lean_dec_ref(v_val_1132_);
+v_type_1137_ = lean_ctor_get(v_toConstantVal_1136_, 2);
+lean_inc_ref(v_type_1137_);
+lean_dec_ref(v_toConstantVal_1136_);
+v___x_1138_ = l_Lean_Meta_isProp(v_type_1137_, v___y_1121_, v___y_1122_, v___y_1123_, v___y_1124_);
+v___y_1096_ = v___y_1123_;
+v___y_1097_ = v___y_1124_;
+v___y_1098_ = v___y_1120_;
+v___y_1099_ = v___x_1138_;
+goto v___jp_1095_;
+}
+}
+case 5:
+{
+lean_object* v___x_1139_; 
+lean_dec_ref_known(v_a_1126_, 1);
+lean_del_object(v___x_1128_);
+v___x_1139_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__5));
+v___y_1056_ = v___y_1120_;
+v_kind_1057_ = v___x_1139_;
+v___y_1058_ = v___y_1123_;
+v___y_1059_ = v___y_1124_;
+goto v___jp_1055_;
+}
+default: 
+{
+lean_object* v___x_1140_; lean_object* v___x_1142_; 
+lean_dec(v_a_1126_);
+lean_dec(v_declName_1049_);
+v___x_1140_ = lean_box(0);
+if (v_isShared_1129_ == 0)
+{
+lean_ctor_set(v___x_1128_, 0, v___x_1140_);
+v___x_1142_ = v___x_1128_;
+goto v_reusejp_1141_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1143_; 
+v_reuseFailAlloc_1143_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1143_, 0, v___x_1140_);
+v___x_1142_ = v_reuseFailAlloc_1143_;
+goto v_reusejp_1141_;
+}
+v_reusejp_1141_:
+{
+return v___x_1142_;
+}
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1145_; lean_object* v___x_1147_; uint8_t v_isShared_1148_; uint8_t v_isSharedCheck_1152_; 
+lean_dec(v_declName_1049_);
+v_a_1145_ = lean_ctor_get(v___x_1125_, 0);
+v_isSharedCheck_1152_ = !lean_is_exclusive(v___x_1125_);
+if (v_isSharedCheck_1152_ == 0)
+{
+v___x_1147_ = v___x_1125_;
+v_isShared_1148_ = v_isSharedCheck_1152_;
+goto v_resetjp_1146_;
+}
+else
+{
+lean_inc(v_a_1145_);
+lean_dec(v___x_1125_);
+v___x_1147_ = lean_box(0);
+v_isShared_1148_ = v_isSharedCheck_1152_;
+goto v_resetjp_1146_;
+}
+v_resetjp_1146_:
+{
+lean_object* v___x_1150_; 
+if (v_isShared_1148_ == 0)
+{
+v___x_1150_ = v___x_1147_;
+goto v_reusejp_1149_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1151_; 
+v_reuseFailAlloc_1151_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1151_, 0, v_a_1145_);
+v___x_1150_ = v_reuseFailAlloc_1151_;
+goto v_reusejp_1149_;
+}
+v_reusejp_1149_:
+{
+return v___x_1150_;
+}
+}
+}
+}
+v___jp_1153_:
+{
+lean_object* v___x_1154_; lean_object* v___x_1155_; 
+v___x_1154_ = lean_box(0);
+v___x_1155_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1155_, 0, v___x_1154_);
+return v___x_1155_;
+}
+v___jp_1156_:
+{
+lean_object* v___x_1157_; lean_object* v___x_1158_; 
+v___x_1157_ = lean_box(0);
+v___x_1158_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1158_, 0, v___x_1157_);
+return v___x_1158_;
+}
+v___jp_1159_:
+{
+if (v___y_1166_ == 0)
+{
+lean_object* v___x_1167_; uint8_t v___x_1168_; 
+v___x_1167_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__6));
+v___x_1168_ = lean_string_dec_eq(v___y_1161_, v___x_1167_);
+if (v___x_1168_ == 0)
+{
+lean_object* v___x_1169_; uint8_t v___x_1170_; 
+v___x_1169_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__7));
+v___x_1170_ = lean_string_dec_eq(v___y_1161_, v___x_1169_);
+lean_dec_ref(v___y_1161_);
+if (v___x_1170_ == 0)
+{
+v___y_1120_ = v___y_1164_;
+v___y_1121_ = v___y_1160_;
+v___y_1122_ = v___y_1165_;
+v___y_1123_ = v___y_1162_;
+v___y_1124_ = v___y_1163_;
+goto v___jp_1119_;
+}
+else
+{
+lean_dec(v_declName_1049_);
+goto v___jp_1156_;
+}
+}
+else
+{
+lean_dec_ref(v___y_1161_);
+lean_dec(v_declName_1049_);
+goto v___jp_1156_;
+}
+}
+else
+{
+lean_dec_ref(v___y_1161_);
+lean_dec(v_declName_1049_);
+goto v___jp_1156_;
+}
+}
+v___jp_1171_:
+{
+if (lean_obj_tag(v_declName_1049_) == 1)
+{
+lean_object* v_str_1177_; lean_object* v___x_1178_; uint8_t v___x_1179_; 
+v_str_1177_ = lean_ctor_get(v_declName_1049_, 1);
+v___x_1178_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__8));
+v___x_1179_ = lean_string_dec_eq(v_str_1177_, v___x_1178_);
+if (v___x_1179_ == 0)
+{
+lean_object* v___x_1180_; uint8_t v___x_1181_; 
+v___x_1180_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__9));
+v___x_1181_ = lean_string_dec_eq(v_str_1177_, v___x_1180_);
+lean_inc_ref(v_str_1177_);
+v___y_1160_ = v___y_1173_;
+v___y_1161_ = v_str_1177_;
+v___y_1162_ = v___y_1175_;
+v___y_1163_ = v___y_1176_;
+v___y_1164_ = v___y_1172_;
+v___y_1165_ = v___y_1174_;
+v___y_1166_ = v___x_1181_;
+goto v___jp_1159_;
+}
+else
+{
+lean_inc_ref(v_str_1177_);
+v___y_1160_ = v___y_1173_;
+v___y_1161_ = v_str_1177_;
+v___y_1162_ = v___y_1175_;
+v___y_1163_ = v___y_1176_;
+v___y_1164_ = v___y_1172_;
+v___y_1165_ = v___y_1174_;
+v___y_1166_ = v___x_1179_;
+goto v___jp_1159_;
+}
+}
+else
+{
+v___y_1120_ = v___y_1172_;
+v___y_1121_ = v___y_1173_;
+v___y_1122_ = v___y_1174_;
+v___y_1123_ = v___y_1175_;
+v___y_1124_ = v___y_1176_;
+goto v___jp_1119_;
+}
+}
+v___jp_1183_:
+{
+lean_object* v___x_1185_; 
+v___x_1185_ = l_Lean_Meta_isInstance___redArg(v_declName_1049_, v___y_1053_);
+if (lean_obj_tag(v___x_1185_) == 0)
+{
+if (v_a_1184_ == 0)
+{
+lean_object* v_a_1186_; uint8_t v___x_1187_; 
+v_a_1186_ = lean_ctor_get(v___x_1185_, 0);
+lean_inc(v_a_1186_);
+lean_dec_ref_known(v___x_1185_, 1);
+v___x_1187_ = lean_unbox(v_a_1186_);
+lean_dec(v_a_1186_);
+if (v___x_1187_ == 0)
+{
+uint8_t v___x_1188_; 
+v___x_1188_ = 1;
+if (lean_obj_tag(v_declName_1049_) == 1)
+{
+lean_object* v_pre_1189_; lean_object* v___x_1190_; 
+v_pre_1189_ = lean_ctor_get(v_declName_1049_, 0);
+v___x_1190_ = l_Lean_Meta_isInstance___redArg(v_pre_1189_, v___y_1053_);
+if (lean_obj_tag(v___x_1190_) == 0)
+{
+lean_object* v_a_1191_; lean_object* v___x_1193_; uint8_t v_isShared_1194_; uint8_t v_isSharedCheck_1200_; 
+v_a_1191_ = lean_ctor_get(v___x_1190_, 0);
+v_isSharedCheck_1200_ = !lean_is_exclusive(v___x_1190_);
+if (v_isSharedCheck_1200_ == 0)
+{
+v___x_1193_ = v___x_1190_;
+v_isShared_1194_ = v_isSharedCheck_1200_;
+goto v_resetjp_1192_;
+}
+else
+{
+lean_inc(v_a_1191_);
+lean_dec(v___x_1190_);
+v___x_1193_ = lean_box(0);
+v_isShared_1194_ = v_isSharedCheck_1200_;
+goto v_resetjp_1192_;
+}
+v_resetjp_1192_:
+{
+uint8_t v___x_1195_; 
+v___x_1195_ = lean_unbox(v_a_1191_);
+lean_dec(v_a_1191_);
+if (v___x_1195_ == 0)
+{
+lean_del_object(v___x_1193_);
+v___y_1172_ = v___x_1188_;
+v___y_1173_ = v___y_1050_;
+v___y_1174_ = v___y_1051_;
+v___y_1175_ = v___y_1052_;
+v___y_1176_ = v___y_1053_;
+goto v___jp_1171_;
+}
+else
+{
+lean_object* v___x_1196_; lean_object* v___x_1198_; 
+lean_dec_ref_known(v_declName_1049_, 2);
+v___x_1196_ = lean_box(0);
+if (v_isShared_1194_ == 0)
+{
+lean_ctor_set(v___x_1193_, 0, v___x_1196_);
+v___x_1198_ = v___x_1193_;
+goto v_reusejp_1197_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1199_; 
+v_reuseFailAlloc_1199_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1199_, 0, v___x_1196_);
+v___x_1198_ = v_reuseFailAlloc_1199_;
+goto v_reusejp_1197_;
+}
+v_reusejp_1197_:
+{
+return v___x_1198_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1201_; lean_object* v___x_1203_; uint8_t v_isShared_1204_; uint8_t v_isSharedCheck_1208_; 
+lean_dec_ref_known(v_declName_1049_, 2);
+v_a_1201_ = lean_ctor_get(v___x_1190_, 0);
+v_isSharedCheck_1208_ = !lean_is_exclusive(v___x_1190_);
+if (v_isSharedCheck_1208_ == 0)
+{
+v___x_1203_ = v___x_1190_;
+v_isShared_1204_ = v_isSharedCheck_1208_;
+goto v_resetjp_1202_;
+}
+else
+{
+lean_inc(v_a_1201_);
+lean_dec(v___x_1190_);
+v___x_1203_ = lean_box(0);
+v_isShared_1204_ = v_isSharedCheck_1208_;
+goto v_resetjp_1202_;
+}
+v_resetjp_1202_:
+{
+lean_object* v___x_1206_; 
+if (v_isShared_1204_ == 0)
+{
+v___x_1206_ = v___x_1203_;
+goto v_reusejp_1205_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1207_; 
+v_reuseFailAlloc_1207_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1207_, 0, v_a_1201_);
+v___x_1206_ = v_reuseFailAlloc_1207_;
+goto v_reusejp_1205_;
+}
+v_reusejp_1205_:
+{
+return v___x_1206_;
+}
+}
+}
+}
+else
+{
+v___y_1172_ = v___x_1188_;
+v___y_1173_ = v___y_1050_;
+v___y_1174_ = v___y_1051_;
+v___y_1175_ = v___y_1052_;
+v___y_1176_ = v___y_1053_;
+goto v___jp_1171_;
+}
+}
+else
+{
+lean_dec(v_declName_1049_);
+goto v___jp_1153_;
+}
+}
+else
+{
+lean_dec_ref_known(v___x_1185_, 1);
+lean_dec(v_declName_1049_);
+goto v___jp_1153_;
+}
+}
+else
+{
+lean_object* v_a_1209_; lean_object* v___x_1211_; uint8_t v_isShared_1212_; uint8_t v_isSharedCheck_1216_; 
+lean_dec(v_declName_1049_);
+v_a_1209_ = lean_ctor_get(v___x_1185_, 0);
+v_isSharedCheck_1216_ = !lean_is_exclusive(v___x_1185_);
+if (v_isSharedCheck_1216_ == 0)
+{
+v___x_1211_ = v___x_1185_;
+v_isShared_1212_ = v_isSharedCheck_1216_;
+goto v_resetjp_1210_;
+}
+else
+{
+lean_inc(v_a_1209_);
+lean_dec(v___x_1185_);
+v___x_1211_ = lean_box(0);
+v_isShared_1212_ = v_isSharedCheck_1216_;
+goto v_resetjp_1210_;
+}
+v_resetjp_1210_:
+{
+lean_object* v___x_1214_; 
+if (v_isShared_1212_ == 0)
+{
+v___x_1214_ = v___x_1211_;
+goto v_reusejp_1213_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1215_; 
+v_reuseFailAlloc_1215_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1215_, 0, v_a_1209_);
+v___x_1214_ = v_reuseFailAlloc_1215_;
+goto v_reusejp_1213_;
+}
+v_reusejp_1213_:
+{
+return v___x_1214_;
+}
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___boxed(lean_object* v_declName_1220_, lean_object* v___y_1221_, lean_object* v___y_1222_, lean_object* v___y_1223_, lean_object* v___y_1224_, lean_object* v___y_1225_){
+_start:
+{
+lean_object* v_res_1226_; 
+v_res_1226_ = lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0(v_declName_1220_, v___y_1221_, v___y_1222_, v___y_1223_, v___y_1224_);
+lean_dec(v___y_1224_);
+lean_dec_ref(v___y_1223_);
+lean_dec(v___y_1222_);
+lean_dec_ref(v___y_1221_);
+return v_res_1226_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlame___closed__3(void){
+_start:
+{
+lean_object* v___x_1231_; lean_object* v___x_1232_; 
+v___x_1231_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___closed__2));
+v___x_1232_ = l_Lean_MessageData_ofFormat(v___x_1231_);
+return v___x_1232_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlame___closed__6(void){
+_start:
+{
+lean_object* v___x_1236_; lean_object* v___x_1237_; 
+v___x_1236_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___closed__5));
+v___x_1237_ = l_Lean_MessageData_ofFormat(v___x_1236_);
+return v___x_1237_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlame___closed__7(void){
+_start:
+{
+uint8_t v___x_1238_; lean_object* v___x_1239_; lean_object* v___x_1240_; lean_object* v___f_1241_; lean_object* v___x_1242_; 
+v___x_1238_ = 1;
+v___x_1239_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__6, &lp_batteries_Batteries_Tactic_Lint_docBlame___closed__6_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlame___closed__6);
+v___x_1240_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__3, &lp_batteries_Batteries_Tactic_Lint_docBlame___closed__3_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlame___closed__3);
+v___f_1241_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlame___closed__0));
+v___x_1242_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_1242_, 0, v___f_1241_);
+lean_ctor_set(v___x_1242_, 1, v___x_1240_);
+lean_ctor_set(v___x_1242_, 2, v___x_1239_);
+lean_ctor_set_uint8(v___x_1242_, sizeof(void*)*3, v___x_1238_);
+return v___x_1242_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlame(void){
+_start:
+{
+lean_object* v___x_1243_; 
+v___x_1243_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlame___closed__7, &lp_batteries_Batteries_Tactic_Lint_docBlame___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlame___closed__7);
+return v___x_1243_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0(lean_object* v_declName_1246_, lean_object* v___y_1247_, lean_object* v___y_1248_, lean_object* v___y_1249_, lean_object* v___y_1250_){
+_start:
+{
+uint8_t v___y_1253_; lean_object* v_kind_1254_; lean_object* v___y_1255_; lean_object* v___y_1256_; uint8_t v___y_1293_; lean_object* v___y_1294_; lean_object* v___x_1314_; uint8_t v_a_1316_; uint8_t v___x_1346_; 
+v___x_1314_ = lean_st_ref_get(v___y_1250_);
+v___x_1346_ = l_Lean_isPrivateName(v_declName_1246_);
+if (v___x_1346_ == 0)
+{
+lean_object* v_env_1347_; uint8_t v___x_1348_; 
+v_env_1347_ = lean_ctor_get(v___x_1314_, 0);
+lean_inc_ref(v_env_1347_);
+lean_dec(v___x_1314_);
+lean_inc(v_declName_1246_);
+v___x_1348_ = lp_batteries_Lean_Environment_isAutoDecl(v_env_1347_, v_declName_1246_);
+v_a_1316_ = v___x_1348_;
+goto v___jp_1315_;
+}
+else
+{
+lean_dec(v___x_1314_);
+v_a_1316_ = v___x_1346_;
+goto v___jp_1315_;
+}
+v___jp_1252_:
+{
+lean_object* v___x_1257_; lean_object* v_env_1258_; lean_object* v___x_1259_; lean_object* v___x_1260_; lean_object* v___x_1261_; lean_object* v___x_1262_; 
+v___x_1257_ = lean_st_ref_get(v___y_1256_);
+v_env_1258_ = lean_ctor_get(v___x_1257_, 0);
+lean_inc_ref(v_env_1258_);
+lean_dec(v___x_1257_);
+v___x_1259_ = l_Lean_Options_empty;
+v___x_1260_ = lean_box(0);
+v___x_1261_ = lean_box(0);
+v___x_1262_ = l_Lean_findDocString_x3f(v_env_1258_, v_declName_1246_, v___y_1253_, v___x_1259_, v___x_1260_, v___x_1261_);
+if (lean_obj_tag(v___x_1262_) == 0)
+{
+lean_object* v_a_1263_; lean_object* v___x_1265_; uint8_t v_isShared_1266_; uint8_t v_isSharedCheck_1278_; 
+v_a_1263_ = lean_ctor_get(v___x_1262_, 0);
+v_isSharedCheck_1278_ = !lean_is_exclusive(v___x_1262_);
+if (v_isSharedCheck_1278_ == 0)
+{
+v___x_1265_ = v___x_1262_;
+v_isShared_1266_ = v_isSharedCheck_1278_;
+goto v_resetjp_1264_;
+}
+else
+{
+lean_inc(v_a_1263_);
+lean_dec(v___x_1262_);
+v___x_1265_ = lean_box(0);
+v_isShared_1266_ = v_isSharedCheck_1278_;
+goto v_resetjp_1264_;
+}
+v_resetjp_1264_:
+{
+if (lean_obj_tag(v_a_1263_) == 0)
+{
+lean_object* v___x_1267_; lean_object* v___x_1268_; lean_object* v___x_1269_; lean_object* v___x_1270_; lean_object* v___x_1272_; 
+lean_inc_ref(v_kind_1254_);
+v___x_1267_ = l_Lean_stringToMessageData(v_kind_1254_);
+v___x_1268_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1, &lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlame___lam__0___closed__1);
+v___x_1269_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_1269_, 0, v___x_1267_);
+lean_ctor_set(v___x_1269_, 1, v___x_1268_);
+v___x_1270_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_1270_, 0, v___x_1269_);
+if (v_isShared_1266_ == 0)
+{
+lean_ctor_set(v___x_1265_, 0, v___x_1270_);
+v___x_1272_ = v___x_1265_;
+goto v_reusejp_1271_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1273_; 
+v_reuseFailAlloc_1273_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1273_, 0, v___x_1270_);
+v___x_1272_ = v_reuseFailAlloc_1273_;
+goto v_reusejp_1271_;
+}
+v_reusejp_1271_:
+{
+return v___x_1272_;
+}
+}
+else
+{
+lean_object* v___x_1274_; lean_object* v___x_1276_; 
+lean_dec(v_a_1263_);
+v___x_1274_ = lean_box(0);
+if (v_isShared_1266_ == 0)
+{
+lean_ctor_set(v___x_1265_, 0, v___x_1274_);
+v___x_1276_ = v___x_1265_;
+goto v_reusejp_1275_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1277_; 
+v_reuseFailAlloc_1277_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1277_, 0, v___x_1274_);
+v___x_1276_ = v_reuseFailAlloc_1277_;
+goto v_reusejp_1275_;
+}
+v_reusejp_1275_:
+{
+return v___x_1276_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1279_; lean_object* v___x_1281_; uint8_t v_isShared_1282_; uint8_t v_isSharedCheck_1291_; 
+v_a_1279_ = lean_ctor_get(v___x_1262_, 0);
+v_isSharedCheck_1291_ = !lean_is_exclusive(v___x_1262_);
+if (v_isSharedCheck_1291_ == 0)
+{
+v___x_1281_ = v___x_1262_;
+v_isShared_1282_ = v_isSharedCheck_1291_;
+goto v_resetjp_1280_;
+}
+else
+{
+lean_inc(v_a_1279_);
+lean_dec(v___x_1262_);
+v___x_1281_ = lean_box(0);
+v_isShared_1282_ = v_isSharedCheck_1291_;
+goto v_resetjp_1280_;
+}
+v_resetjp_1280_:
+{
+lean_object* v_ref_1283_; lean_object* v___x_1284_; lean_object* v___x_1285_; lean_object* v___x_1286_; lean_object* v___x_1287_; lean_object* v___x_1289_; 
+v_ref_1283_ = lean_ctor_get(v___y_1255_, 5);
+v___x_1284_ = lean_io_error_to_string(v_a_1279_);
+v___x_1285_ = lean_alloc_ctor(3, 1, 0);
+lean_ctor_set(v___x_1285_, 0, v___x_1284_);
+v___x_1286_ = l_Lean_MessageData_ofFormat(v___x_1285_);
+lean_inc(v_ref_1283_);
+v___x_1287_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_1287_, 0, v_ref_1283_);
+lean_ctor_set(v___x_1287_, 1, v___x_1286_);
+if (v_isShared_1282_ == 0)
+{
+lean_ctor_set(v___x_1281_, 0, v___x_1287_);
+v___x_1289_ = v___x_1281_;
+goto v_reusejp_1288_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1290_; 
+v_reuseFailAlloc_1290_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1290_, 0, v___x_1287_);
+v___x_1289_ = v_reuseFailAlloc_1290_;
+goto v_reusejp_1288_;
+}
+v_reusejp_1288_:
+{
+return v___x_1289_;
+}
+}
+}
+}
+v___jp_1292_:
+{
+if (lean_obj_tag(v___y_1294_) == 0)
+{
+lean_object* v_a_1295_; lean_object* v___x_1297_; uint8_t v_isShared_1298_; uint8_t v_isSharedCheck_1305_; 
+v_a_1295_ = lean_ctor_get(v___y_1294_, 0);
+v_isSharedCheck_1305_ = !lean_is_exclusive(v___y_1294_);
+if (v_isSharedCheck_1305_ == 0)
+{
+v___x_1297_ = v___y_1294_;
+v_isShared_1298_ = v_isSharedCheck_1305_;
+goto v_resetjp_1296_;
+}
+else
+{
+lean_inc(v_a_1295_);
+lean_dec(v___y_1294_);
+v___x_1297_ = lean_box(0);
+v_isShared_1298_ = v_isSharedCheck_1305_;
+goto v_resetjp_1296_;
+}
+v_resetjp_1296_:
+{
+uint8_t v___x_1299_; 
+v___x_1299_ = lean_unbox(v_a_1295_);
+lean_dec(v_a_1295_);
+if (v___x_1299_ == 0)
+{
+lean_object* v___x_1300_; lean_object* v___x_1302_; 
+lean_dec(v_declName_1246_);
+v___x_1300_ = lean_box(0);
+if (v_isShared_1298_ == 0)
+{
+lean_ctor_set(v___x_1297_, 0, v___x_1300_);
+v___x_1302_ = v___x_1297_;
+goto v_reusejp_1301_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1303_; 
+v_reuseFailAlloc_1303_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1303_, 0, v___x_1300_);
+v___x_1302_ = v_reuseFailAlloc_1303_;
+goto v_reusejp_1301_;
+}
+v_reusejp_1301_:
+{
+return v___x_1302_;
+}
+}
+else
+{
+lean_object* v___x_1304_; 
+lean_del_object(v___x_1297_);
+v___x_1304_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__0));
+v___y_1253_ = v___y_1293_;
+v_kind_1254_ = v___x_1304_;
+v___y_1255_ = v___y_1249_;
+v___y_1256_ = v___y_1250_;
+goto v___jp_1252_;
+}
+}
+}
+else
+{
+lean_object* v_a_1306_; lean_object* v___x_1308_; uint8_t v_isShared_1309_; uint8_t v_isSharedCheck_1313_; 
+lean_dec(v_declName_1246_);
+v_a_1306_ = lean_ctor_get(v___y_1294_, 0);
+v_isSharedCheck_1313_ = !lean_is_exclusive(v___y_1294_);
+if (v_isSharedCheck_1313_ == 0)
+{
+v___x_1308_ = v___y_1294_;
+v_isShared_1309_ = v_isSharedCheck_1313_;
+goto v_resetjp_1307_;
+}
+else
+{
+lean_inc(v_a_1306_);
+lean_dec(v___y_1294_);
+v___x_1308_ = lean_box(0);
+v_isShared_1309_ = v_isSharedCheck_1313_;
+goto v_resetjp_1307_;
+}
+v_resetjp_1307_:
+{
+lean_object* v___x_1311_; 
+if (v_isShared_1309_ == 0)
+{
+v___x_1311_ = v___x_1308_;
+goto v_reusejp_1310_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1312_; 
+v_reuseFailAlloc_1312_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1312_, 0, v_a_1306_);
+v___x_1311_ = v_reuseFailAlloc_1312_;
+goto v_reusejp_1310_;
+}
+v_reusejp_1310_:
+{
+return v___x_1311_;
+}
+}
+}
+}
+v___jp_1315_:
+{
+if (v_a_1316_ == 0)
+{
+lean_object* v___x_1317_; 
+lean_inc(v_declName_1246_);
+v___x_1317_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_declName_1246_, v___y_1247_, v___y_1248_, v___y_1249_, v___y_1250_);
+if (lean_obj_tag(v___x_1317_) == 0)
+{
+lean_object* v_a_1318_; lean_object* v___x_1320_; uint8_t v_isShared_1321_; uint8_t v_isSharedCheck_1335_; 
+v_a_1318_ = lean_ctor_get(v___x_1317_, 0);
+v_isSharedCheck_1335_ = !lean_is_exclusive(v___x_1317_);
+if (v_isSharedCheck_1335_ == 0)
+{
+v___x_1320_ = v___x_1317_;
+v_isShared_1321_ = v_isSharedCheck_1335_;
+goto v_resetjp_1319_;
+}
+else
+{
+lean_inc(v_a_1318_);
+lean_dec(v___x_1317_);
+v___x_1320_ = lean_box(0);
+v_isShared_1321_ = v_isSharedCheck_1335_;
+goto v_resetjp_1319_;
+}
+v_resetjp_1319_:
+{
+uint8_t v___x_1322_; 
+v___x_1322_ = 1;
+switch(lean_obj_tag(v_a_1318_))
+{
+case 2:
+{
+lean_object* v___x_1323_; 
+lean_dec_ref_known(v_a_1318_, 1);
+lean_del_object(v___x_1320_);
+v___x_1323_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___closed__1));
+v___y_1253_ = v___x_1322_;
+v_kind_1254_ = v___x_1323_;
+v___y_1255_ = v___y_1249_;
+v___y_1256_ = v___y_1250_;
+goto v___jp_1252_;
+}
+case 1:
+{
+lean_object* v_val_1324_; lean_object* v___x_1325_; lean_object* v_a_1326_; uint8_t v___x_1327_; 
+lean_del_object(v___x_1320_);
+v_val_1324_ = lean_ctor_get(v_a_1318_, 0);
+lean_inc_ref(v_val_1324_);
+lean_dec_ref_known(v_a_1318_, 1);
+lean_inc(v_declName_1246_);
+v___x_1325_ = lp_batteries_Lean_isProjectionFn___at___00Batteries_Tactic_Lint_unusedArguments_spec__0___redArg(v_declName_1246_, v___y_1250_);
+v_a_1326_ = lean_ctor_get(v___x_1325_, 0);
+lean_inc(v_a_1326_);
+v___x_1327_ = lean_unbox(v_a_1326_);
+lean_dec(v_a_1326_);
+if (v___x_1327_ == 0)
+{
+lean_dec_ref(v_val_1324_);
+v___y_1293_ = v___x_1322_;
+v___y_1294_ = v___x_1325_;
+goto v___jp_1292_;
+}
+else
+{
+lean_object* v_toConstantVal_1328_; lean_object* v_type_1329_; lean_object* v___x_1330_; 
+lean_dec_ref(v___x_1325_);
+v_toConstantVal_1328_ = lean_ctor_get(v_val_1324_, 0);
+lean_inc_ref(v_toConstantVal_1328_);
+lean_dec_ref(v_val_1324_);
+v_type_1329_ = lean_ctor_get(v_toConstantVal_1328_, 2);
+lean_inc_ref(v_type_1329_);
+lean_dec_ref(v_toConstantVal_1328_);
+v___x_1330_ = l_Lean_Meta_isProp(v_type_1329_, v___y_1247_, v___y_1248_, v___y_1249_, v___y_1250_);
+v___y_1293_ = v___x_1322_;
+v___y_1294_ = v___x_1330_;
+goto v___jp_1292_;
+}
+}
+default: 
+{
+lean_object* v___x_1331_; lean_object* v___x_1333_; 
+lean_dec(v_a_1318_);
+lean_dec(v_declName_1246_);
+v___x_1331_ = lean_box(0);
+if (v_isShared_1321_ == 0)
+{
+lean_ctor_set(v___x_1320_, 0, v___x_1331_);
+v___x_1333_ = v___x_1320_;
+goto v_reusejp_1332_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1334_; 
+v_reuseFailAlloc_1334_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1334_, 0, v___x_1331_);
+v___x_1333_ = v_reuseFailAlloc_1334_;
+goto v_reusejp_1332_;
+}
+v_reusejp_1332_:
+{
+return v___x_1333_;
+}
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1336_; lean_object* v___x_1338_; uint8_t v_isShared_1339_; uint8_t v_isSharedCheck_1343_; 
+lean_dec(v_declName_1246_);
+v_a_1336_ = lean_ctor_get(v___x_1317_, 0);
+v_isSharedCheck_1343_ = !lean_is_exclusive(v___x_1317_);
+if (v_isSharedCheck_1343_ == 0)
+{
+v___x_1338_ = v___x_1317_;
+v_isShared_1339_ = v_isSharedCheck_1343_;
+goto v_resetjp_1337_;
+}
+else
+{
+lean_inc(v_a_1336_);
+lean_dec(v___x_1317_);
+v___x_1338_ = lean_box(0);
+v_isShared_1339_ = v_isSharedCheck_1343_;
+goto v_resetjp_1337_;
+}
+v_resetjp_1337_:
+{
+lean_object* v___x_1341_; 
+if (v_isShared_1339_ == 0)
+{
+v___x_1341_ = v___x_1338_;
+goto v_reusejp_1340_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1342_; 
+v_reuseFailAlloc_1342_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1342_, 0, v_a_1336_);
+v___x_1341_ = v_reuseFailAlloc_1342_;
+goto v_reusejp_1340_;
+}
+v_reusejp_1340_:
+{
+return v___x_1341_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_1344_; lean_object* v___x_1345_; 
+lean_dec(v_declName_1246_);
+v___x_1344_ = lean_box(0);
+v___x_1345_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1345_, 0, v___x_1344_);
+return v___x_1345_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0___boxed(lean_object* v_declName_1349_, lean_object* v___y_1350_, lean_object* v___y_1351_, lean_object* v___y_1352_, lean_object* v___y_1353_, lean_object* v___y_1354_){
+_start:
+{
+lean_object* v_res_1355_; 
+v_res_1355_ = lp_batteries_Batteries_Tactic_Lint_docBlameThm___lam__0(v_declName_1349_, v___y_1350_, v___y_1351_, v___y_1352_, v___y_1353_);
+lean_dec(v___y_1353_);
+lean_dec_ref(v___y_1352_);
+lean_dec(v___y_1351_);
+lean_dec_ref(v___y_1350_);
+return v_res_1355_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__3(void){
+_start:
+{
+lean_object* v___x_1360_; lean_object* v___x_1361_; 
+v___x_1360_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__2));
+v___x_1361_ = l_Lean_MessageData_ofFormat(v___x_1360_);
+return v___x_1361_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__6(void){
+_start:
+{
+lean_object* v___x_1365_; lean_object* v___x_1366_; 
+v___x_1365_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__5));
+v___x_1366_ = l_Lean_MessageData_ofFormat(v___x_1365_);
+return v___x_1366_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__7(void){
+_start:
+{
+uint8_t v___x_1367_; lean_object* v___x_1368_; lean_object* v___x_1369_; lean_object* v___f_1370_; lean_object* v___x_1371_; 
+v___x_1367_ = 1;
+v___x_1368_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__6, &lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__6_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__6);
+v___x_1369_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__3, &lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__3_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__3);
+v___f_1370_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__0));
+v___x_1371_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_1371_, 0, v___f_1370_);
+lean_ctor_set(v___x_1371_, 1, v___x_1369_);
+lean_ctor_set(v___x_1371_, 2, v___x_1368_);
+lean_ctor_set_uint8(v___x_1371_, sizeof(void*)*3, v___x_1367_);
+return v___x_1371_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm(void){
+_start:
+{
+lean_object* v___x_1372_; 
+v___x_1372_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__7, &lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm___closed__7);
+return v___x_1372_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__1(void){
+_start:
+{
+lean_object* v___x_1374_; lean_object* v___x_1375_; 
+v___x_1374_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__0));
+v___x_1375_ = l_Lean_stringToMessageData(v___x_1374_);
+return v___x_1375_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__2(void){
+_start:
+{
+lean_object* v___x_1376_; lean_object* v___x_1377_; 
+v___x_1376_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__1, &lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__1_once, _init_lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__1);
+v___x_1377_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_1377_, 0, v___x_1376_);
+return v___x_1377_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0(lean_object* v_declName_1378_, lean_object* v___y_1379_, lean_object* v___y_1380_, lean_object* v___y_1381_, lean_object* v___y_1382_){
+_start:
+{
+lean_object* v___x_1384_; lean_object* v_env_1385_; uint8_t v___x_1386_; 
+v___x_1384_ = lean_st_ref_get(v___y_1382_);
+v_env_1385_ = lean_ctor_get(v___x_1384_, 0);
+lean_inc_ref(v_env_1385_);
+lean_dec(v___x_1384_);
+lean_inc(v_declName_1378_);
+v___x_1386_ = lp_batteries_Lean_Environment_isAutoDecl(v_env_1385_, v_declName_1378_);
+if (v___x_1386_ == 0)
+{
+lean_object* v___x_1387_; 
+v___x_1387_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_declName_1378_, v___y_1379_, v___y_1380_, v___y_1381_, v___y_1382_);
+if (lean_obj_tag(v___x_1387_) == 0)
+{
+lean_object* v_a_1388_; lean_object* v___x_1389_; lean_object* v___x_1390_; 
+v_a_1388_ = lean_ctor_get(v___x_1387_, 0);
+lean_inc(v_a_1388_);
+lean_dec_ref_known(v___x_1387_, 1);
+v___x_1389_ = l_Lean_ConstantInfo_type(v_a_1388_);
+lean_dec(v_a_1388_);
+v___x_1390_ = l_Lean_Meta_isTypeCorrect(v___x_1389_, v___y_1379_, v___y_1380_, v___y_1381_, v___y_1382_);
+if (lean_obj_tag(v___x_1390_) == 0)
+{
+lean_object* v_a_1391_; lean_object* v___x_1393_; uint8_t v_isShared_1394_; uint8_t v_isSharedCheck_1404_; 
+v_a_1391_ = lean_ctor_get(v___x_1390_, 0);
+v_isSharedCheck_1404_ = !lean_is_exclusive(v___x_1390_);
+if (v_isSharedCheck_1404_ == 0)
+{
+v___x_1393_ = v___x_1390_;
+v_isShared_1394_ = v_isSharedCheck_1404_;
+goto v_resetjp_1392_;
+}
+else
+{
+lean_inc(v_a_1391_);
+lean_dec(v___x_1390_);
+v___x_1393_ = lean_box(0);
+v_isShared_1394_ = v_isSharedCheck_1404_;
+goto v_resetjp_1392_;
+}
+v_resetjp_1392_:
+{
+uint8_t v___x_1395_; 
+v___x_1395_ = lean_unbox(v_a_1391_);
+lean_dec(v_a_1391_);
+if (v___x_1395_ == 0)
+{
+lean_object* v___x_1396_; lean_object* v___x_1398_; 
+v___x_1396_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__2, &lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__2_once, _init_lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___closed__2);
+if (v_isShared_1394_ == 0)
+{
+lean_ctor_set(v___x_1393_, 0, v___x_1396_);
+v___x_1398_ = v___x_1393_;
+goto v_reusejp_1397_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1399_; 
+v_reuseFailAlloc_1399_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1399_, 0, v___x_1396_);
+v___x_1398_ = v_reuseFailAlloc_1399_;
+goto v_reusejp_1397_;
+}
+v_reusejp_1397_:
+{
+return v___x_1398_;
+}
+}
+else
+{
+lean_object* v___x_1400_; lean_object* v___x_1402_; 
+v___x_1400_ = lean_box(0);
+if (v_isShared_1394_ == 0)
+{
+lean_ctor_set(v___x_1393_, 0, v___x_1400_);
+v___x_1402_ = v___x_1393_;
+goto v_reusejp_1401_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1403_; 
+v_reuseFailAlloc_1403_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1403_, 0, v___x_1400_);
+v___x_1402_ = v_reuseFailAlloc_1403_;
+goto v_reusejp_1401_;
+}
+v_reusejp_1401_:
+{
+return v___x_1402_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1405_; lean_object* v___x_1407_; uint8_t v_isShared_1408_; uint8_t v_isSharedCheck_1412_; 
+v_a_1405_ = lean_ctor_get(v___x_1390_, 0);
+v_isSharedCheck_1412_ = !lean_is_exclusive(v___x_1390_);
+if (v_isSharedCheck_1412_ == 0)
+{
+v___x_1407_ = v___x_1390_;
+v_isShared_1408_ = v_isSharedCheck_1412_;
+goto v_resetjp_1406_;
+}
+else
+{
+lean_inc(v_a_1405_);
+lean_dec(v___x_1390_);
+v___x_1407_ = lean_box(0);
+v_isShared_1408_ = v_isSharedCheck_1412_;
+goto v_resetjp_1406_;
+}
+v_resetjp_1406_:
+{
+lean_object* v___x_1410_; 
+if (v_isShared_1408_ == 0)
+{
+v___x_1410_ = v___x_1407_;
+goto v_reusejp_1409_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1411_; 
+v_reuseFailAlloc_1411_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1411_, 0, v_a_1405_);
+v___x_1410_ = v_reuseFailAlloc_1411_;
+goto v_reusejp_1409_;
+}
+v_reusejp_1409_:
+{
+return v___x_1410_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1413_; lean_object* v___x_1415_; uint8_t v_isShared_1416_; uint8_t v_isSharedCheck_1420_; 
+v_a_1413_ = lean_ctor_get(v___x_1387_, 0);
+v_isSharedCheck_1420_ = !lean_is_exclusive(v___x_1387_);
+if (v_isSharedCheck_1420_ == 0)
+{
+v___x_1415_ = v___x_1387_;
+v_isShared_1416_ = v_isSharedCheck_1420_;
+goto v_resetjp_1414_;
+}
+else
+{
+lean_inc(v_a_1413_);
+lean_dec(v___x_1387_);
+v___x_1415_ = lean_box(0);
+v_isShared_1416_ = v_isSharedCheck_1420_;
+goto v_resetjp_1414_;
+}
+v_resetjp_1414_:
+{
+lean_object* v___x_1418_; 
+if (v_isShared_1416_ == 0)
+{
+v___x_1418_ = v___x_1415_;
+goto v_reusejp_1417_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1419_; 
+v_reuseFailAlloc_1419_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1419_, 0, v_a_1413_);
+v___x_1418_ = v_reuseFailAlloc_1419_;
+goto v_reusejp_1417_;
+}
+v_reusejp_1417_:
+{
+return v___x_1418_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_1421_; lean_object* v___x_1422_; 
+lean_dec(v_declName_1378_);
+v___x_1421_ = lean_box(0);
+v___x_1422_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1422_, 0, v___x_1421_);
+return v___x_1422_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_checkType___lam__0___boxed(lean_object* v_declName_1423_, lean_object* v___y_1424_, lean_object* v___y_1425_, lean_object* v___y_1426_, lean_object* v___y_1427_, lean_object* v___y_1428_){
+_start:
+{
+lean_object* v_res_1429_; 
+v_res_1429_ = lp_batteries_Batteries_Tactic_Lint_checkType___lam__0(v_declName_1423_, v___y_1424_, v___y_1425_, v___y_1426_, v___y_1427_);
+lean_dec(v___y_1427_);
+lean_dec_ref(v___y_1426_);
+lean_dec(v___y_1425_);
+lean_dec_ref(v___y_1424_);
+return v_res_1429_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_checkType___closed__3(void){
+_start:
+{
+lean_object* v___x_1434_; lean_object* v___x_1435_; 
+v___x_1434_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_checkType___closed__2));
+v___x_1435_ = l_Lean_MessageData_ofFormat(v___x_1434_);
+return v___x_1435_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_checkType___closed__6(void){
+_start:
+{
+lean_object* v___x_1439_; lean_object* v___x_1440_; 
+v___x_1439_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_checkType___closed__5));
+v___x_1440_ = l_Lean_MessageData_ofFormat(v___x_1439_);
+return v___x_1440_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_checkType___closed__7(void){
+_start:
+{
+uint8_t v___x_1441_; lean_object* v___x_1442_; lean_object* v___x_1443_; lean_object* v___f_1444_; lean_object* v___x_1445_; 
+v___x_1441_ = 1;
+v___x_1442_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_checkType___closed__6, &lp_batteries_Batteries_Tactic_Lint_checkType___closed__6_once, _init_lp_batteries_Batteries_Tactic_Lint_checkType___closed__6);
+v___x_1443_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_checkType___closed__3, &lp_batteries_Batteries_Tactic_Lint_checkType___closed__3_once, _init_lp_batteries_Batteries_Tactic_Lint_checkType___closed__3);
+v___f_1444_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_checkType___closed__0));
+v___x_1445_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_1445_, 0, v___f_1444_);
+lean_ctor_set(v___x_1445_, 1, v___x_1443_);
+lean_ctor_set(v___x_1445_, 2, v___x_1442_);
+lean_ctor_set_uint8(v___x_1445_, sizeof(void*)*3, v___x_1441_);
+return v___x_1445_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_checkType(void){
+_start:
+{
+lean_object* v___x_1446_; 
+v___x_1446_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_checkType___closed__7, &lp_batteries_Batteries_Tactic_Lint_checkType___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_checkType___closed__7);
+return v___x_1446_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__1(void){
+_start:
+{
+lean_object* v___x_1448_; lean_object* v___x_1449_; 
+v___x_1448_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__0));
+v___x_1449_ = l_Lean_stringToMessageData(v___x_1448_);
+return v___x_1449_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__2(void){
+_start:
+{
+lean_object* v___x_1450_; lean_object* v___x_1451_; 
+v___x_1450_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__1, &lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__1_once, _init_lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__1);
+v___x_1451_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_1451_, 0, v___x_1450_);
+return v___x_1451_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0(lean_object* v_x_1458_, lean_object* v_ty_1459_, lean_object* v___y_1460_, lean_object* v___y_1461_, lean_object* v___y_1462_, lean_object* v___y_1463_){
+_start:
+{
+lean_object* v_fst_1466_; lean_object* v_snd_1467_; lean_object* v___x_1473_; lean_object* v___x_1474_; uint8_t v___x_1475_; 
+v___x_1473_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__4));
+v___x_1474_ = lean_unsigned_to_nat(3u);
+v___x_1475_ = l_Lean_Expr_isAppOfArity(v_ty_1459_, v___x_1473_, v___x_1474_);
+if (v___x_1475_ == 0)
+{
+lean_object* v___x_1476_; lean_object* v___x_1477_; uint8_t v___x_1478_; 
+v___x_1476_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__6));
+v___x_1477_ = lean_unsigned_to_nat(2u);
+v___x_1478_ = l_Lean_Expr_isAppOfArity(v_ty_1459_, v___x_1476_, v___x_1477_);
+if (v___x_1478_ == 0)
+{
+lean_object* v___x_1479_; lean_object* v___x_1480_; 
+v___x_1479_ = lean_box(0);
+v___x_1480_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1480_, 0, v___x_1479_);
+return v___x_1480_;
+}
+else
+{
+lean_object* v___x_1481_; lean_object* v___x_1482_; lean_object* v___x_1483_; 
+v___x_1481_ = l_Lean_Expr_appFn_x21(v_ty_1459_);
+v___x_1482_ = l_Lean_Expr_appArg_x21(v___x_1481_);
+lean_dec_ref(v___x_1481_);
+v___x_1483_ = l_Lean_Expr_appArg_x21(v_ty_1459_);
+v_fst_1466_ = v___x_1482_;
+v_snd_1467_ = v___x_1483_;
+goto v___jp_1465_;
+}
+}
+else
+{
+lean_object* v___x_1484_; lean_object* v___x_1485_; lean_object* v___x_1486_; 
+v___x_1484_ = l_Lean_Expr_appFn_x21(v_ty_1459_);
+v___x_1485_ = l_Lean_Expr_appArg_x21(v___x_1484_);
+lean_dec_ref(v___x_1484_);
+v___x_1486_ = l_Lean_Expr_appArg_x21(v_ty_1459_);
+v_fst_1466_ = v___x_1485_;
+v_snd_1467_ = v___x_1486_;
+goto v___jp_1465_;
+}
+v___jp_1465_:
+{
+uint8_t v___x_1468_; 
+v___x_1468_ = lean_expr_eqv(v_fst_1466_, v_snd_1467_);
+lean_dec_ref(v_snd_1467_);
+lean_dec_ref(v_fst_1466_);
+if (v___x_1468_ == 0)
+{
+lean_object* v___x_1469_; lean_object* v___x_1470_; 
+v___x_1469_ = lean_box(0);
+v___x_1470_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1470_, 0, v___x_1469_);
+return v___x_1470_;
+}
+else
+{
+lean_object* v___x_1471_; lean_object* v___x_1472_; 
+v___x_1471_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__2, &lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__2_once, _init_lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__2);
+v___x_1472_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1472_, 0, v___x_1471_);
+return v___x_1472_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___boxed(lean_object* v_x_1487_, lean_object* v_ty_1488_, lean_object* v___y_1489_, lean_object* v___y_1490_, lean_object* v___y_1491_, lean_object* v___y_1492_, lean_object* v___y_1493_){
+_start:
+{
+lean_object* v_res_1494_; 
+v_res_1494_ = lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0(v_x_1487_, v_ty_1488_, v___y_1489_, v___y_1490_, v___y_1491_, v___y_1492_);
+lean_dec(v___y_1492_);
+lean_dec_ref(v___y_1491_);
+lean_dec(v___y_1490_);
+lean_dec_ref(v___y_1489_);
+lean_dec_ref(v_ty_1488_);
+lean_dec_ref(v_x_1487_);
+return v_res_1494_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1(lean_object* v___f_1495_, lean_object* v_declName_1496_, lean_object* v___y_1497_, lean_object* v___y_1498_, lean_object* v___y_1499_, lean_object* v___y_1500_){
+_start:
+{
+lean_object* v___x_1502_; lean_object* v_env_1503_; uint8_t v___x_1504_; 
+v___x_1502_ = lean_st_ref_get(v___y_1500_);
+v_env_1503_ = lean_ctor_get(v___x_1502_, 0);
+lean_inc_ref(v_env_1503_);
+lean_dec(v___x_1502_);
+lean_inc(v_declName_1496_);
+v___x_1504_ = lp_batteries_Lean_Environment_isAutoDecl(v_env_1503_, v_declName_1496_);
+if (v___x_1504_ == 0)
+{
+lean_object* v___x_1505_; lean_object* v_env_1506_; uint8_t v___x_1507_; 
+v___x_1505_ = lean_st_ref_get(v___y_1500_);
+v_env_1506_ = lean_ctor_get(v___x_1505_, 0);
+lean_inc_ref(v_env_1506_);
+lean_dec(v___x_1505_);
+lean_inc(v_declName_1496_);
+v___x_1507_ = l_Lean_Linter_isDeprecated(v_env_1506_, v_declName_1496_);
+if (v___x_1507_ == 0)
+{
+lean_object* v___x_1508_; 
+v___x_1508_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_declName_1496_, v___y_1497_, v___y_1498_, v___y_1499_, v___y_1500_);
+if (lean_obj_tag(v___x_1508_) == 0)
+{
+lean_object* v_a_1509_; lean_object* v___x_1510_; lean_object* v___x_1511_; 
+v_a_1509_ = lean_ctor_get(v___x_1508_, 0);
+lean_inc(v_a_1509_);
+lean_dec_ref_known(v___x_1508_, 1);
+v___x_1510_ = l_Lean_ConstantInfo_type(v_a_1509_);
+lean_dec(v_a_1509_);
+v___x_1511_ = lp_batteries_Lean_Meta_forallTelescope___at___00Batteries_Tactic_Lint_unusedArguments_spec__8___redArg(v___x_1510_, v___f_1495_, v___x_1507_, v___y_1497_, v___y_1498_, v___y_1499_, v___y_1500_);
+return v___x_1511_;
+}
+else
+{
+lean_object* v_a_1512_; lean_object* v___x_1514_; uint8_t v_isShared_1515_; uint8_t v_isSharedCheck_1519_; 
+lean_dec_ref(v___f_1495_);
+v_a_1512_ = lean_ctor_get(v___x_1508_, 0);
+v_isSharedCheck_1519_ = !lean_is_exclusive(v___x_1508_);
+if (v_isSharedCheck_1519_ == 0)
+{
+v___x_1514_ = v___x_1508_;
+v_isShared_1515_ = v_isSharedCheck_1519_;
+goto v_resetjp_1513_;
+}
+else
+{
+lean_inc(v_a_1512_);
+lean_dec(v___x_1508_);
+v___x_1514_ = lean_box(0);
+v_isShared_1515_ = v_isSharedCheck_1519_;
+goto v_resetjp_1513_;
+}
+v_resetjp_1513_:
+{
+lean_object* v___x_1517_; 
+if (v_isShared_1515_ == 0)
+{
+v___x_1517_ = v___x_1514_;
+goto v_reusejp_1516_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1518_; 
+v_reuseFailAlloc_1518_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1518_, 0, v_a_1512_);
+v___x_1517_ = v_reuseFailAlloc_1518_;
+goto v_reusejp_1516_;
+}
+v_reusejp_1516_:
+{
+return v___x_1517_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_1520_; lean_object* v___x_1521_; 
+lean_dec(v_declName_1496_);
+lean_dec_ref(v___f_1495_);
+v___x_1520_ = lean_box(0);
+v___x_1521_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1521_, 0, v___x_1520_);
+return v___x_1521_;
+}
+}
+else
+{
+lean_object* v___x_1522_; lean_object* v___x_1523_; 
+lean_dec(v_declName_1496_);
+lean_dec_ref(v___f_1495_);
+v___x_1522_ = lean_box(0);
+v___x_1523_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1523_, 0, v___x_1522_);
+return v___x_1523_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1___boxed(lean_object* v___f_1524_, lean_object* v_declName_1525_, lean_object* v___y_1526_, lean_object* v___y_1527_, lean_object* v___y_1528_, lean_object* v___y_1529_, lean_object* v___y_1530_){
+_start:
+{
+lean_object* v_res_1531_; 
+v_res_1531_ = lp_batteries_Batteries_Tactic_Lint_synTaut___lam__1(v___f_1524_, v_declName_1525_, v___y_1526_, v___y_1527_, v___y_1528_, v___y_1529_);
+lean_dec(v___y_1529_);
+lean_dec_ref(v___y_1528_);
+lean_dec(v___y_1527_);
+lean_dec_ref(v___y_1526_);
+return v_res_1531_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_synTaut___closed__4(void){
+_start:
+{
+lean_object* v___x_1538_; lean_object* v___x_1539_; 
+v___x_1538_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___closed__3));
+v___x_1539_ = l_Lean_MessageData_ofFormat(v___x_1538_);
+return v___x_1539_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_synTaut___closed__7(void){
+_start:
+{
+lean_object* v___x_1543_; lean_object* v___x_1544_; 
+v___x_1543_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___closed__6));
+v___x_1544_ = l_Lean_MessageData_ofFormat(v___x_1543_);
+return v___x_1544_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_synTaut___closed__8(void){
+_start:
+{
+uint8_t v___x_1545_; lean_object* v___x_1546_; lean_object* v___x_1547_; lean_object* v___f_1548_; lean_object* v___x_1549_; 
+v___x_1545_ = 1;
+v___x_1546_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__7, &lp_batteries_Batteries_Tactic_Lint_synTaut___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_synTaut___closed__7);
+v___x_1547_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__4, &lp_batteries_Batteries_Tactic_Lint_synTaut___closed__4_once, _init_lp_batteries_Batteries_Tactic_Lint_synTaut___closed__4);
+v___f_1548_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___closed__1));
+v___x_1549_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_1549_, 0, v___f_1548_);
+lean_ctor_set(v___x_1549_, 1, v___x_1547_);
+lean_ctor_set(v___x_1549_, 2, v___x_1546_);
+lean_ctor_set_uint8(v___x_1549_, sizeof(void*)*3, v___x_1545_);
+return v___x_1549_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_synTaut(void){
+_start:
+{
+lean_object* v___x_1550_; 
+v___x_1550_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_synTaut___closed__8, &lp_batteries_Batteries_Tactic_Lint_synTaut___closed__8_once, _init_lp_batteries_Batteries_Tactic_Lint_synTaut___closed__8);
+return v___x_1550_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg(){
+_start:
+{
+lean_object* v___x_1554_; lean_object* v___x_1555_; 
+v___x_1554_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg___closed__0));
+v___x_1555_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1555_, 0, v___x_1554_);
+return v___x_1555_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg___boxed(lean_object* v_a_1556_){
+_start:
+{
+lean_object* v_res_1557_; 
+v_res_1557_ = lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg();
+return v_res_1557_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves(lean_object* v_x_1558_, lean_object* v_a_1559_, lean_object* v_a_1560_, lean_object* v_a_1561_, lean_object* v_a_1562_){
+_start:
+{
+lean_object* v___x_1564_; 
+v___x_1564_ = lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg();
+return v___x_1564_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___boxed(lean_object* v_x_1565_, lean_object* v_a_1566_, lean_object* v_a_1567_, lean_object* v_a_1568_, lean_object* v_a_1569_, lean_object* v_a_1570_){
+_start:
+{
+lean_object* v_res_1571_; 
+v_res_1571_ = lp_batteries_Batteries_Tactic_Lint_findUnusedHaves(v_x_1565_, v_a_1566_, v_a_1567_, v_a_1568_, v_a_1569_);
+lean_dec(v_a_1569_);
+lean_dec_ref(v_a_1568_);
+lean_dec(v_a_1567_);
+lean_dec_ref(v_a_1566_);
+lean_dec_ref(v_x_1565_);
+return v_res_1571_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2(void){
+_start:
+{
+lean_object* v___x_1575_; lean_object* v___x_1576_; 
+v___x_1575_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__1));
+v___x_1576_ = l_Lean_MessageData_ofFormat(v___x_1575_);
+return v___x_1576_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0(lean_object* v_declName_1577_, lean_object* v___y_1578_, lean_object* v___y_1579_, lean_object* v___y_1580_, lean_object* v___y_1581_){
+_start:
+{
+lean_object* v_unused_1584_; lean_object* v___x_1595_; lean_object* v_env_1596_; uint8_t v___x_1597_; 
+v___x_1595_ = lean_st_ref_get(v___y_1581_);
+v_env_1596_ = lean_ctor_get(v___x_1595_, 0);
+lean_inc_ref(v_env_1596_);
+lean_dec(v___x_1595_);
+lean_inc(v_declName_1577_);
+v___x_1597_ = lp_batteries_Lean_Environment_isAutoDecl(v_env_1596_, v_declName_1577_);
+if (v___x_1597_ == 0)
+{
+lean_object* v___x_1598_; 
+v___x_1598_ = lp_batteries_Lean_getConstInfo___at___00Batteries_Tactic_Lint_unusedArguments_spec__1(v_declName_1577_, v___y_1578_, v___y_1579_, v___y_1580_, v___y_1581_);
+if (lean_obj_tag(v___x_1598_) == 0)
+{
+lean_object* v_a_1599_; lean_object* v___x_1600_; lean_object* v_a_1601_; lean_object* v___x_1602_; 
+v_a_1599_ = lean_ctor_get(v___x_1598_, 0);
+lean_inc(v_a_1599_);
+lean_dec_ref_known(v___x_1598_, 1);
+v___x_1600_ = lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg();
+v_a_1601_ = lean_ctor_get(v___x_1600_, 0);
+lean_inc(v_a_1601_);
+lean_dec_ref(v___x_1600_);
+v___x_1602_ = l_Lean_ConstantInfo_value_x3f(v_a_1599_, v___x_1597_);
+if (lean_obj_tag(v___x_1602_) == 1)
+{
+lean_object* v___x_1603_; lean_object* v_a_1604_; lean_object* v___x_1605_; 
+lean_dec_ref_known(v___x_1602_, 1);
+v___x_1603_ = lp_batteries_Batteries_Tactic_Lint_findUnusedHaves___redArg();
+v_a_1604_ = lean_ctor_get(v___x_1603_, 0);
+lean_inc(v_a_1604_);
+lean_dec_ref(v___x_1603_);
+v___x_1605_ = l_Array_append___redArg(v_a_1601_, v_a_1604_);
+lean_dec(v_a_1604_);
+v_unused_1584_ = v___x_1605_;
+goto v___jp_1583_;
+}
+else
+{
+lean_dec(v___x_1602_);
+v_unused_1584_ = v_a_1601_;
+goto v___jp_1583_;
+}
+}
+else
+{
+lean_object* v_a_1606_; lean_object* v___x_1608_; uint8_t v_isShared_1609_; uint8_t v_isSharedCheck_1613_; 
+v_a_1606_ = lean_ctor_get(v___x_1598_, 0);
+v_isSharedCheck_1613_ = !lean_is_exclusive(v___x_1598_);
+if (v_isSharedCheck_1613_ == 0)
+{
+v___x_1608_ = v___x_1598_;
+v_isShared_1609_ = v_isSharedCheck_1613_;
+goto v_resetjp_1607_;
+}
+else
+{
+lean_inc(v_a_1606_);
+lean_dec(v___x_1598_);
+v___x_1608_ = lean_box(0);
+v_isShared_1609_ = v_isSharedCheck_1613_;
+goto v_resetjp_1607_;
+}
+v_resetjp_1607_:
+{
+lean_object* v___x_1611_; 
+if (v_isShared_1609_ == 0)
+{
+v___x_1611_ = v___x_1608_;
+goto v_reusejp_1610_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1612_; 
+v_reuseFailAlloc_1612_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1612_, 0, v_a_1606_);
+v___x_1611_ = v_reuseFailAlloc_1612_;
+goto v_reusejp_1610_;
+}
+v_reusejp_1610_:
+{
+return v___x_1611_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_1614_; lean_object* v___x_1615_; 
+lean_dec(v_declName_1577_);
+v___x_1614_ = lean_box(0);
+v___x_1615_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1615_, 0, v___x_1614_);
+return v___x_1615_;
+}
+v___jp_1583_:
+{
+lean_object* v___x_1585_; lean_object* v___x_1586_; uint8_t v___x_1587_; 
+v___x_1585_ = lean_array_get_size(v_unused_1584_);
+v___x_1586_ = lean_unsigned_to_nat(0u);
+v___x_1587_ = lean_nat_dec_eq(v___x_1585_, v___x_1586_);
+if (v___x_1587_ == 0)
+{
+lean_object* v___x_1588_; lean_object* v___x_1589_; lean_object* v___x_1590_; lean_object* v___x_1591_; lean_object* v___x_1592_; 
+v___x_1588_ = lean_array_to_list(v_unused_1584_);
+v___x_1589_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2, &lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2);
+v___x_1590_ = l_Lean_MessageData_joinSep(v___x_1588_, v___x_1589_);
+v___x_1591_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_1591_, 0, v___x_1590_);
+v___x_1592_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1592_, 0, v___x_1591_);
+return v___x_1592_;
+}
+else
+{
+lean_object* v___x_1593_; lean_object* v___x_1594_; 
+lean_dec_ref(v_unused_1584_);
+v___x_1593_ = lean_box(0);
+v___x_1594_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1594_, 0, v___x_1593_);
+return v___x_1594_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___boxed(lean_object* v_declName_1616_, lean_object* v___y_1617_, lean_object* v___y_1618_, lean_object* v___y_1619_, lean_object* v___y_1620_, lean_object* v___y_1621_){
+_start:
+{
+lean_object* v_res_1622_; 
+v_res_1622_ = lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0(v_declName_1616_, v___y_1617_, v___y_1618_, v___y_1619_, v___y_1620_);
+lean_dec(v___y_1620_);
+lean_dec_ref(v___y_1619_);
+lean_dec(v___y_1618_);
+lean_dec_ref(v___y_1617_);
+return v_res_1622_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__3(void){
+_start:
+{
+lean_object* v___x_1627_; lean_object* v___x_1628_; 
+v___x_1627_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__2));
+v___x_1628_ = l_Lean_MessageData_ofFormat(v___x_1627_);
+return v___x_1628_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__6(void){
+_start:
+{
+lean_object* v___x_1632_; lean_object* v___x_1633_; 
+v___x_1632_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__5));
+v___x_1633_ = l_Lean_MessageData_ofFormat(v___x_1632_);
+return v___x_1633_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__7(void){
+_start:
+{
+uint8_t v___x_1634_; lean_object* v___x_1635_; lean_object* v___x_1636_; lean_object* v___f_1637_; lean_object* v___x_1638_; 
+v___x_1634_ = 1;
+v___x_1635_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__6, &lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__6_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__6);
+v___x_1636_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__3, &lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__3_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__3);
+v___f_1637_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__0));
+v___x_1638_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_1638_, 0, v___f_1637_);
+lean_ctor_set(v___x_1638_, 1, v___x_1636_);
+lean_ctor_set(v___x_1638_, 2, v___x_1635_);
+lean_ctor_set_uint8(v___x_1638_, sizeof(void*)*3, v___x_1634_);
+return v___x_1638_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices(void){
+_start:
+{
+lean_object* v___x_1639_; 
+v___x_1639_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__7, &lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___closed__7);
+return v___x_1639_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_List_mapTR_loop___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__0(lean_object* v_a_1640_, lean_object* v_a_1641_){
+_start:
+{
+if (lean_obj_tag(v_a_1640_) == 0)
+{
+lean_object* v___x_1642_; 
+v___x_1642_ = l_List_reverse___redArg(v_a_1641_);
+return v___x_1642_;
+}
+else
+{
+lean_object* v_head_1643_; lean_object* v_tail_1644_; lean_object* v___x_1646_; uint8_t v_isShared_1647_; uint8_t v_isSharedCheck_1653_; 
+v_head_1643_ = lean_ctor_get(v_a_1640_, 0);
+v_tail_1644_ = lean_ctor_get(v_a_1640_, 1);
+v_isSharedCheck_1653_ = !lean_is_exclusive(v_a_1640_);
+if (v_isSharedCheck_1653_ == 0)
+{
+v___x_1646_ = v_a_1640_;
+v_isShared_1647_ = v_isSharedCheck_1653_;
+goto v_resetjp_1645_;
+}
+else
+{
+lean_inc(v_tail_1644_);
+lean_inc(v_head_1643_);
+lean_dec(v_a_1640_);
+v___x_1646_ = lean_box(0);
+v_isShared_1647_ = v_isSharedCheck_1653_;
+goto v_resetjp_1645_;
+}
+v_resetjp_1645_:
+{
+lean_object* v___x_1648_; lean_object* v___x_1650_; 
+v___x_1648_ = l_Lean_MessageData_ofExpr(v_head_1643_);
+if (v_isShared_1647_ == 0)
+{
+lean_ctor_set(v___x_1646_, 1, v_a_1641_);
+lean_ctor_set(v___x_1646_, 0, v___x_1648_);
+v___x_1650_ = v___x_1646_;
+goto v_reusejp_1649_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1652_; 
+v_reuseFailAlloc_1652_ = lean_alloc_ctor(1, 2, 0);
+lean_ctor_set(v_reuseFailAlloc_1652_, 0, v___x_1648_);
+lean_ctor_set(v_reuseFailAlloc_1652_, 1, v_a_1641_);
+v___x_1650_ = v_reuseFailAlloc_1652_;
+goto v_reusejp_1649_;
+}
+v_reusejp_1649_:
+{
+v_a_1640_ = v_tail_1644_;
+v_a_1641_ = v___x_1650_;
+goto _start;
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg(lean_object* v___x_1654_, lean_object* v___x_1655_, lean_object* v_as_1656_, size_t v_i_1657_, size_t v_stop_1658_, lean_object* v_b_1659_, lean_object* v___y_1660_, lean_object* v___y_1661_, lean_object* v___y_1662_){
+_start:
+{
+uint8_t v___x_1664_; 
+v___x_1664_ = lean_usize_dec_eq(v_i_1657_, v_stop_1658_);
+if (v___x_1664_ == 0)
+{
+lean_object* v___x_1665_; lean_object* v___x_1666_; 
+v___x_1665_ = lean_array_uget_borrowed(v_as_1656_, v_i_1657_);
+v___x_1666_ = l_Lean_Meta_getFVarLocalDecl___redArg(v___x_1665_, v___y_1660_, v___y_1661_, v___y_1662_);
+if (lean_obj_tag(v___x_1666_) == 0)
+{
+lean_object* v_a_1667_; lean_object* v_a_1669_; uint8_t v___y_1674_; uint8_t v___x_1678_; uint8_t v___x_1679_; 
+v_a_1667_ = lean_ctor_get(v___x_1666_, 0);
+lean_inc(v_a_1667_);
+lean_dec_ref_known(v___x_1666_, 1);
+v___x_1678_ = l_Lean_LocalDecl_binderInfo(v_a_1667_);
+lean_dec(v_a_1667_);
+v___x_1679_ = l_Lean_BinderInfo_isExplicit(v___x_1678_);
+if (v___x_1679_ == 0)
+{
+v___y_1674_ = v___x_1679_;
+goto v___jp_1673_;
+}
+else
+{
+lean_object* v___x_1680_; uint8_t v___x_1681_; 
+v___x_1680_ = l_Lean_Expr_fvarId_x21(v___x_1665_);
+v___x_1681_ = lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(v___x_1680_, v___x_1655_);
+lean_dec(v___x_1680_);
+v___y_1674_ = v___x_1681_;
+goto v___jp_1673_;
+}
+v___jp_1668_:
+{
+size_t v___x_1670_; size_t v___x_1671_; 
+v___x_1670_ = ((size_t)1ULL);
+v___x_1671_ = lean_usize_add(v_i_1657_, v___x_1670_);
+v_i_1657_ = v___x_1671_;
+v_b_1659_ = v_a_1669_;
+goto _start;
+}
+v___jp_1673_:
+{
+if (v___y_1674_ == 0)
+{
+v_a_1669_ = v_b_1659_;
+goto v___jp_1668_;
+}
+else
+{
+lean_object* v___x_1675_; uint8_t v___x_1676_; 
+v___x_1675_ = l_Lean_Expr_fvarId_x21(v___x_1665_);
+v___x_1676_ = lp_batteries_Std_DTreeMap_Internal_Impl_contains___at___00Batteries_Tactic_Lint_unusedArguments_spec__6___redArg(v___x_1675_, v___x_1654_);
+lean_dec(v___x_1675_);
+if (v___x_1676_ == 0)
+{
+v_a_1669_ = v_b_1659_;
+goto v___jp_1668_;
+}
+else
+{
+lean_object* v___x_1677_; 
+lean_inc(v___x_1665_);
+v___x_1677_ = lean_array_push(v_b_1659_, v___x_1665_);
+v_a_1669_ = v___x_1677_;
+goto v___jp_1668_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_1682_; lean_object* v___x_1684_; uint8_t v_isShared_1685_; uint8_t v_isSharedCheck_1689_; 
+lean_dec_ref(v_b_1659_);
+v_a_1682_ = lean_ctor_get(v___x_1666_, 0);
+v_isSharedCheck_1689_ = !lean_is_exclusive(v___x_1666_);
+if (v_isSharedCheck_1689_ == 0)
+{
+v___x_1684_ = v___x_1666_;
+v_isShared_1685_ = v_isSharedCheck_1689_;
+goto v_resetjp_1683_;
+}
+else
+{
+lean_inc(v_a_1682_);
+lean_dec(v___x_1666_);
+v___x_1684_ = lean_box(0);
+v_isShared_1685_ = v_isSharedCheck_1689_;
+goto v_resetjp_1683_;
+}
+v_resetjp_1683_:
+{
+lean_object* v___x_1687_; 
+if (v_isShared_1685_ == 0)
+{
+v___x_1687_ = v___x_1684_;
+goto v_reusejp_1686_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1688_; 
+v_reuseFailAlloc_1688_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1688_, 0, v_a_1682_);
+v___x_1687_ = v_reuseFailAlloc_1688_;
+goto v_reusejp_1686_;
+}
+v_reusejp_1686_:
+{
+return v___x_1687_;
+}
+}
+}
+}
+else
+{
+lean_object* v___x_1690_; 
+v___x_1690_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1690_, 0, v_b_1659_);
+return v___x_1690_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg___boxed(lean_object* v___x_1691_, lean_object* v___x_1692_, lean_object* v_as_1693_, lean_object* v_i_1694_, lean_object* v_stop_1695_, lean_object* v_b_1696_, lean_object* v___y_1697_, lean_object* v___y_1698_, lean_object* v___y_1699_, lean_object* v___y_1700_){
+_start:
+{
+size_t v_i_boxed_1701_; size_t v_stop_boxed_1702_; lean_object* v_res_1703_; 
+v_i_boxed_1701_ = lean_unbox_usize(v_i_1694_);
+lean_dec(v_i_1694_);
+v_stop_boxed_1702_ = lean_unbox_usize(v_stop_1695_);
+lean_dec(v_stop_1695_);
+v_res_1703_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg(v___x_1691_, v___x_1692_, v_as_1693_, v_i_boxed_1701_, v_stop_boxed_1702_, v_b_1696_, v___y_1697_, v___y_1698_, v___y_1699_);
+lean_dec(v___y_1699_);
+lean_dec_ref(v___y_1698_);
+lean_dec_ref(v___y_1697_);
+lean_dec_ref(v_as_1693_);
+lean_dec(v___x_1692_);
+lean_dec(v___x_1691_);
+return v_res_1703_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__1(void){
+_start:
+{
+lean_object* v___x_1705_; lean_object* v___x_1706_; 
+v___x_1705_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__0));
+v___x_1706_ = l_Lean_stringToMessageData(v___x_1705_);
+return v___x_1706_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__3(void){
+_start:
+{
+lean_object* v___x_1709_; lean_object* v___x_1710_; lean_object* v___x_1711_; lean_object* v___x_1712_; 
+v___x_1709_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__2));
+v___x_1710_ = lean_box(1);
+v___x_1711_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12, &lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments___lam__0___closed__12);
+v___x_1712_ = lean_alloc_ctor(0, 3, 0);
+lean_ctor_set(v___x_1712_, 0, v___x_1711_);
+lean_ctor_set(v___x_1712_, 1, v___x_1710_);
+lean_ctor_set(v___x_1712_, 2, v___x_1709_);
+return v___x_1712_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0(lean_object* v_args_1713_, lean_object* v_ty_1714_, lean_object* v___y_1715_, lean_object* v___y_1716_, lean_object* v___y_1717_, lean_object* v___y_1718_){
+_start:
+{
+lean_object* v_a_1721_; lean_object* v___y_1745_; lean_object* v___x_1755_; lean_object* v___x_1756_; uint8_t v___x_1757_; 
+v___x_1755_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_synTaut___lam__0___closed__6));
+v___x_1756_ = lean_unsigned_to_nat(2u);
+v___x_1757_ = l_Lean_Expr_isAppOfArity(v_ty_1714_, v___x_1755_, v___x_1756_);
+if (v___x_1757_ == 0)
+{
+lean_object* v___x_1758_; lean_object* v___x_1759_; 
+v___x_1758_ = lean_box(0);
+v___x_1759_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1759_, 0, v___x_1758_);
+return v___x_1759_;
+}
+else
+{
+lean_object* v___x_1760_; lean_object* v___x_1761_; lean_object* v___x_1762_; uint8_t v___x_1763_; 
+v___x_1760_ = lean_unsigned_to_nat(0u);
+v___x_1761_ = lean_array_get_size(v_args_1713_);
+v___x_1762_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__2));
+v___x_1763_ = lean_nat_dec_lt(v___x_1760_, v___x_1761_);
+if (v___x_1763_ == 0)
+{
+v_a_1721_ = v___x_1762_;
+goto v___jp_1720_;
+}
+else
+{
+lean_object* v___x_1764_; lean_object* v___x_1765_; lean_object* v___x_1766_; lean_object* v___x_1767_; lean_object* v_fvarSet_1768_; lean_object* v___x_1769_; lean_object* v___x_1770_; lean_object* v_fvarSet_1771_; uint8_t v___x_1772_; 
+v___x_1764_ = l_Lean_Expr_appFn_x21(v_ty_1714_);
+v___x_1765_ = l_Lean_Expr_appArg_x21(v___x_1764_);
+lean_dec_ref(v___x_1764_);
+v___x_1766_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__3, &lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__3_once, _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__3);
+v___x_1767_ = l_Lean_collectFVars(v___x_1766_, v___x_1765_);
+v_fvarSet_1768_ = lean_ctor_get(v___x_1767_, 1);
+lean_inc(v_fvarSet_1768_);
+lean_dec_ref(v___x_1767_);
+v___x_1769_ = l_Lean_Expr_appArg_x21(v_ty_1714_);
+v___x_1770_ = l_Lean_collectFVars(v___x_1766_, v___x_1769_);
+v_fvarSet_1771_ = lean_ctor_get(v___x_1770_, 1);
+lean_inc(v_fvarSet_1771_);
+lean_dec_ref(v___x_1770_);
+v___x_1772_ = lean_nat_dec_le(v___x_1761_, v___x_1761_);
+if (v___x_1772_ == 0)
+{
+if (v___x_1763_ == 0)
+{
+lean_dec(v_fvarSet_1771_);
+lean_dec(v_fvarSet_1768_);
+v_a_1721_ = v___x_1762_;
+goto v___jp_1720_;
+}
+else
+{
+size_t v___x_1773_; size_t v___x_1774_; lean_object* v___x_1775_; 
+v___x_1773_ = ((size_t)0ULL);
+v___x_1774_ = lean_usize_of_nat(v___x_1761_);
+v___x_1775_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg(v_fvarSet_1771_, v_fvarSet_1768_, v_args_1713_, v___x_1773_, v___x_1774_, v___x_1762_, v___y_1715_, v___y_1717_, v___y_1718_);
+lean_dec(v_fvarSet_1768_);
+lean_dec(v_fvarSet_1771_);
+v___y_1745_ = v___x_1775_;
+goto v___jp_1744_;
+}
+}
+else
+{
+size_t v___x_1776_; size_t v___x_1777_; lean_object* v___x_1778_; 
+v___x_1776_ = ((size_t)0ULL);
+v___x_1777_ = lean_usize_of_nat(v___x_1761_);
+v___x_1778_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg(v_fvarSet_1771_, v_fvarSet_1768_, v_args_1713_, v___x_1776_, v___x_1777_, v___x_1762_, v___y_1715_, v___y_1717_, v___y_1718_);
+lean_dec(v_fvarSet_1768_);
+lean_dec(v_fvarSet_1771_);
+v___y_1745_ = v___x_1778_;
+goto v___jp_1744_;
+}
+}
+}
+v___jp_1720_:
+{
+lean_object* v___x_1722_; lean_object* v___x_1723_; uint8_t v___x_1724_; 
+v___x_1722_ = lean_array_get_size(v_a_1721_);
+v___x_1723_ = lean_unsigned_to_nat(0u);
+v___x_1724_ = lean_nat_dec_eq(v___x_1722_, v___x_1723_);
+if (v___x_1724_ == 0)
+{
+lean_object* v___x_1725_; lean_object* v___x_1726_; lean_object* v___x_1727_; lean_object* v___x_1728_; lean_object* v___x_1729_; lean_object* v___x_1730_; lean_object* v___x_1731_; lean_object* v___x_1732_; lean_object* v_a_1733_; lean_object* v___x_1735_; uint8_t v_isShared_1736_; uint8_t v_isSharedCheck_1741_; 
+v___x_1725_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__1, &lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__1_once, _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___closed__1);
+v___x_1726_ = lean_array_to_list(v_a_1721_);
+v___x_1727_ = lean_box(0);
+v___x_1728_ = lp_batteries_List_mapTR_loop___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__0(v___x_1726_, v___x_1727_);
+v___x_1729_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2, &lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2_once, _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices___lam__0___closed__2);
+v___x_1730_ = l_Lean_MessageData_joinSep(v___x_1728_, v___x_1729_);
+v___x_1731_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_1731_, 0, v___x_1725_);
+lean_ctor_set(v___x_1731_, 1, v___x_1730_);
+v___x_1732_ = lp_batteries_Lean_addMessageContextFull___at___00Batteries_Tactic_Lint_unusedArguments_spec__5(v___x_1731_, v___y_1715_, v___y_1716_, v___y_1717_, v___y_1718_);
+v_a_1733_ = lean_ctor_get(v___x_1732_, 0);
+v_isSharedCheck_1741_ = !lean_is_exclusive(v___x_1732_);
+if (v_isSharedCheck_1741_ == 0)
+{
+v___x_1735_ = v___x_1732_;
+v_isShared_1736_ = v_isSharedCheck_1741_;
+goto v_resetjp_1734_;
+}
+else
+{
+lean_inc(v_a_1733_);
+lean_dec(v___x_1732_);
+v___x_1735_ = lean_box(0);
+v_isShared_1736_ = v_isSharedCheck_1741_;
+goto v_resetjp_1734_;
+}
+v_resetjp_1734_:
+{
+lean_object* v___x_1737_; lean_object* v___x_1739_; 
+v___x_1737_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_1737_, 0, v_a_1733_);
+if (v_isShared_1736_ == 0)
+{
+lean_ctor_set(v___x_1735_, 0, v___x_1737_);
+v___x_1739_ = v___x_1735_;
+goto v_reusejp_1738_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1740_; 
+v_reuseFailAlloc_1740_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1740_, 0, v___x_1737_);
+v___x_1739_ = v_reuseFailAlloc_1740_;
+goto v_reusejp_1738_;
+}
+v_reusejp_1738_:
+{
+return v___x_1739_;
+}
+}
+}
+else
+{
+lean_object* v___x_1742_; lean_object* v___x_1743_; 
+lean_dec_ref(v_a_1721_);
+v___x_1742_ = lean_box(0);
+v___x_1743_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_1743_, 0, v___x_1742_);
+return v___x_1743_;
+}
+}
+v___jp_1744_:
+{
+if (lean_obj_tag(v___y_1745_) == 0)
+{
+lean_object* v_a_1746_; 
+v_a_1746_ = lean_ctor_get(v___y_1745_, 0);
+lean_inc(v_a_1746_);
+lean_dec_ref_known(v___y_1745_, 1);
+v_a_1721_ = v_a_1746_;
+goto v___jp_1720_;
+}
+else
+{
+lean_object* v_a_1747_; lean_object* v___x_1749_; uint8_t v_isShared_1750_; uint8_t v_isSharedCheck_1754_; 
+v_a_1747_ = lean_ctor_get(v___y_1745_, 0);
+v_isSharedCheck_1754_ = !lean_is_exclusive(v___y_1745_);
+if (v_isSharedCheck_1754_ == 0)
+{
+v___x_1749_ = v___y_1745_;
+v_isShared_1750_ = v_isSharedCheck_1754_;
+goto v_resetjp_1748_;
+}
+else
+{
+lean_inc(v_a_1747_);
+lean_dec(v___y_1745_);
+v___x_1749_ = lean_box(0);
+v_isShared_1750_ = v_isSharedCheck_1754_;
+goto v_resetjp_1748_;
+}
+v_resetjp_1748_:
+{
+lean_object* v___x_1752_; 
+if (v_isShared_1750_ == 0)
+{
+v___x_1752_ = v___x_1749_;
+goto v_reusejp_1751_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_1753_; 
+v_reuseFailAlloc_1753_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_1753_, 0, v_a_1747_);
+v___x_1752_ = v_reuseFailAlloc_1753_;
+goto v_reusejp_1751_;
+}
+v_reusejp_1751_:
+{
+return v___x_1752_;
+}
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0___boxed(lean_object* v_args_1779_, lean_object* v_ty_1780_, lean_object* v___y_1781_, lean_object* v___y_1782_, lean_object* v___y_1783_, lean_object* v___y_1784_, lean_object* v___y_1785_){
+_start:
+{
+lean_object* v_res_1786_; 
+v_res_1786_ = lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___lam__0(v_args_1779_, v_ty_1780_, v___y_1781_, v___y_1782_, v___y_1783_, v___y_1784_);
+lean_dec(v___y_1784_);
+lean_dec_ref(v___y_1783_);
+lean_dec(v___y_1782_);
+lean_dec_ref(v___y_1781_);
+lean_dec_ref(v_ty_1780_);
+lean_dec_ref(v_args_1779_);
+return v_res_1786_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__4(void){
+_start:
+{
+lean_object* v___x_1793_; lean_object* v___x_1794_; 
+v___x_1793_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__3));
+v___x_1794_ = l_Lean_MessageData_ofFormat(v___x_1793_);
+return v___x_1794_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__7(void){
+_start:
+{
+lean_object* v___x_1798_; lean_object* v___x_1799_; 
+v___x_1798_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__6));
+v___x_1799_ = l_Lean_MessageData_ofFormat(v___x_1798_);
+return v___x_1799_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__8(void){
+_start:
+{
+uint8_t v___x_1800_; lean_object* v___x_1801_; lean_object* v___x_1802_; lean_object* v___f_1803_; lean_object* v___x_1804_; 
+v___x_1800_ = 1;
+v___x_1801_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__7, &lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__7_once, _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__7);
+v___x_1802_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__4, &lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__4_once, _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__4);
+v___f_1803_ = ((lean_object*)(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__1));
+v___x_1804_ = lean_alloc_ctor(0, 3, 1);
+lean_ctor_set(v___x_1804_, 0, v___f_1803_);
+lean_ctor_set(v___x_1804_, 1, v___x_1802_);
+lean_ctor_set(v___x_1804_, 2, v___x_1801_);
+lean_ctor_set_uint8(v___x_1804_, sizeof(void*)*3, v___x_1800_);
+return v___x_1804_;
+}
+}
+static lean_object* _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff(void){
+_start:
+{
+lean_object* v___x_1805_; 
+v___x_1805_ = lean_obj_once(&lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__8, &lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__8_once, _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff___closed__8);
+return v___x_1805_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1(lean_object* v___x_1806_, lean_object* v___x_1807_, lean_object* v_as_1808_, size_t v_i_1809_, size_t v_stop_1810_, lean_object* v_b_1811_, lean_object* v___y_1812_, lean_object* v___y_1813_, lean_object* v___y_1814_, lean_object* v___y_1815_){
+_start:
+{
+lean_object* v___x_1817_; 
+v___x_1817_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___redArg(v___x_1806_, v___x_1807_, v_as_1808_, v_i_1809_, v_stop_1810_, v_b_1811_, v___y_1812_, v___y_1814_, v___y_1815_);
+return v___x_1817_;
+}
+}
+LEAN_EXPORT lean_object* lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1___boxed(lean_object* v___x_1818_, lean_object* v___x_1819_, lean_object* v_as_1820_, lean_object* v_i_1821_, lean_object* v_stop_1822_, lean_object* v_b_1823_, lean_object* v___y_1824_, lean_object* v___y_1825_, lean_object* v___y_1826_, lean_object* v___y_1827_, lean_object* v___y_1828_){
+_start:
+{
+size_t v_i_boxed_1829_; size_t v_stop_boxed_1830_; lean_object* v_res_1831_; 
+v_i_boxed_1829_ = lean_unbox_usize(v_i_1821_);
+lean_dec(v_i_1821_);
+v_stop_boxed_1830_ = lean_unbox_usize(v_stop_1822_);
+lean_dec(v_stop_1822_);
+v_res_1831_ = lp_batteries___private_Init_Data_Array_Basic_0__Array_foldlMUnsafe_fold___at___00Batteries_Tactic_Lint_explicitVarsOfIff_spec__1(v___x_1818_, v___x_1819_, v_as_1820_, v_i_boxed_1829_, v_stop_boxed_1830_, v_b_1823_, v___y_1824_, v___y_1825_, v___y_1826_, v___y_1827_);
+lean_dec(v___y_1827_);
+lean_dec_ref(v___y_1826_);
+lean_dec(v___y_1825_);
+lean_dec_ref(v___y_1824_);
+lean_dec_ref(v_as_1820_);
+lean_dec(v___x_1819_);
+lean_dec(v___x_1818_);
+return v_res_1831_;
+}
+}
+lean_object* runtime_initialize_Init(uint8_t builtin);
+void lean_initialize_runtime_module();
+static bool _G_runtime_initialized = false;
+LEAN_EXPORT lean_object* runtime_initialize_batteries_Batteries_Tactic_Lint_Misc(uint8_t builtin) {
+lean_object * res;
+if (_G_runtime_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_runtime_initialized = true;
+lean_initialize_runtime_module();
+res = runtime_initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return lean_io_result_mk_ok(lean_box(0));
+}
+lean_object* runtime_initialize_Init(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Util_CollectFVars(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Util_CollectLevelParams(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Util_ForEachExpr(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Meta_Check(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Meta_Instances(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Util_Recognizers(uint8_t builtin);
+lean_object* runtime_initialize_Lean_Linter_Deprecated(uint8_t builtin);
+lean_object* runtime_initialize_Lean_DocString(uint8_t builtin);
+lean_object* runtime_initialize_batteries_Batteries_Tactic_Lint_Basic(uint8_t builtin);
+static bool _G_meta_initialized = false;
+LEAN_EXPORT lean_object* meta_initialize_batteries_Batteries_Tactic_Lint_Misc(uint8_t builtin) {
+lean_object * res;
+if (_G_meta_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_meta_initialized = true;
+res = runtime_initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Util_CollectFVars(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Util_CollectLevelParams(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Util_ForEachExpr(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Meta_Check(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Meta_Instances(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Util_Recognizers(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_Linter_Deprecated(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_Lean_DocString(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_batteries_Batteries_Tactic_Lint_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+lp_batteries_Batteries_Tactic_Lint_unusedArguments = _init_lp_batteries_Batteries_Tactic_Lint_unusedArguments();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_unusedArguments);
+lp_batteries_Batteries_Tactic_Lint_docBlame = _init_lp_batteries_Batteries_Tactic_Lint_docBlame();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_docBlame);
+lp_batteries_Batteries_Tactic_Lint_docBlameThm = _init_lp_batteries_Batteries_Tactic_Lint_docBlameThm();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_docBlameThm);
+lp_batteries_Batteries_Tactic_Lint_checkType = _init_lp_batteries_Batteries_Tactic_Lint_checkType();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_checkType);
+lp_batteries_Batteries_Tactic_Lint_synTaut = _init_lp_batteries_Batteries_Tactic_Lint_synTaut();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_synTaut);
+lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices = _init_lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_unusedHavesSuffices);
+lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff = _init_lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff();
+lean_mark_persistent(lp_batteries_Batteries_Tactic_Lint_explicitVarsOfIff);
+return lean_io_result_mk_ok(lean_box(0));
+}
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_Lean_Util_CollectFVars(uint8_t builtin);
+lean_object* initialize_Lean_Util_CollectLevelParams(uint8_t builtin);
+lean_object* initialize_Lean_Util_ForEachExpr(uint8_t builtin);
+lean_object* initialize_Lean_Meta_Check(uint8_t builtin);
+lean_object* initialize_Lean_Meta_Instances(uint8_t builtin);
+lean_object* initialize_Lean_Util_Recognizers(uint8_t builtin);
+lean_object* initialize_Lean_Linter_Deprecated(uint8_t builtin);
+lean_object* initialize_Lean_DocString(uint8_t builtin);
+lean_object* initialize_batteries_Batteries_Tactic_Lint_Basic(uint8_t builtin);
+static bool _G_initialized = false;
+LEAN_EXPORT lean_object* initialize_batteries_Batteries_Tactic_Lint_Misc(uint8_t builtin) {
+lean_object * res;
+if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_initialized = true;
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Util_CollectFVars(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Util_CollectLevelParams(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Util_ForEachExpr(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Meta_Check(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Meta_Instances(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Util_Recognizers(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_Linter_Deprecated(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Lean_DocString(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_batteries_Batteries_Tactic_Lint_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_batteries_Batteries_Tactic_Lint_Misc(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = meta_initialize_batteries_Batteries_Tactic_Lint_Misc(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return initialize_batteries_Batteries_Tactic_Lint_Misc(builtin);
+}
+#ifdef __cplusplus
+}
+#endif

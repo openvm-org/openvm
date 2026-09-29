@@ -1737,8 +1737,8 @@ v___x_405_ = l_outOfBounds___redArg(v___x_404_);
 lean_dec(v___x_404_);
 v___x_406_ = lean_unbox(v___x_405_);
 lean_dec(v___x_405_);
-v___y_386_ = v_b1_400_;
-v___y_387_ = v___y_398_;
+v___y_386_ = v___y_398_;
+v___y_387_ = v_b1_400_;
 v___y_388_ = v___x_406_;
 goto v___jp_385_;
 }
@@ -1747,8 +1747,8 @@ else
 uint8_t v___x_407_; 
 v___x_407_ = lean_byte_array_fget(v_bytes_360_, v___x_402_);
 lean_dec(v___x_402_);
-v___y_386_ = v_b1_400_;
-v___y_387_ = v___y_398_;
+v___y_386_ = v___y_398_;
+v___y_387_ = v_b1_400_;
 v___y_388_ = v___x_407_;
 goto v___jp_385_;
 }
@@ -1789,8 +1789,8 @@ v___jp_362_:
 uint32_t v_b3_367_; uint32_t v___x_368_; uint32_t v___x_369_; uint32_t v___x_370_; uint32_t v___x_371_; uint32_t v___x_372_; uint32_t v___x_373_; uint32_t v___x_374_; uint32_t v___x_375_; uint32_t v___x_376_; lean_object* v___x_377_; lean_object* v___x_378_; 
 v_b3_367_ = lean_uint8_to_uint32(v___y_366_);
 v___x_368_ = 8;
-v___x_369_ = lean_uint32_shift_left(v___y_363_, v___x_368_);
-v___x_370_ = lean_uint32_lor(v___y_365_, v___x_369_);
+v___x_369_ = lean_uint32_shift_left(v___y_365_, v___x_368_);
+v___x_370_ = lean_uint32_lor(v___y_363_, v___x_369_);
 v___x_371_ = 16;
 v___x_372_ = lean_uint32_shift_left(v___y_364_, v___x_371_);
 v___x_373_ = lean_uint32_lor(v___x_370_, v___x_372_);
@@ -2284,13 +2284,13 @@ lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_swirl_x2dfv_Swirl_Spec_ReferenceVerifier_Wire_RawToTyped(uint8_t builtin);
 lean_object* initialize_openvm_x2dfv_VmVerifier_Spec_Types(uint8_t builtin);
-void lean_initialize_runtime_module();
+void lean_initialize();
 static bool _G_initialized = false;
 LEAN_EXPORT lean_object* initialize_openvm_x2dfv_VmVerifier_Spec_Wire(uint8_t builtin) {
 lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
-lean_initialize_runtime_module();
+lean_initialize();
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
