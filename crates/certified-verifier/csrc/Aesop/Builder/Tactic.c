@@ -1,0 +1,2427 @@
+// Lean compiler output
+// Module: Aesop.Builder.Tactic
+// Imports: public import Init public meta import Init public import Aesop.Builder.Basic
+#include <lean/lean.h>
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-label"
+#elif defined(__GNUC__) && !defined(__CLANG__)
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-label"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
+lean_object* l_Lean_stringToMessageData(lean_object*);
+lean_object* l_Lean_MessageData_ofConstName(lean_object*, uint8_t);
+lean_object* lean_st_ref_get(lean_object*);
+uint8_t l_Lean_Name_isAnonymous(lean_object*);
+lean_object* l_Lean_Environment_setExporting(lean_object*, uint8_t);
+uint8_t l_Lean_Environment_contains(lean_object*, lean_object*, uint8_t);
+lean_object* l_Lean_PersistentHashMap_mkEmptyEntriesArray(lean_object*, lean_object*);
+lean_object* lean_mk_empty_array_with_capacity(lean_object*);
+extern lean_object* l_Lean_Options_empty;
+lean_object* l_Lean_Environment_getModuleIdxFor_x3f(lean_object*, lean_object*);
+lean_object* l_Lean_MessageData_note(lean_object*);
+lean_object* l_Lean_Environment_header(lean_object*);
+lean_object* l_Lean_EnvironmentHeader_moduleNames(lean_object*);
+lean_object* lean_array_get(lean_object*, lean_object*, lean_object*);
+uint8_t l_Lean_isPrivateName(lean_object*);
+lean_object* l_Lean_MessageData_ofName(lean_object*);
+extern lean_object* l_Lean_unknownIdentifierMessageTag;
+lean_object* l_Lean_replaceRef(lean_object*, lean_object*);
+lean_object* l_Lean_Name_mkStr2(lean_object*, lean_object*);
+lean_object* lp_aesop_Aesop_PhaseSpec_toRule(lean_object*, lean_object*, uint8_t, uint8_t, lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_Environment_find_x3f(lean_object*, lean_object*, uint8_t);
+lean_object* l_Lean_ConstantInfo_type(lean_object*);
+lean_object* l_Lean_Name_mkStr1(lean_object*);
+lean_object* l_Lean_mkConst(lean_object*, lean_object*);
+lean_object* l_Lean_Name_mkStr4(lean_object*, lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_Expr_app___override(lean_object*, lean_object*);
+lean_object* l_Lean_Meta_isExprDefEq(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+lean_object* l_Lean_indentExpr(lean_object*);
+lean_object* lean_st_ref_take(lean_object*);
+lean_object* l_Lean_Name_num___override(lean_object*, lean_object*);
+lean_object* lean_nat_add(lean_object*, lean_object*);
+lean_object* lean_st_ref_set(lean_object*, lean_object*);
+uint8_t l_Lean_Syntax_isIdent(lean_object*);
+uint8_t l_Lean_Syntax_isOfKind(lean_object*, lean_object*);
+lean_object* l_Lean_Syntax_getArg(lean_object*, lean_object*);
+lean_object* l_Lean_MessageData_ofSyntax(lean_object*);
+lean_object* lp_aesop_Aesop_elabGlobalRuleIdent(uint8_t, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_aesop_Aesop_matchByTactic_x3f___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "Lean"};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__0 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__0_value;
+static const lean_string_object lp_aesop_Aesop_matchByTactic_x3f___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 7, .m_capacity = 7, .m_length = 6, .m_data = "Parser"};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__1 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__1_value;
+static const lean_string_object lp_aesop_Aesop_matchByTactic_x3f___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "Term"};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__2 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__2_value;
+static const lean_string_object lp_aesop_Aesop_matchByTactic_x3f___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 9, .m_capacity = 9, .m_length = 8, .m_data = "byTactic"};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__3 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__3_value;
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__4_value_aux_0 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__0_value),LEAN_SCALAR_PTR_LITERAL(70, 193, 83, 126, 233, 67, 208, 165)}};
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__4_value_aux_1 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__4_value_aux_0),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__1_value),LEAN_SCALAR_PTR_LITERAL(103, 136, 125, 166, 167, 98, 71, 111)}};
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__4_value_aux_2 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__4_value_aux_1),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__2_value),LEAN_SCALAR_PTR_LITERAL(75, 170, 162, 138, 136, 204, 251, 229)}};
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__4_value_aux_2),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__3_value),LEAN_SCALAR_PTR_LITERAL(187, 150, 238, 148, 228, 221, 116, 224)}};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__4 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__4_value;
+static const lean_string_object lp_aesop_Aesop_matchByTactic_x3f___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 7, .m_capacity = 7, .m_length = 6, .m_data = "Tactic"};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__5 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__5_value;
+static const lean_string_object lp_aesop_Aesop_matchByTactic_x3f___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 10, .m_capacity = 10, .m_length = 9, .m_data = "tacticSeq"};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__6 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__6_value;
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__7_value_aux_0 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__0_value),LEAN_SCALAR_PTR_LITERAL(70, 193, 83, 126, 233, 67, 208, 165)}};
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__7_value_aux_1 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__7_value_aux_0),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__1_value),LEAN_SCALAR_PTR_LITERAL(103, 136, 125, 166, 167, 98, 71, 111)}};
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__7_value_aux_2 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__7_value_aux_1),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__5_value),LEAN_SCALAR_PTR_LITERAL(166, 58, 35, 182, 187, 130, 147, 254)}};
+static const lean_ctor_object lp_aesop_Aesop_matchByTactic_x3f___closed__7_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__7_value_aux_2),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__6_value),LEAN_SCALAR_PTR_LITERAL(212, 140, 85, 215, 241, 69, 7, 118)}};
+static const lean_object* lp_aesop_Aesop_matchByTactic_x3f___closed__7 = (const lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__7_value;
+LEAN_EXPORT lean_object* lp_aesop_Aesop_matchByTactic_x3f(lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticIMode(lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticIMode___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg(lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__0;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__2;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__3;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__4;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__5_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__5;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__6_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 24, .m_capacity = 24, .m_length = 23, .m_data = "A private declaration `"};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__6 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__6_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 79, .m_capacity = 79, .m_length = 78, .m_data = "` (from the current module) exists but would need to be public to access here."};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__8 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__8_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__9_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__9;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 23, .m_capacity = 23, .m_length = 22, .m_data = "A public declaration `"};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__10 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__10_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__11_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__11;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__12_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 68, .m_capacity = 68, .m_length = 67, .m_data = "` exists but is imported privately; consider adding `public import "};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__12 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__12_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__13_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__13;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__14_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 3, .m_capacity = 3, .m_length = 2, .m_data = "`."};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__14 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__14_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__15_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__15;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__16_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 10, .m_capacity = 10, .m_length = 9, .m_data = "` (from `"};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__16 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__16_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__17_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__17;
+static const lean_string_object lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__18_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 54, .m_capacity = 54, .m_length = 53, .m_data = "`) exists but would need to be public to access here."};
+static const lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__18 = (const lean_object*)&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__18_value;
+static lean_once_cell_t lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__19_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__19;
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 19, .m_capacity = 19, .m_length = 18, .m_data = "Unknown constant `"};
+static const lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__0 = (const lean_object*)&lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__0_value;
+static lean_once_cell_t lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__1;
+static const lean_string_object lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = "`"};
+static const lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__2 = (const lean_object*)&lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__2_value;
+static lean_once_cell_t lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__3;
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "Elab"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__0 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__0_value;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = "TacticM"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__1 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__1_value;
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value_aux_0 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__0_value),LEAN_SCALAR_PTR_LITERAL(70, 193, 83, 126, 233, 67, 208, 165)}};
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value_aux_1 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value_aux_0),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__0_value),LEAN_SCALAR_PTR_LITERAL(52, 247, 248, 201, 92, 23, 188, 159)}};
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value_aux_2 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value_aux_1),((lean_object*)&lp_aesop_Aesop_matchByTactic_x3f___closed__5_value),LEAN_SCALAR_PTR_LITERAL(161, 230, 229, 85, 182, 144, 182, 176)}};
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value_aux_2),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__1_value),LEAN_SCALAR_PTR_LITERAL(143, 63, 151, 54, 27, 84, 190, 214)}};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__3;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__4_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 5, .m_capacity = 5, .m_length = 4, .m_data = "Unit"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__4 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__4_value;
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__5_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__4_value),LEAN_SCALAR_PTR_LITERAL(230, 84, 106, 234, 91, 210, 120, 136)}};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__5 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__5_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__6;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__7;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__8_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 6, .m_capacity = 6, .m_length = 5, .m_data = "Aesop"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__8 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__8_value;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__9_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 14, .m_capacity = 14, .m_length = 13, .m_data = "SingleRuleTac"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__9 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__9_value;
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__10_value_aux_0 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__8_value),LEAN_SCALAR_PTR_LITERAL(97, 226, 101, 135, 78, 117, 164, 248)}};
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__10_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__10_value_aux_0),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__9_value),LEAN_SCALAR_PTR_LITERAL(193, 81, 211, 55, 11, 85, 158, 236)}};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__10 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__10_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__11_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__11;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__12_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = "RuleTac"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__12 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__12_value;
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__13_value_aux_0 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__8_value),LEAN_SCALAR_PTR_LITERAL(97, 226, 101, 135, 78, 117, 164, 248)}};
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__13_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__13_value_aux_0),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__12_value),LEAN_SCALAR_PTR_LITERAL(188, 243, 29, 60, 199, 195, 40, 107)}};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__13 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__13_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__14_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__14;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__15_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 7, .m_capacity = 7, .m_length = 6, .m_data = "TacGen"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__15 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__15_value;
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__16_value_aux_0 = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)(((size_t)(0) << 1) | 1)),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__8_value),LEAN_SCALAR_PTR_LITERAL(97, 226, 101, 135, 78, 117, 164, 248)}};
+static const lean_ctor_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__16_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 8, .m_other = 2, .m_tag = 1}, .m_objs = {((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__16_value_aux_0),((lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__15_value),LEAN_SCALAR_PTR_LITERAL(92, 99, 41, 134, 223, 151, 24, 64)}};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__16 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__16_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__17_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__17;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__18_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 33, .m_capacity = 33, .m_length = 32, .m_data = "aesop: tactic builder: expected "};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__18 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__18_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__19_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__19;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tacticCore___closed__20_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 121, .m_capacity = 121, .m_length = 120, .m_data = " to be a tactic, i.e. to have one of these types:\n  TacticM Unit\n  SimpleRuleTac\n  RuleTac\n  TacGen\nHowever, it has type"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__20 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__20_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tacticCore___closed__21_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___closed__21;
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tactic___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 34, .m_capacity = 34, .m_length = 33, .m_data = "aesop: tactic builder: expected '"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tactic___closed__0 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tactic___closed__0_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tactic___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tactic___closed__1;
+static const lean_string_object lp_aesop_Aesop_RuleBuilder_tactic___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 17, .m_capacity = 17, .m_length = 16, .m_data = "' to be a tactic"};
+static const lean_object* lp_aesop_Aesop_RuleBuilder_tactic___closed__2 = (const lean_object*)&lp_aesop_Aesop_RuleBuilder_tactic___closed__2_value;
+static lean_once_cell_t lp_aesop_Aesop_RuleBuilder_tactic___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_aesop_Aesop_RuleBuilder_tactic___closed__3;
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tactic(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tactic___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_aesop_Aesop_matchByTactic_x3f(lean_object* v_x_17_){
+_start:
+{
+lean_object* v___x_18_; uint8_t v___x_19_; 
+v___x_18_ = ((lean_object*)(lp_aesop_Aesop_matchByTactic_x3f___closed__4));
+lean_inc(v_x_17_);
+v___x_19_ = l_Lean_Syntax_isOfKind(v_x_17_, v___x_18_);
+if (v___x_19_ == 0)
+{
+lean_object* v___x_20_; 
+lean_dec(v_x_17_);
+v___x_20_ = lean_box(0);
+return v___x_20_;
+}
+else
+{
+lean_object* v___x_21_; lean_object* v_ts_22_; lean_object* v___x_23_; uint8_t v___x_24_; 
+v___x_21_ = lean_unsigned_to_nat(1u);
+v_ts_22_ = l_Lean_Syntax_getArg(v_x_17_, v___x_21_);
+lean_dec(v_x_17_);
+v___x_23_ = ((lean_object*)(lp_aesop_Aesop_matchByTactic_x3f___closed__7));
+lean_inc(v_ts_22_);
+v___x_24_ = l_Lean_Syntax_isOfKind(v_ts_22_, v___x_23_);
+if (v___x_24_ == 0)
+{
+lean_object* v___x_25_; 
+lean_dec(v_ts_22_);
+v___x_25_ = lean_box(0);
+return v___x_25_;
+}
+else
+{
+lean_object* v___x_26_; 
+v___x_26_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v___x_26_, 0, v_ts_22_);
+return v___x_26_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticIMode(lean_object* v_imode_x3f_27_){
+_start:
+{
+if (lean_obj_tag(v_imode_x3f_27_) == 0)
+{
+lean_object* v___x_28_; 
+v___x_28_ = lean_box(0);
+return v___x_28_;
+}
+else
+{
+lean_object* v_val_29_; 
+v_val_29_ = lean_ctor_get(v_imode_x3f_27_, 0);
+lean_inc(v_val_29_);
+return v_val_29_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticIMode___boxed(lean_object* v_imode_x3f_30_){
+_start:
+{
+lean_object* v_res_31_; 
+v_res_31_ = lp_aesop_Aesop_RuleBuilder_tacticIMode(v_imode_x3f_30_);
+lean_dec(v_imode_x3f_30_);
+return v_res_31_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg(lean_object* v___y_32_){
+_start:
+{
+lean_object* v___x_34_; lean_object* v_ngen_35_; lean_object* v_namePrefix_36_; lean_object* v_idx_37_; lean_object* v___x_39_; uint8_t v_isShared_40_; uint8_t v_isSharedCheck_66_; 
+v___x_34_ = lean_st_ref_get(v___y_32_);
+v_ngen_35_ = lean_ctor_get(v___x_34_, 2);
+lean_inc_ref(v_ngen_35_);
+lean_dec(v___x_34_);
+v_namePrefix_36_ = lean_ctor_get(v_ngen_35_, 0);
+v_idx_37_ = lean_ctor_get(v_ngen_35_, 1);
+v_isSharedCheck_66_ = !lean_is_exclusive(v_ngen_35_);
+if (v_isSharedCheck_66_ == 0)
+{
+v___x_39_ = v_ngen_35_;
+v_isShared_40_ = v_isSharedCheck_66_;
+goto v_resetjp_38_;
+}
+else
+{
+lean_inc(v_idx_37_);
+lean_inc(v_namePrefix_36_);
+lean_dec(v_ngen_35_);
+v___x_39_ = lean_box(0);
+v_isShared_40_ = v_isSharedCheck_66_;
+goto v_resetjp_38_;
+}
+v_resetjp_38_:
+{
+lean_object* v___x_41_; lean_object* v_env_42_; lean_object* v_nextMacroScope_43_; lean_object* v_auxDeclNGen_44_; lean_object* v_traceState_45_; lean_object* v_cache_46_; lean_object* v_messages_47_; lean_object* v_infoState_48_; lean_object* v_snapshotTasks_49_; lean_object* v___x_51_; uint8_t v_isShared_52_; uint8_t v_isSharedCheck_64_; 
+v___x_41_ = lean_st_ref_take(v___y_32_);
+v_env_42_ = lean_ctor_get(v___x_41_, 0);
+v_nextMacroScope_43_ = lean_ctor_get(v___x_41_, 1);
+v_auxDeclNGen_44_ = lean_ctor_get(v___x_41_, 3);
+v_traceState_45_ = lean_ctor_get(v___x_41_, 4);
+v_cache_46_ = lean_ctor_get(v___x_41_, 5);
+v_messages_47_ = lean_ctor_get(v___x_41_, 6);
+v_infoState_48_ = lean_ctor_get(v___x_41_, 7);
+v_snapshotTasks_49_ = lean_ctor_get(v___x_41_, 8);
+v_isSharedCheck_64_ = !lean_is_exclusive(v___x_41_);
+if (v_isSharedCheck_64_ == 0)
+{
+lean_object* v_unused_65_; 
+v_unused_65_ = lean_ctor_get(v___x_41_, 2);
+lean_dec(v_unused_65_);
+v___x_51_ = v___x_41_;
+v_isShared_52_ = v_isSharedCheck_64_;
+goto v_resetjp_50_;
+}
+else
+{
+lean_inc(v_snapshotTasks_49_);
+lean_inc(v_infoState_48_);
+lean_inc(v_messages_47_);
+lean_inc(v_cache_46_);
+lean_inc(v_traceState_45_);
+lean_inc(v_auxDeclNGen_44_);
+lean_inc(v_nextMacroScope_43_);
+lean_inc(v_env_42_);
+lean_dec(v___x_41_);
+v___x_51_ = lean_box(0);
+v_isShared_52_ = v_isSharedCheck_64_;
+goto v_resetjp_50_;
+}
+v_resetjp_50_:
+{
+lean_object* v_r_53_; lean_object* v___x_54_; lean_object* v___x_55_; lean_object* v___x_57_; 
+lean_inc(v_idx_37_);
+lean_inc(v_namePrefix_36_);
+v_r_53_ = l_Lean_Name_num___override(v_namePrefix_36_, v_idx_37_);
+v___x_54_ = lean_unsigned_to_nat(1u);
+v___x_55_ = lean_nat_add(v_idx_37_, v___x_54_);
+lean_dec(v_idx_37_);
+if (v_isShared_40_ == 0)
+{
+lean_ctor_set(v___x_39_, 1, v___x_55_);
+v___x_57_ = v___x_39_;
+goto v_reusejp_56_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_63_; 
+v_reuseFailAlloc_63_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v_reuseFailAlloc_63_, 0, v_namePrefix_36_);
+lean_ctor_set(v_reuseFailAlloc_63_, 1, v___x_55_);
+v___x_57_ = v_reuseFailAlloc_63_;
+goto v_reusejp_56_;
+}
+v_reusejp_56_:
+{
+lean_object* v___x_59_; 
+if (v_isShared_52_ == 0)
+{
+lean_ctor_set(v___x_51_, 2, v___x_57_);
+v___x_59_ = v___x_51_;
+goto v_reusejp_58_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_62_; 
+v_reuseFailAlloc_62_ = lean_alloc_ctor(0, 9, 0);
+lean_ctor_set(v_reuseFailAlloc_62_, 0, v_env_42_);
+lean_ctor_set(v_reuseFailAlloc_62_, 1, v_nextMacroScope_43_);
+lean_ctor_set(v_reuseFailAlloc_62_, 2, v___x_57_);
+lean_ctor_set(v_reuseFailAlloc_62_, 3, v_auxDeclNGen_44_);
+lean_ctor_set(v_reuseFailAlloc_62_, 4, v_traceState_45_);
+lean_ctor_set(v_reuseFailAlloc_62_, 5, v_cache_46_);
+lean_ctor_set(v_reuseFailAlloc_62_, 6, v_messages_47_);
+lean_ctor_set(v_reuseFailAlloc_62_, 7, v_infoState_48_);
+lean_ctor_set(v_reuseFailAlloc_62_, 8, v_snapshotTasks_49_);
+v___x_59_ = v_reuseFailAlloc_62_;
+goto v_reusejp_58_;
+}
+v_reusejp_58_:
+{
+lean_object* v___x_60_; lean_object* v___x_61_; 
+v___x_60_ = lean_st_ref_set(v___y_32_, v___x_59_);
+v___x_61_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_61_, 0, v_r_53_);
+return v___x_61_;
+}
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg___boxed(lean_object* v___y_67_, lean_object* v___y_68_){
+_start:
+{
+lean_object* v_res_69_; 
+v_res_69_ = lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg(v___y_67_);
+lean_dec(v___y_67_);
+return v_res_69_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2(lean_object* v___y_70_, lean_object* v___y_71_, lean_object* v___y_72_, lean_object* v___y_73_){
+_start:
+{
+lean_object* v___x_75_; 
+v___x_75_ = lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg(v___y_73_);
+return v___x_75_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___boxed(lean_object* v___y_76_, lean_object* v___y_77_, lean_object* v___y_78_, lean_object* v___y_79_, lean_object* v___y_80_){
+_start:
+{
+lean_object* v_res_81_; 
+v_res_81_ = lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2(v___y_76_, v___y_77_, v___y_78_, v___y_79_);
+lean_dec(v___y_79_);
+lean_dec_ref(v___y_78_);
+lean_dec(v___y_77_);
+lean_dec_ref(v___y_76_);
+return v_res_81_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2(lean_object* v_msgData_82_, lean_object* v___y_83_, lean_object* v___y_84_, lean_object* v___y_85_, lean_object* v___y_86_){
+_start:
+{
+lean_object* v___x_88_; lean_object* v_env_89_; lean_object* v___x_90_; lean_object* v_mctx_91_; lean_object* v_lctx_92_; lean_object* v_options_93_; lean_object* v___x_94_; lean_object* v___x_95_; lean_object* v___x_96_; 
+v___x_88_ = lean_st_ref_get(v___y_86_);
+v_env_89_ = lean_ctor_get(v___x_88_, 0);
+lean_inc_ref(v_env_89_);
+lean_dec(v___x_88_);
+v___x_90_ = lean_st_ref_get(v___y_84_);
+v_mctx_91_ = lean_ctor_get(v___x_90_, 0);
+lean_inc_ref(v_mctx_91_);
+lean_dec(v___x_90_);
+v_lctx_92_ = lean_ctor_get(v___y_83_, 2);
+v_options_93_ = lean_ctor_get(v___y_85_, 2);
+lean_inc_ref(v_options_93_);
+lean_inc_ref(v_lctx_92_);
+v___x_94_ = lean_alloc_ctor(0, 4, 0);
+lean_ctor_set(v___x_94_, 0, v_env_89_);
+lean_ctor_set(v___x_94_, 1, v_mctx_91_);
+lean_ctor_set(v___x_94_, 2, v_lctx_92_);
+lean_ctor_set(v___x_94_, 3, v_options_93_);
+v___x_95_ = lean_alloc_ctor(3, 2, 0);
+lean_ctor_set(v___x_95_, 0, v___x_94_);
+lean_ctor_set(v___x_95_, 1, v_msgData_82_);
+v___x_96_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_96_, 0, v___x_95_);
+return v___x_96_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2___boxed(lean_object* v_msgData_97_, lean_object* v___y_98_, lean_object* v___y_99_, lean_object* v___y_100_, lean_object* v___y_101_, lean_object* v___y_102_){
+_start:
+{
+lean_object* v_res_103_; 
+v_res_103_ = lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2(v_msgData_97_, v___y_98_, v___y_99_, v___y_100_, v___y_101_);
+lean_dec(v___y_101_);
+lean_dec_ref(v___y_100_);
+lean_dec(v___y_99_);
+lean_dec_ref(v___y_98_);
+return v_res_103_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg(lean_object* v_msg_104_, lean_object* v___y_105_, lean_object* v___y_106_, lean_object* v___y_107_, lean_object* v___y_108_){
+_start:
+{
+lean_object* v_ref_110_; lean_object* v___x_111_; lean_object* v_a_112_; lean_object* v___x_114_; uint8_t v_isShared_115_; uint8_t v_isSharedCheck_120_; 
+v_ref_110_ = lean_ctor_get(v___y_107_, 5);
+v___x_111_ = lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2(v_msg_104_, v___y_105_, v___y_106_, v___y_107_, v___y_108_);
+v_a_112_ = lean_ctor_get(v___x_111_, 0);
+v_isSharedCheck_120_ = !lean_is_exclusive(v___x_111_);
+if (v_isSharedCheck_120_ == 0)
+{
+v___x_114_ = v___x_111_;
+v_isShared_115_ = v_isSharedCheck_120_;
+goto v_resetjp_113_;
+}
+else
+{
+lean_inc(v_a_112_);
+lean_dec(v___x_111_);
+v___x_114_ = lean_box(0);
+v_isShared_115_ = v_isSharedCheck_120_;
+goto v_resetjp_113_;
+}
+v_resetjp_113_:
+{
+lean_object* v___x_116_; lean_object* v___x_118_; 
+lean_inc(v_ref_110_);
+v___x_116_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_116_, 0, v_ref_110_);
+lean_ctor_set(v___x_116_, 1, v_a_112_);
+if (v_isShared_115_ == 0)
+{
+lean_ctor_set_tag(v___x_114_, 1);
+lean_ctor_set(v___x_114_, 0, v___x_116_);
+v___x_118_ = v___x_114_;
+goto v_reusejp_117_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_119_; 
+v_reuseFailAlloc_119_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_119_, 0, v___x_116_);
+v___x_118_ = v_reuseFailAlloc_119_;
+goto v_reusejp_117_;
+}
+v_reusejp_117_:
+{
+return v___x_118_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg___boxed(lean_object* v_msg_121_, lean_object* v___y_122_, lean_object* v___y_123_, lean_object* v___y_124_, lean_object* v___y_125_, lean_object* v___y_126_){
+_start:
+{
+lean_object* v_res_127_; 
+v_res_127_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg(v_msg_121_, v___y_122_, v___y_123_, v___y_124_, v___y_125_);
+lean_dec(v___y_125_);
+lean_dec_ref(v___y_124_);
+lean_dec(v___y_123_);
+lean_dec_ref(v___y_122_);
+return v_res_127_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg(lean_object* v_ref_128_, lean_object* v_msg_129_, lean_object* v___y_130_, lean_object* v___y_131_, lean_object* v___y_132_, lean_object* v___y_133_){
+_start:
+{
+lean_object* v_fileName_135_; lean_object* v_fileMap_136_; lean_object* v_options_137_; lean_object* v_currRecDepth_138_; lean_object* v_maxRecDepth_139_; lean_object* v_ref_140_; lean_object* v_currNamespace_141_; lean_object* v_openDecls_142_; lean_object* v_initHeartbeats_143_; lean_object* v_maxHeartbeats_144_; lean_object* v_quotContext_145_; lean_object* v_currMacroScope_146_; uint8_t v_diag_147_; lean_object* v_cancelTk_x3f_148_; uint8_t v_suppressElabErrors_149_; lean_object* v_inheritedTraceOptions_150_; lean_object* v_ref_151_; lean_object* v___x_152_; lean_object* v___x_153_; 
+v_fileName_135_ = lean_ctor_get(v___y_132_, 0);
+v_fileMap_136_ = lean_ctor_get(v___y_132_, 1);
+v_options_137_ = lean_ctor_get(v___y_132_, 2);
+v_currRecDepth_138_ = lean_ctor_get(v___y_132_, 3);
+v_maxRecDepth_139_ = lean_ctor_get(v___y_132_, 4);
+v_ref_140_ = lean_ctor_get(v___y_132_, 5);
+v_currNamespace_141_ = lean_ctor_get(v___y_132_, 6);
+v_openDecls_142_ = lean_ctor_get(v___y_132_, 7);
+v_initHeartbeats_143_ = lean_ctor_get(v___y_132_, 8);
+v_maxHeartbeats_144_ = lean_ctor_get(v___y_132_, 9);
+v_quotContext_145_ = lean_ctor_get(v___y_132_, 10);
+v_currMacroScope_146_ = lean_ctor_get(v___y_132_, 11);
+v_diag_147_ = lean_ctor_get_uint8(v___y_132_, sizeof(void*)*14);
+v_cancelTk_x3f_148_ = lean_ctor_get(v___y_132_, 12);
+v_suppressElabErrors_149_ = lean_ctor_get_uint8(v___y_132_, sizeof(void*)*14 + 1);
+v_inheritedTraceOptions_150_ = lean_ctor_get(v___y_132_, 13);
+v_ref_151_ = l_Lean_replaceRef(v_ref_128_, v_ref_140_);
+lean_inc_ref(v_inheritedTraceOptions_150_);
+lean_inc(v_cancelTk_x3f_148_);
+lean_inc(v_currMacroScope_146_);
+lean_inc(v_quotContext_145_);
+lean_inc(v_maxHeartbeats_144_);
+lean_inc(v_initHeartbeats_143_);
+lean_inc(v_openDecls_142_);
+lean_inc(v_currNamespace_141_);
+lean_inc(v_maxRecDepth_139_);
+lean_inc(v_currRecDepth_138_);
+lean_inc_ref(v_options_137_);
+lean_inc_ref(v_fileMap_136_);
+lean_inc_ref(v_fileName_135_);
+v___x_152_ = lean_alloc_ctor(0, 14, 2);
+lean_ctor_set(v___x_152_, 0, v_fileName_135_);
+lean_ctor_set(v___x_152_, 1, v_fileMap_136_);
+lean_ctor_set(v___x_152_, 2, v_options_137_);
+lean_ctor_set(v___x_152_, 3, v_currRecDepth_138_);
+lean_ctor_set(v___x_152_, 4, v_maxRecDepth_139_);
+lean_ctor_set(v___x_152_, 5, v_ref_151_);
+lean_ctor_set(v___x_152_, 6, v_currNamespace_141_);
+lean_ctor_set(v___x_152_, 7, v_openDecls_142_);
+lean_ctor_set(v___x_152_, 8, v_initHeartbeats_143_);
+lean_ctor_set(v___x_152_, 9, v_maxHeartbeats_144_);
+lean_ctor_set(v___x_152_, 10, v_quotContext_145_);
+lean_ctor_set(v___x_152_, 11, v_currMacroScope_146_);
+lean_ctor_set(v___x_152_, 12, v_cancelTk_x3f_148_);
+lean_ctor_set(v___x_152_, 13, v_inheritedTraceOptions_150_);
+lean_ctor_set_uint8(v___x_152_, sizeof(void*)*14, v_diag_147_);
+lean_ctor_set_uint8(v___x_152_, sizeof(void*)*14 + 1, v_suppressElabErrors_149_);
+v___x_153_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg(v_msg_129_, v___y_130_, v___y_131_, v___x_152_, v___y_133_);
+lean_dec_ref_known(v___x_152_, 14);
+return v___x_153_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg___boxed(lean_object* v_ref_154_, lean_object* v_msg_155_, lean_object* v___y_156_, lean_object* v___y_157_, lean_object* v___y_158_, lean_object* v___y_159_, lean_object* v___y_160_){
+_start:
+{
+lean_object* v_res_161_; 
+v_res_161_ = lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg(v_ref_154_, v_msg_155_, v___y_156_, v___y_157_, v___y_158_, v___y_159_);
+lean_dec(v___y_159_);
+lean_dec_ref(v___y_158_);
+lean_dec(v___y_157_);
+lean_dec_ref(v___y_156_);
+lean_dec(v_ref_154_);
+return v_res_161_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__0(void){
+_start:
+{
+lean_object* v___x_162_; 
+v___x_162_ = l_Lean_PersistentHashMap_mkEmptyEntriesArray(lean_box(0), lean_box(0));
+return v___x_162_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1(void){
+_start:
+{
+lean_object* v___x_163_; lean_object* v___x_164_; 
+v___x_163_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__0, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__0_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__0);
+v___x_164_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_164_, 0, v___x_163_);
+return v___x_164_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__2(void){
+_start:
+{
+lean_object* v___x_165_; lean_object* v___x_166_; lean_object* v___x_167_; 
+v___x_165_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1);
+v___x_166_ = lean_unsigned_to_nat(0u);
+v___x_167_ = lean_alloc_ctor(0, 10, 0);
+lean_ctor_set(v___x_167_, 0, v___x_166_);
+lean_ctor_set(v___x_167_, 1, v___x_166_);
+lean_ctor_set(v___x_167_, 2, v___x_166_);
+lean_ctor_set(v___x_167_, 3, v___x_166_);
+lean_ctor_set(v___x_167_, 4, v___x_165_);
+lean_ctor_set(v___x_167_, 5, v___x_165_);
+lean_ctor_set(v___x_167_, 6, v___x_165_);
+lean_ctor_set(v___x_167_, 7, v___x_165_);
+lean_ctor_set(v___x_167_, 8, v___x_165_);
+lean_ctor_set(v___x_167_, 9, v___x_165_);
+return v___x_167_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__3(void){
+_start:
+{
+lean_object* v___x_168_; lean_object* v___x_169_; lean_object* v___x_170_; 
+v___x_168_ = lean_unsigned_to_nat(32u);
+v___x_169_ = lean_mk_empty_array_with_capacity(v___x_168_);
+v___x_170_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_170_, 0, v___x_169_);
+return v___x_170_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__4(void){
+_start:
+{
+size_t v___x_171_; lean_object* v___x_172_; lean_object* v___x_173_; lean_object* v___x_174_; lean_object* v___x_175_; lean_object* v___x_176_; 
+v___x_171_ = ((size_t)5ULL);
+v___x_172_ = lean_unsigned_to_nat(0u);
+v___x_173_ = lean_unsigned_to_nat(32u);
+v___x_174_ = lean_mk_empty_array_with_capacity(v___x_173_);
+v___x_175_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__3, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__3_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__3);
+v___x_176_ = lean_alloc_ctor(0, 4, sizeof(size_t)*1);
+lean_ctor_set(v___x_176_, 0, v___x_175_);
+lean_ctor_set(v___x_176_, 1, v___x_174_);
+lean_ctor_set(v___x_176_, 2, v___x_172_);
+lean_ctor_set(v___x_176_, 3, v___x_172_);
+lean_ctor_set_usize(v___x_176_, 4, v___x_171_);
+return v___x_176_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__5(void){
+_start:
+{
+lean_object* v___x_177_; lean_object* v___x_178_; lean_object* v___x_179_; lean_object* v___x_180_; 
+v___x_177_ = lean_box(1);
+v___x_178_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__4, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__4_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__4);
+v___x_179_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__1);
+v___x_180_ = lean_alloc_ctor(0, 3, 0);
+lean_ctor_set(v___x_180_, 0, v___x_179_);
+lean_ctor_set(v___x_180_, 1, v___x_178_);
+lean_ctor_set(v___x_180_, 2, v___x_177_);
+return v___x_180_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7(void){
+_start:
+{
+lean_object* v___x_182_; lean_object* v___x_183_; 
+v___x_182_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__6));
+v___x_183_ = l_Lean_stringToMessageData(v___x_182_);
+return v___x_183_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__9(void){
+_start:
+{
+lean_object* v___x_185_; lean_object* v___x_186_; 
+v___x_185_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__8));
+v___x_186_ = l_Lean_stringToMessageData(v___x_185_);
+return v___x_186_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__11(void){
+_start:
+{
+lean_object* v___x_188_; lean_object* v___x_189_; 
+v___x_188_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__10));
+v___x_189_ = l_Lean_stringToMessageData(v___x_188_);
+return v___x_189_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__13(void){
+_start:
+{
+lean_object* v___x_191_; lean_object* v___x_192_; 
+v___x_191_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__12));
+v___x_192_ = l_Lean_stringToMessageData(v___x_191_);
+return v___x_192_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__15(void){
+_start:
+{
+lean_object* v___x_194_; lean_object* v___x_195_; 
+v___x_194_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__14));
+v___x_195_ = l_Lean_stringToMessageData(v___x_194_);
+return v___x_195_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__17(void){
+_start:
+{
+lean_object* v___x_197_; lean_object* v___x_198_; 
+v___x_197_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__16));
+v___x_198_ = l_Lean_stringToMessageData(v___x_197_);
+return v___x_198_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__19(void){
+_start:
+{
+lean_object* v___x_200_; lean_object* v___x_201_; 
+v___x_200_ = ((lean_object*)(lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__18));
+v___x_201_ = l_Lean_stringToMessageData(v___x_200_);
+return v___x_201_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg(lean_object* v_msg_202_, lean_object* v_declHint_203_, lean_object* v___y_204_){
+_start:
+{
+lean_object* v___x_206_; lean_object* v_env_207_; uint8_t v___x_208_; 
+v___x_206_ = lean_st_ref_get(v___y_204_);
+v_env_207_ = lean_ctor_get(v___x_206_, 0);
+lean_inc_ref(v_env_207_);
+lean_dec(v___x_206_);
+v___x_208_ = l_Lean_Name_isAnonymous(v_declHint_203_);
+if (v___x_208_ == 0)
+{
+uint8_t v_isExporting_209_; 
+v_isExporting_209_ = lean_ctor_get_uint8(v_env_207_, sizeof(void*)*8);
+if (v_isExporting_209_ == 0)
+{
+lean_object* v___x_210_; 
+lean_dec_ref(v_env_207_);
+lean_dec(v_declHint_203_);
+v___x_210_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_210_, 0, v_msg_202_);
+return v___x_210_;
+}
+else
+{
+lean_object* v___x_211_; uint8_t v___x_212_; 
+lean_inc_ref(v_env_207_);
+v___x_211_ = l_Lean_Environment_setExporting(v_env_207_, v___x_208_);
+lean_inc(v_declHint_203_);
+lean_inc_ref(v___x_211_);
+v___x_212_ = l_Lean_Environment_contains(v___x_211_, v_declHint_203_, v_isExporting_209_);
+if (v___x_212_ == 0)
+{
+lean_object* v___x_213_; 
+lean_dec_ref(v___x_211_);
+lean_dec_ref(v_env_207_);
+lean_dec(v_declHint_203_);
+v___x_213_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_213_, 0, v_msg_202_);
+return v___x_213_;
+}
+else
+{
+lean_object* v___x_214_; lean_object* v___x_215_; lean_object* v___x_216_; lean_object* v___x_217_; lean_object* v___x_218_; lean_object* v_c_219_; lean_object* v___x_220_; 
+v___x_214_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__2, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__2_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__2);
+v___x_215_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__5, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__5_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__5);
+v___x_216_ = l_Lean_Options_empty;
+v___x_217_ = lean_alloc_ctor(0, 4, 0);
+lean_ctor_set(v___x_217_, 0, v___x_211_);
+lean_ctor_set(v___x_217_, 1, v___x_214_);
+lean_ctor_set(v___x_217_, 2, v___x_215_);
+lean_ctor_set(v___x_217_, 3, v___x_216_);
+lean_inc(v_declHint_203_);
+v___x_218_ = l_Lean_MessageData_ofConstName(v_declHint_203_, v___x_208_);
+v_c_219_ = lean_alloc_ctor(3, 2, 0);
+lean_ctor_set(v_c_219_, 0, v___x_217_);
+lean_ctor_set(v_c_219_, 1, v___x_218_);
+v___x_220_ = l_Lean_Environment_getModuleIdxFor_x3f(v_env_207_, v_declHint_203_);
+if (lean_obj_tag(v___x_220_) == 0)
+{
+lean_object* v___x_221_; lean_object* v___x_222_; lean_object* v___x_223_; lean_object* v___x_224_; lean_object* v___x_225_; lean_object* v___x_226_; lean_object* v___x_227_; 
+lean_dec_ref(v_env_207_);
+lean_dec(v_declHint_203_);
+v___x_221_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7);
+v___x_222_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_222_, 0, v___x_221_);
+lean_ctor_set(v___x_222_, 1, v_c_219_);
+v___x_223_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__9, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__9_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__9);
+v___x_224_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_224_, 0, v___x_222_);
+lean_ctor_set(v___x_224_, 1, v___x_223_);
+v___x_225_ = l_Lean_MessageData_note(v___x_224_);
+v___x_226_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_226_, 0, v_msg_202_);
+lean_ctor_set(v___x_226_, 1, v___x_225_);
+v___x_227_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_227_, 0, v___x_226_);
+return v___x_227_;
+}
+else
+{
+lean_object* v_val_228_; lean_object* v___x_230_; uint8_t v_isShared_231_; uint8_t v_isSharedCheck_263_; 
+v_val_228_ = lean_ctor_get(v___x_220_, 0);
+v_isSharedCheck_263_ = !lean_is_exclusive(v___x_220_);
+if (v_isSharedCheck_263_ == 0)
+{
+v___x_230_ = v___x_220_;
+v_isShared_231_ = v_isSharedCheck_263_;
+goto v_resetjp_229_;
+}
+else
+{
+lean_inc(v_val_228_);
+lean_dec(v___x_220_);
+v___x_230_ = lean_box(0);
+v_isShared_231_ = v_isSharedCheck_263_;
+goto v_resetjp_229_;
+}
+v_resetjp_229_:
+{
+lean_object* v___x_232_; lean_object* v___x_233_; lean_object* v___x_234_; lean_object* v_mod_235_; uint8_t v___x_236_; 
+v___x_232_ = lean_box(0);
+v___x_233_ = l_Lean_Environment_header(v_env_207_);
+lean_dec_ref(v_env_207_);
+v___x_234_ = l_Lean_EnvironmentHeader_moduleNames(v___x_233_);
+v_mod_235_ = lean_array_get(v___x_232_, v___x_234_, v_val_228_);
+lean_dec(v_val_228_);
+lean_dec_ref(v___x_234_);
+v___x_236_ = l_Lean_isPrivateName(v_declHint_203_);
+lean_dec(v_declHint_203_);
+if (v___x_236_ == 0)
+{
+lean_object* v___x_237_; lean_object* v___x_238_; lean_object* v___x_239_; lean_object* v___x_240_; lean_object* v___x_241_; lean_object* v___x_242_; lean_object* v___x_243_; lean_object* v___x_244_; lean_object* v___x_245_; lean_object* v___x_246_; lean_object* v___x_248_; 
+v___x_237_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__11, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__11_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__11);
+v___x_238_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_238_, 0, v___x_237_);
+lean_ctor_set(v___x_238_, 1, v_c_219_);
+v___x_239_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__13, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__13_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__13);
+v___x_240_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_240_, 0, v___x_238_);
+lean_ctor_set(v___x_240_, 1, v___x_239_);
+v___x_241_ = l_Lean_MessageData_ofName(v_mod_235_);
+v___x_242_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_242_, 0, v___x_240_);
+lean_ctor_set(v___x_242_, 1, v___x_241_);
+v___x_243_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__15, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__15_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__15);
+v___x_244_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_244_, 0, v___x_242_);
+lean_ctor_set(v___x_244_, 1, v___x_243_);
+v___x_245_ = l_Lean_MessageData_note(v___x_244_);
+v___x_246_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_246_, 0, v_msg_202_);
+lean_ctor_set(v___x_246_, 1, v___x_245_);
+if (v_isShared_231_ == 0)
+{
+lean_ctor_set_tag(v___x_230_, 0);
+lean_ctor_set(v___x_230_, 0, v___x_246_);
+v___x_248_ = v___x_230_;
+goto v_reusejp_247_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_249_; 
+v_reuseFailAlloc_249_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_249_, 0, v___x_246_);
+v___x_248_ = v_reuseFailAlloc_249_;
+goto v_reusejp_247_;
+}
+v_reusejp_247_:
+{
+return v___x_248_;
+}
+}
+else
+{
+lean_object* v___x_250_; lean_object* v___x_251_; lean_object* v___x_252_; lean_object* v___x_253_; lean_object* v___x_254_; lean_object* v___x_255_; lean_object* v___x_256_; lean_object* v___x_257_; lean_object* v___x_258_; lean_object* v___x_259_; lean_object* v___x_261_; 
+v___x_250_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__7);
+v___x_251_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_251_, 0, v___x_250_);
+lean_ctor_set(v___x_251_, 1, v_c_219_);
+v___x_252_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__17, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__17_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__17);
+v___x_253_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_253_, 0, v___x_251_);
+lean_ctor_set(v___x_253_, 1, v___x_252_);
+v___x_254_ = l_Lean_MessageData_ofName(v_mod_235_);
+v___x_255_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_255_, 0, v___x_253_);
+lean_ctor_set(v___x_255_, 1, v___x_254_);
+v___x_256_ = lean_obj_once(&lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__19, &lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__19_once, _init_lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___closed__19);
+v___x_257_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_257_, 0, v___x_255_);
+lean_ctor_set(v___x_257_, 1, v___x_256_);
+v___x_258_ = l_Lean_MessageData_note(v___x_257_);
+v___x_259_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_259_, 0, v_msg_202_);
+lean_ctor_set(v___x_259_, 1, v___x_258_);
+if (v_isShared_231_ == 0)
+{
+lean_ctor_set_tag(v___x_230_, 0);
+lean_ctor_set(v___x_230_, 0, v___x_259_);
+v___x_261_ = v___x_230_;
+goto v_reusejp_260_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_262_; 
+v_reuseFailAlloc_262_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_262_, 0, v___x_259_);
+v___x_261_ = v_reuseFailAlloc_262_;
+goto v_reusejp_260_;
+}
+v_reusejp_260_:
+{
+return v___x_261_;
+}
+}
+}
+}
+}
+}
+}
+else
+{
+lean_object* v___x_264_; 
+lean_dec_ref(v_env_207_);
+lean_dec(v_declHint_203_);
+v___x_264_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_264_, 0, v_msg_202_);
+return v___x_264_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg___boxed(lean_object* v_msg_265_, lean_object* v_declHint_266_, lean_object* v___y_267_, lean_object* v___y_268_){
+_start:
+{
+lean_object* v_res_269_; 
+v_res_269_ = lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg(v_msg_265_, v_declHint_266_, v___y_267_);
+lean_dec(v___y_267_);
+return v_res_269_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6(lean_object* v_msg_270_, lean_object* v_declHint_271_, lean_object* v___y_272_, lean_object* v___y_273_, lean_object* v___y_274_, lean_object* v___y_275_){
+_start:
+{
+lean_object* v___x_277_; lean_object* v_a_278_; lean_object* v___x_280_; uint8_t v_isShared_281_; uint8_t v_isSharedCheck_287_; 
+v___x_277_ = lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg(v_msg_270_, v_declHint_271_, v___y_275_);
+v_a_278_ = lean_ctor_get(v___x_277_, 0);
+v_isSharedCheck_287_ = !lean_is_exclusive(v___x_277_);
+if (v_isSharedCheck_287_ == 0)
+{
+v___x_280_ = v___x_277_;
+v_isShared_281_ = v_isSharedCheck_287_;
+goto v_resetjp_279_;
+}
+else
+{
+lean_inc(v_a_278_);
+lean_dec(v___x_277_);
+v___x_280_ = lean_box(0);
+v_isShared_281_ = v_isSharedCheck_287_;
+goto v_resetjp_279_;
+}
+v_resetjp_279_:
+{
+lean_object* v___x_282_; lean_object* v___x_283_; lean_object* v___x_285_; 
+v___x_282_ = l_Lean_unknownIdentifierMessageTag;
+v___x_283_ = lean_alloc_ctor(8, 2, 0);
+lean_ctor_set(v___x_283_, 0, v___x_282_);
+lean_ctor_set(v___x_283_, 1, v_a_278_);
+if (v_isShared_281_ == 0)
+{
+lean_ctor_set(v___x_280_, 0, v___x_283_);
+v___x_285_ = v___x_280_;
+goto v_reusejp_284_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_286_; 
+v_reuseFailAlloc_286_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_286_, 0, v___x_283_);
+v___x_285_ = v_reuseFailAlloc_286_;
+goto v_reusejp_284_;
+}
+v_reusejp_284_:
+{
+return v___x_285_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6___boxed(lean_object* v_msg_288_, lean_object* v_declHint_289_, lean_object* v___y_290_, lean_object* v___y_291_, lean_object* v___y_292_, lean_object* v___y_293_, lean_object* v___y_294_){
+_start:
+{
+lean_object* v_res_295_; 
+v_res_295_ = lp_aesop_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6(v_msg_288_, v_declHint_289_, v___y_290_, v___y_291_, v___y_292_, v___y_293_);
+lean_dec(v___y_293_);
+lean_dec_ref(v___y_292_);
+lean_dec(v___y_291_);
+lean_dec_ref(v___y_290_);
+return v_res_295_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg(lean_object* v_ref_296_, lean_object* v_msg_297_, lean_object* v_declHint_298_, lean_object* v___y_299_, lean_object* v___y_300_, lean_object* v___y_301_, lean_object* v___y_302_){
+_start:
+{
+lean_object* v___x_304_; lean_object* v_a_305_; lean_object* v___x_306_; 
+v___x_304_ = lp_aesop_Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6(v_msg_297_, v_declHint_298_, v___y_299_, v___y_300_, v___y_301_, v___y_302_);
+v_a_305_ = lean_ctor_get(v___x_304_, 0);
+lean_inc(v_a_305_);
+lean_dec_ref(v___x_304_);
+v___x_306_ = lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg(v_ref_296_, v_a_305_, v___y_299_, v___y_300_, v___y_301_, v___y_302_);
+return v___x_306_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg___boxed(lean_object* v_ref_307_, lean_object* v_msg_308_, lean_object* v_declHint_309_, lean_object* v___y_310_, lean_object* v___y_311_, lean_object* v___y_312_, lean_object* v___y_313_, lean_object* v___y_314_){
+_start:
+{
+lean_object* v_res_315_; 
+v_res_315_ = lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg(v_ref_307_, v_msg_308_, v_declHint_309_, v___y_310_, v___y_311_, v___y_312_, v___y_313_);
+lean_dec(v___y_313_);
+lean_dec_ref(v___y_312_);
+lean_dec(v___y_311_);
+lean_dec_ref(v___y_310_);
+lean_dec(v_ref_307_);
+return v_res_315_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__1(void){
+_start:
+{
+lean_object* v___x_317_; lean_object* v___x_318_; 
+v___x_317_ = ((lean_object*)(lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__0));
+v___x_318_ = l_Lean_stringToMessageData(v___x_317_);
+return v___x_318_;
+}
+}
+static lean_object* _init_lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__3(void){
+_start:
+{
+lean_object* v___x_320_; lean_object* v___x_321_; 
+v___x_320_ = ((lean_object*)(lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__2));
+v___x_321_ = l_Lean_stringToMessageData(v___x_320_);
+return v___x_321_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg(lean_object* v_ref_322_, lean_object* v_constName_323_, lean_object* v___y_324_, lean_object* v___y_325_, lean_object* v___y_326_, lean_object* v___y_327_){
+_start:
+{
+lean_object* v___x_329_; uint8_t v___x_330_; lean_object* v___x_331_; lean_object* v___x_332_; lean_object* v___x_333_; lean_object* v___x_334_; lean_object* v___x_335_; 
+v___x_329_ = lean_obj_once(&lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__1, &lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__1_once, _init_lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__1);
+v___x_330_ = 0;
+lean_inc(v_constName_323_);
+v___x_331_ = l_Lean_MessageData_ofConstName(v_constName_323_, v___x_330_);
+v___x_332_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_332_, 0, v___x_329_);
+lean_ctor_set(v___x_332_, 1, v___x_331_);
+v___x_333_ = lean_obj_once(&lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__3, &lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__3_once, _init_lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___closed__3);
+v___x_334_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_334_, 0, v___x_332_);
+lean_ctor_set(v___x_334_, 1, v___x_333_);
+v___x_335_ = lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg(v_ref_322_, v___x_334_, v_constName_323_, v___y_324_, v___y_325_, v___y_326_, v___y_327_);
+return v___x_335_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg___boxed(lean_object* v_ref_336_, lean_object* v_constName_337_, lean_object* v___y_338_, lean_object* v___y_339_, lean_object* v___y_340_, lean_object* v___y_341_, lean_object* v___y_342_){
+_start:
+{
+lean_object* v_res_343_; 
+v_res_343_ = lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg(v_ref_336_, v_constName_337_, v___y_338_, v___y_339_, v___y_340_, v___y_341_);
+lean_dec(v___y_341_);
+lean_dec_ref(v___y_340_);
+lean_dec(v___y_339_);
+lean_dec_ref(v___y_338_);
+lean_dec(v_ref_336_);
+return v_res_343_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg(lean_object* v_constName_344_, lean_object* v___y_345_, lean_object* v___y_346_, lean_object* v___y_347_, lean_object* v___y_348_){
+_start:
+{
+lean_object* v_ref_350_; lean_object* v___x_351_; 
+v_ref_350_ = lean_ctor_get(v___y_347_, 5);
+v___x_351_ = lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg(v_ref_350_, v_constName_344_, v___y_345_, v___y_346_, v___y_347_, v___y_348_);
+return v___x_351_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg___boxed(lean_object* v_constName_352_, lean_object* v___y_353_, lean_object* v___y_354_, lean_object* v___y_355_, lean_object* v___y_356_, lean_object* v___y_357_){
+_start:
+{
+lean_object* v_res_358_; 
+v_res_358_ = lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg(v_constName_352_, v___y_353_, v___y_354_, v___y_355_, v___y_356_);
+lean_dec(v___y_356_);
+lean_dec_ref(v___y_355_);
+lean_dec(v___y_354_);
+lean_dec_ref(v___y_353_);
+return v_res_358_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0(lean_object* v_constName_359_, lean_object* v___y_360_, lean_object* v___y_361_, lean_object* v___y_362_, lean_object* v___y_363_){
+_start:
+{
+lean_object* v___x_365_; lean_object* v_env_366_; uint8_t v___x_367_; lean_object* v___x_368_; 
+v___x_365_ = lean_st_ref_get(v___y_363_);
+v_env_366_ = lean_ctor_get(v___x_365_, 0);
+lean_inc_ref(v_env_366_);
+lean_dec(v___x_365_);
+v___x_367_ = 0;
+lean_inc(v_constName_359_);
+v___x_368_ = l_Lean_Environment_find_x3f(v_env_366_, v_constName_359_, v___x_367_);
+if (lean_obj_tag(v___x_368_) == 0)
+{
+lean_object* v___x_369_; 
+v___x_369_ = lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg(v_constName_359_, v___y_360_, v___y_361_, v___y_362_, v___y_363_);
+return v___x_369_;
+}
+else
+{
+lean_object* v_val_370_; lean_object* v___x_372_; uint8_t v_isShared_373_; uint8_t v_isSharedCheck_377_; 
+lean_dec(v_constName_359_);
+v_val_370_ = lean_ctor_get(v___x_368_, 0);
+v_isSharedCheck_377_ = !lean_is_exclusive(v___x_368_);
+if (v_isSharedCheck_377_ == 0)
+{
+v___x_372_ = v___x_368_;
+v_isShared_373_ = v_isSharedCheck_377_;
+goto v_resetjp_371_;
+}
+else
+{
+lean_inc(v_val_370_);
+lean_dec(v___x_368_);
+v___x_372_ = lean_box(0);
+v_isShared_373_ = v_isSharedCheck_377_;
+goto v_resetjp_371_;
+}
+v_resetjp_371_:
+{
+lean_object* v___x_375_; 
+if (v_isShared_373_ == 0)
+{
+lean_ctor_set_tag(v___x_372_, 0);
+v___x_375_ = v___x_372_;
+goto v_reusejp_374_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_376_; 
+v_reuseFailAlloc_376_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_376_, 0, v_val_370_);
+v___x_375_ = v_reuseFailAlloc_376_;
+goto v_reusejp_374_;
+}
+v_reusejp_374_:
+{
+return v___x_375_;
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0___boxed(lean_object* v_constName_378_, lean_object* v___y_379_, lean_object* v___y_380_, lean_object* v___y_381_, lean_object* v___y_382_, lean_object* v___y_383_){
+_start:
+{
+lean_object* v_res_384_; 
+v_res_384_ = lp_aesop_Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0(v_constName_378_, v___y_379_, v___y_380_, v___y_381_, v___y_382_);
+lean_dec(v___y_382_);
+lean_dec_ref(v___y_381_);
+lean_dec(v___y_380_);
+lean_dec_ref(v___y_379_);
+return v_res_384_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__3(void){
+_start:
+{
+lean_object* v___x_392_; lean_object* v___x_393_; lean_object* v___x_394_; 
+v___x_392_ = lean_box(0);
+v___x_393_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__2));
+v___x_394_ = l_Lean_mkConst(v___x_393_, v___x_392_);
+return v___x_394_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__6(void){
+_start:
+{
+lean_object* v___x_398_; lean_object* v___x_399_; lean_object* v___x_400_; 
+v___x_398_ = lean_box(0);
+v___x_399_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__5));
+v___x_400_ = l_Lean_mkConst(v___x_399_, v___x_398_);
+return v___x_400_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__7(void){
+_start:
+{
+lean_object* v___x_401_; lean_object* v___x_402_; lean_object* v___x_403_; 
+v___x_401_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__6, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__6_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__6);
+v___x_402_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__3, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__3_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__3);
+v___x_403_ = l_Lean_Expr_app___override(v___x_402_, v___x_401_);
+return v___x_403_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__11(void){
+_start:
+{
+lean_object* v___x_409_; lean_object* v___x_410_; lean_object* v___x_411_; 
+v___x_409_ = lean_box(0);
+v___x_410_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__10));
+v___x_411_ = l_Lean_mkConst(v___x_410_, v___x_409_);
+return v___x_411_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__14(void){
+_start:
+{
+lean_object* v___x_416_; lean_object* v___x_417_; lean_object* v___x_418_; 
+v___x_416_ = lean_box(0);
+v___x_417_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__13));
+v___x_418_ = l_Lean_mkConst(v___x_417_, v___x_416_);
+return v___x_418_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__17(void){
+_start:
+{
+lean_object* v___x_423_; lean_object* v___x_424_; lean_object* v___x_425_; 
+v___x_423_ = lean_box(0);
+v___x_424_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__16));
+v___x_425_ = l_Lean_mkConst(v___x_424_, v___x_423_);
+return v___x_425_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__19(void){
+_start:
+{
+lean_object* v___x_427_; lean_object* v___x_428_; 
+v___x_427_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__18));
+v___x_428_ = l_Lean_stringToMessageData(v___x_427_);
+return v___x_428_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__21(void){
+_start:
+{
+lean_object* v___x_430_; lean_object* v___x_431_; 
+v___x_430_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tacticCore___closed__20));
+v___x_431_ = l_Lean_stringToMessageData(v___x_430_);
+return v___x_431_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore(lean_object* v_t_432_, lean_object* v_imode_x3f_433_, lean_object* v_phase_434_, lean_object* v_a_435_, lean_object* v_a_436_, lean_object* v_a_437_, lean_object* v_a_438_){
+_start:
+{
+lean_object* v___y_441_; lean_object* v___y_442_; lean_object* v_tac_443_; lean_object* v___y_452_; 
+if (lean_obj_tag(v_imode_x3f_433_) == 0)
+{
+lean_object* v___x_568_; 
+v___x_568_ = lean_box(0);
+v___y_452_ = v___x_568_;
+goto v___jp_451_;
+}
+else
+{
+lean_object* v_val_569_; 
+v_val_569_ = lean_ctor_get(v_imode_x3f_433_, 0);
+lean_inc(v_val_569_);
+lean_dec_ref_known(v_imode_x3f_433_, 1);
+v___y_452_ = v_val_569_;
+goto v___jp_451_;
+}
+v___jp_440_:
+{
+uint8_t v___x_444_; uint8_t v___x_445_; lean_object* v___x_446_; lean_object* v___x_447_; lean_object* v___x_448_; lean_object* v___x_449_; lean_object* v___x_450_; 
+v___x_444_ = 6;
+v___x_445_ = 0;
+v___x_446_ = lean_box(0);
+v___x_447_ = lp_aesop_Aesop_PhaseSpec_toRule(v_phase_434_, v___y_441_, v___x_444_, v___x_445_, v_tac_443_, v___y_442_, v___x_446_);
+v___x_448_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_448_, 0, v___x_447_);
+v___x_449_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_449_, 0, v___x_448_);
+v___x_450_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_450_, 0, v___x_449_);
+return v___x_450_;
+}
+v___jp_451_:
+{
+if (lean_obj_tag(v_t_432_) == 0)
+{
+lean_object* v_val_453_; lean_object* v___x_455_; uint8_t v_isShared_456_; uint8_t v_isSharedCheck_544_; 
+v_val_453_ = lean_ctor_get(v_t_432_, 0);
+v_isSharedCheck_544_ = !lean_is_exclusive(v_t_432_);
+if (v_isSharedCheck_544_ == 0)
+{
+v___x_455_ = v_t_432_;
+v_isShared_456_ = v_isSharedCheck_544_;
+goto v_resetjp_454_;
+}
+else
+{
+lean_inc(v_val_453_);
+lean_dec(v_t_432_);
+v___x_455_ = lean_box(0);
+v_isShared_456_ = v_isSharedCheck_544_;
+goto v_resetjp_454_;
+}
+v_resetjp_454_:
+{
+lean_object* v___x_457_; 
+lean_inc(v_val_453_);
+v___x_457_ = lp_aesop_Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0(v_val_453_, v_a_435_, v_a_436_, v_a_437_, v_a_438_);
+if (lean_obj_tag(v___x_457_) == 0)
+{
+lean_object* v_a_458_; lean_object* v___x_459_; lean_object* v___x_460_; lean_object* v___x_461_; 
+v_a_458_ = lean_ctor_get(v___x_457_, 0);
+lean_inc(v_a_458_);
+lean_dec_ref_known(v___x_457_, 1);
+v___x_459_ = l_Lean_ConstantInfo_type(v_a_458_);
+lean_dec(v_a_458_);
+v___x_460_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__7, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__7_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__7);
+lean_inc_ref(v___x_459_);
+v___x_461_ = l_Lean_Meta_isExprDefEq(v___x_460_, v___x_459_, v_a_435_, v_a_436_, v_a_437_, v_a_438_);
+if (lean_obj_tag(v___x_461_) == 0)
+{
+lean_object* v_a_462_; lean_object* v___x_463_; lean_object* v___x_464_; 
+v_a_462_ = lean_ctor_get(v___x_461_, 0);
+lean_inc(v_a_462_);
+lean_dec_ref_known(v___x_461_, 1);
+v___x_463_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__11, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__11_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__11);
+lean_inc_ref(v___x_459_);
+v___x_464_ = l_Lean_Meta_isExprDefEq(v___x_463_, v___x_459_, v_a_435_, v_a_436_, v_a_437_, v_a_438_);
+if (lean_obj_tag(v___x_464_) == 0)
+{
+lean_object* v_a_465_; lean_object* v___x_466_; lean_object* v___x_467_; 
+v_a_465_ = lean_ctor_get(v___x_464_, 0);
+lean_inc(v_a_465_);
+lean_dec_ref_known(v___x_464_, 1);
+v___x_466_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__14, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__14_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__14);
+lean_inc_ref(v___x_459_);
+v___x_467_ = l_Lean_Meta_isExprDefEq(v___x_466_, v___x_459_, v_a_435_, v_a_436_, v_a_437_, v_a_438_);
+if (lean_obj_tag(v___x_467_) == 0)
+{
+lean_object* v_a_468_; lean_object* v___x_469_; lean_object* v___x_470_; 
+v_a_468_ = lean_ctor_get(v___x_467_, 0);
+lean_inc(v_a_468_);
+lean_dec_ref_known(v___x_467_, 1);
+v___x_469_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__17, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__17_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__17);
+lean_inc_ref(v___x_459_);
+v___x_470_ = l_Lean_Meta_isExprDefEq(v___x_469_, v___x_459_, v_a_435_, v_a_436_, v_a_437_, v_a_438_);
+if (lean_obj_tag(v___x_470_) == 0)
+{
+uint8_t v___x_471_; 
+v___x_471_ = lean_unbox(v_a_462_);
+lean_dec(v_a_462_);
+if (v___x_471_ == 0)
+{
+uint8_t v___x_472_; 
+v___x_472_ = lean_unbox(v_a_465_);
+lean_dec(v_a_465_);
+if (v___x_472_ == 0)
+{
+uint8_t v___x_473_; 
+v___x_473_ = lean_unbox(v_a_468_);
+lean_dec(v_a_468_);
+if (v___x_473_ == 0)
+{
+lean_object* v_a_474_; uint8_t v___x_475_; 
+v_a_474_ = lean_ctor_get(v___x_470_, 0);
+lean_inc(v_a_474_);
+lean_dec_ref_known(v___x_470_, 1);
+v___x_475_ = lean_unbox(v_a_474_);
+lean_dec(v_a_474_);
+if (v___x_475_ == 0)
+{
+lean_object* v___x_476_; lean_object* v___x_477_; lean_object* v___x_478_; lean_object* v___x_479_; lean_object* v___x_480_; lean_object* v___x_481_; lean_object* v___x_482_; lean_object* v___x_483_; lean_object* v_a_484_; lean_object* v___x_486_; uint8_t v_isShared_487_; uint8_t v_isSharedCheck_491_; 
+lean_del_object(v___x_455_);
+lean_dec(v___y_452_);
+lean_dec_ref(v_phase_434_);
+v___x_476_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__19, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__19_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__19);
+v___x_477_ = l_Lean_MessageData_ofName(v_val_453_);
+v___x_478_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_478_, 0, v___x_476_);
+lean_ctor_set(v___x_478_, 1, v___x_477_);
+v___x_479_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tacticCore___closed__21, &lp_aesop_Aesop_RuleBuilder_tacticCore___closed__21_once, _init_lp_aesop_Aesop_RuleBuilder_tacticCore___closed__21);
+v___x_480_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_480_, 0, v___x_478_);
+lean_ctor_set(v___x_480_, 1, v___x_479_);
+v___x_481_ = l_Lean_indentExpr(v___x_459_);
+v___x_482_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_482_, 0, v___x_480_);
+lean_ctor_set(v___x_482_, 1, v___x_481_);
+v___x_483_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg(v___x_482_, v_a_435_, v_a_436_, v_a_437_, v_a_438_);
+v_a_484_ = lean_ctor_get(v___x_483_, 0);
+v_isSharedCheck_491_ = !lean_is_exclusive(v___x_483_);
+if (v_isSharedCheck_491_ == 0)
+{
+v___x_486_ = v___x_483_;
+v_isShared_487_ = v_isSharedCheck_491_;
+goto v_resetjp_485_;
+}
+else
+{
+lean_inc(v_a_484_);
+lean_dec(v___x_483_);
+v___x_486_ = lean_box(0);
+v_isShared_487_ = v_isSharedCheck_491_;
+goto v_resetjp_485_;
+}
+v_resetjp_485_:
+{
+lean_object* v___x_489_; 
+if (v_isShared_487_ == 0)
+{
+v___x_489_ = v___x_486_;
+goto v_reusejp_488_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_490_; 
+v_reuseFailAlloc_490_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_490_, 0, v_a_484_);
+v___x_489_ = v_reuseFailAlloc_490_;
+goto v_reusejp_488_;
+}
+v_reusejp_488_:
+{
+return v___x_489_;
+}
+}
+}
+else
+{
+lean_object* v___x_493_; 
+lean_dec_ref(v___x_459_);
+lean_inc(v_val_453_);
+if (v_isShared_456_ == 0)
+{
+lean_ctor_set_tag(v___x_455_, 6);
+v___x_493_ = v___x_455_;
+goto v_reusejp_492_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_494_; 
+v_reuseFailAlloc_494_ = lean_alloc_ctor(6, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_494_, 0, v_val_453_);
+v___x_493_ = v_reuseFailAlloc_494_;
+goto v_reusejp_492_;
+}
+v_reusejp_492_:
+{
+v___y_441_ = v_val_453_;
+v___y_442_ = v___y_452_;
+v_tac_443_ = v___x_493_;
+goto v___jp_440_;
+}
+}
+}
+else
+{
+lean_object* v___x_496_; 
+lean_dec_ref_known(v___x_470_, 1);
+lean_dec_ref(v___x_459_);
+lean_inc(v_val_453_);
+if (v_isShared_456_ == 0)
+{
+lean_ctor_set_tag(v___x_455_, 5);
+v___x_496_ = v___x_455_;
+goto v_reusejp_495_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_497_; 
+v_reuseFailAlloc_497_ = lean_alloc_ctor(5, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_497_, 0, v_val_453_);
+v___x_496_ = v_reuseFailAlloc_497_;
+goto v_reusejp_495_;
+}
+v_reusejp_495_:
+{
+v___y_441_ = v_val_453_;
+v___y_442_ = v___y_452_;
+v_tac_443_ = v___x_496_;
+goto v___jp_440_;
+}
+}
+}
+else
+{
+lean_object* v___x_499_; 
+lean_dec_ref_known(v___x_470_, 1);
+lean_dec(v_a_468_);
+lean_dec_ref(v___x_459_);
+lean_inc(v_val_453_);
+if (v_isShared_456_ == 0)
+{
+lean_ctor_set_tag(v___x_455_, 7);
+v___x_499_ = v___x_455_;
+goto v_reusejp_498_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_500_; 
+v_reuseFailAlloc_500_ = lean_alloc_ctor(7, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_500_, 0, v_val_453_);
+v___x_499_ = v_reuseFailAlloc_500_;
+goto v_reusejp_498_;
+}
+v_reusejp_498_:
+{
+v___y_441_ = v_val_453_;
+v___y_442_ = v___y_452_;
+v_tac_443_ = v___x_499_;
+goto v___jp_440_;
+}
+}
+}
+else
+{
+lean_object* v___x_502_; 
+lean_dec_ref_known(v___x_470_, 1);
+lean_dec(v_a_468_);
+lean_dec(v_a_465_);
+lean_dec_ref(v___x_459_);
+lean_inc(v_val_453_);
+if (v_isShared_456_ == 0)
+{
+lean_ctor_set_tag(v___x_455_, 4);
+v___x_502_ = v___x_455_;
+goto v_reusejp_501_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_503_; 
+v_reuseFailAlloc_503_ = lean_alloc_ctor(4, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_503_, 0, v_val_453_);
+v___x_502_ = v_reuseFailAlloc_503_;
+goto v_reusejp_501_;
+}
+v_reusejp_501_:
+{
+v___y_441_ = v_val_453_;
+v___y_442_ = v___y_452_;
+v_tac_443_ = v___x_502_;
+goto v___jp_440_;
+}
+}
+}
+else
+{
+lean_object* v_a_504_; lean_object* v___x_506_; uint8_t v_isShared_507_; uint8_t v_isSharedCheck_511_; 
+lean_dec(v_a_468_);
+lean_dec(v_a_465_);
+lean_dec(v_a_462_);
+lean_dec_ref(v___x_459_);
+lean_del_object(v___x_455_);
+lean_dec(v_val_453_);
+lean_dec(v___y_452_);
+lean_dec_ref(v_phase_434_);
+v_a_504_ = lean_ctor_get(v___x_470_, 0);
+v_isSharedCheck_511_ = !lean_is_exclusive(v___x_470_);
+if (v_isSharedCheck_511_ == 0)
+{
+v___x_506_ = v___x_470_;
+v_isShared_507_ = v_isSharedCheck_511_;
+goto v_resetjp_505_;
+}
+else
+{
+lean_inc(v_a_504_);
+lean_dec(v___x_470_);
+v___x_506_ = lean_box(0);
+v_isShared_507_ = v_isSharedCheck_511_;
+goto v_resetjp_505_;
+}
+v_resetjp_505_:
+{
+lean_object* v___x_509_; 
+if (v_isShared_507_ == 0)
+{
+v___x_509_ = v___x_506_;
+goto v_reusejp_508_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_510_; 
+v_reuseFailAlloc_510_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_510_, 0, v_a_504_);
+v___x_509_ = v_reuseFailAlloc_510_;
+goto v_reusejp_508_;
+}
+v_reusejp_508_:
+{
+return v___x_509_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_512_; lean_object* v___x_514_; uint8_t v_isShared_515_; uint8_t v_isSharedCheck_519_; 
+lean_dec(v_a_465_);
+lean_dec(v_a_462_);
+lean_dec_ref(v___x_459_);
+lean_del_object(v___x_455_);
+lean_dec(v_val_453_);
+lean_dec(v___y_452_);
+lean_dec_ref(v_phase_434_);
+v_a_512_ = lean_ctor_get(v___x_467_, 0);
+v_isSharedCheck_519_ = !lean_is_exclusive(v___x_467_);
+if (v_isSharedCheck_519_ == 0)
+{
+v___x_514_ = v___x_467_;
+v_isShared_515_ = v_isSharedCheck_519_;
+goto v_resetjp_513_;
+}
+else
+{
+lean_inc(v_a_512_);
+lean_dec(v___x_467_);
+v___x_514_ = lean_box(0);
+v_isShared_515_ = v_isSharedCheck_519_;
+goto v_resetjp_513_;
+}
+v_resetjp_513_:
+{
+lean_object* v___x_517_; 
+if (v_isShared_515_ == 0)
+{
+v___x_517_ = v___x_514_;
+goto v_reusejp_516_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_518_; 
+v_reuseFailAlloc_518_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_518_, 0, v_a_512_);
+v___x_517_ = v_reuseFailAlloc_518_;
+goto v_reusejp_516_;
+}
+v_reusejp_516_:
+{
+return v___x_517_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_520_; lean_object* v___x_522_; uint8_t v_isShared_523_; uint8_t v_isSharedCheck_527_; 
+lean_dec(v_a_462_);
+lean_dec_ref(v___x_459_);
+lean_del_object(v___x_455_);
+lean_dec(v_val_453_);
+lean_dec(v___y_452_);
+lean_dec_ref(v_phase_434_);
+v_a_520_ = lean_ctor_get(v___x_464_, 0);
+v_isSharedCheck_527_ = !lean_is_exclusive(v___x_464_);
+if (v_isSharedCheck_527_ == 0)
+{
+v___x_522_ = v___x_464_;
+v_isShared_523_ = v_isSharedCheck_527_;
+goto v_resetjp_521_;
+}
+else
+{
+lean_inc(v_a_520_);
+lean_dec(v___x_464_);
+v___x_522_ = lean_box(0);
+v_isShared_523_ = v_isSharedCheck_527_;
+goto v_resetjp_521_;
+}
+v_resetjp_521_:
+{
+lean_object* v___x_525_; 
+if (v_isShared_523_ == 0)
+{
+v___x_525_ = v___x_522_;
+goto v_reusejp_524_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_526_; 
+v_reuseFailAlloc_526_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_526_, 0, v_a_520_);
+v___x_525_ = v_reuseFailAlloc_526_;
+goto v_reusejp_524_;
+}
+v_reusejp_524_:
+{
+return v___x_525_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_528_; lean_object* v___x_530_; uint8_t v_isShared_531_; uint8_t v_isSharedCheck_535_; 
+lean_dec_ref(v___x_459_);
+lean_del_object(v___x_455_);
+lean_dec(v_val_453_);
+lean_dec(v___y_452_);
+lean_dec_ref(v_phase_434_);
+v_a_528_ = lean_ctor_get(v___x_461_, 0);
+v_isSharedCheck_535_ = !lean_is_exclusive(v___x_461_);
+if (v_isSharedCheck_535_ == 0)
+{
+v___x_530_ = v___x_461_;
+v_isShared_531_ = v_isSharedCheck_535_;
+goto v_resetjp_529_;
+}
+else
+{
+lean_inc(v_a_528_);
+lean_dec(v___x_461_);
+v___x_530_ = lean_box(0);
+v_isShared_531_ = v_isSharedCheck_535_;
+goto v_resetjp_529_;
+}
+v_resetjp_529_:
+{
+lean_object* v___x_533_; 
+if (v_isShared_531_ == 0)
+{
+v___x_533_ = v___x_530_;
+goto v_reusejp_532_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_534_; 
+v_reuseFailAlloc_534_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_534_, 0, v_a_528_);
+v___x_533_ = v_reuseFailAlloc_534_;
+goto v_reusejp_532_;
+}
+v_reusejp_532_:
+{
+return v___x_533_;
+}
+}
+}
+}
+else
+{
+lean_object* v_a_536_; lean_object* v___x_538_; uint8_t v_isShared_539_; uint8_t v_isSharedCheck_543_; 
+lean_del_object(v___x_455_);
+lean_dec(v_val_453_);
+lean_dec(v___y_452_);
+lean_dec_ref(v_phase_434_);
+v_a_536_ = lean_ctor_get(v___x_457_, 0);
+v_isSharedCheck_543_ = !lean_is_exclusive(v___x_457_);
+if (v_isSharedCheck_543_ == 0)
+{
+v___x_538_ = v___x_457_;
+v_isShared_539_ = v_isSharedCheck_543_;
+goto v_resetjp_537_;
+}
+else
+{
+lean_inc(v_a_536_);
+lean_dec(v___x_457_);
+v___x_538_ = lean_box(0);
+v_isShared_539_ = v_isSharedCheck_543_;
+goto v_resetjp_537_;
+}
+v_resetjp_537_:
+{
+lean_object* v___x_541_; 
+if (v_isShared_539_ == 0)
+{
+v___x_541_ = v___x_538_;
+goto v_reusejp_540_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_542_; 
+v_reuseFailAlloc_542_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_542_, 0, v_a_536_);
+v___x_541_ = v_reuseFailAlloc_542_;
+goto v_reusejp_540_;
+}
+v_reusejp_540_:
+{
+return v___x_541_;
+}
+}
+}
+}
+}
+else
+{
+lean_object* v_val_545_; lean_object* v___x_547_; uint8_t v_isShared_548_; uint8_t v_isSharedCheck_567_; 
+v_val_545_ = lean_ctor_get(v_t_432_, 0);
+v_isSharedCheck_567_ = !lean_is_exclusive(v_t_432_);
+if (v_isSharedCheck_567_ == 0)
+{
+v___x_547_ = v_t_432_;
+v_isShared_548_ = v_isSharedCheck_567_;
+goto v_resetjp_546_;
+}
+else
+{
+lean_inc(v_val_545_);
+lean_dec(v_t_432_);
+v___x_547_ = lean_box(0);
+v_isShared_548_ = v_isSharedCheck_567_;
+goto v_resetjp_546_;
+}
+v_resetjp_546_:
+{
+lean_object* v___x_549_; lean_object* v_a_550_; lean_object* v___x_552_; uint8_t v_isShared_553_; uint8_t v_isSharedCheck_566_; 
+v___x_549_ = lp_aesop_Lean_mkFreshId___at___00Aesop_RuleBuilder_tacticCore_spec__2___redArg(v_a_438_);
+v_a_550_ = lean_ctor_get(v___x_549_, 0);
+v_isSharedCheck_566_ = !lean_is_exclusive(v___x_549_);
+if (v_isSharedCheck_566_ == 0)
+{
+v___x_552_ = v___x_549_;
+v_isShared_553_ = v_isSharedCheck_566_;
+goto v_resetjp_551_;
+}
+else
+{
+lean_inc(v_a_550_);
+lean_dec(v___x_549_);
+v___x_552_ = lean_box(0);
+v_isShared_553_ = v_isSharedCheck_566_;
+goto v_resetjp_551_;
+}
+v_resetjp_551_:
+{
+lean_object* v___x_555_; 
+if (v_isShared_548_ == 0)
+{
+lean_ctor_set_tag(v___x_547_, 8);
+v___x_555_ = v___x_547_;
+goto v_reusejp_554_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_565_; 
+v_reuseFailAlloc_565_ = lean_alloc_ctor(8, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_565_, 0, v_val_545_);
+v___x_555_ = v_reuseFailAlloc_565_;
+goto v_reusejp_554_;
+}
+v_reusejp_554_:
+{
+uint8_t v___x_556_; uint8_t v___x_557_; lean_object* v___x_558_; lean_object* v___x_559_; lean_object* v___x_560_; lean_object* v___x_561_; lean_object* v___x_563_; 
+v___x_556_ = 6;
+v___x_557_ = 0;
+v___x_558_ = lean_box(0);
+v___x_559_ = lp_aesop_Aesop_PhaseSpec_toRule(v_phase_434_, v_a_550_, v___x_556_, v___x_557_, v___x_555_, v___y_452_, v___x_558_);
+v___x_560_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_560_, 0, v___x_559_);
+v___x_561_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_561_, 0, v___x_560_);
+if (v_isShared_553_ == 0)
+{
+lean_ctor_set(v___x_552_, 0, v___x_561_);
+v___x_563_ = v___x_552_;
+goto v_reusejp_562_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_564_; 
+v_reuseFailAlloc_564_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_564_, 0, v___x_561_);
+v___x_563_ = v_reuseFailAlloc_564_;
+goto v_reusejp_562_;
+}
+v_reusejp_562_:
+{
+return v___x_563_;
+}
+}
+}
+}
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tacticCore___boxed(lean_object* v_t_570_, lean_object* v_imode_x3f_571_, lean_object* v_phase_572_, lean_object* v_a_573_, lean_object* v_a_574_, lean_object* v_a_575_, lean_object* v_a_576_, lean_object* v_a_577_){
+_start:
+{
+lean_object* v_res_578_; 
+v_res_578_ = lp_aesop_Aesop_RuleBuilder_tacticCore(v_t_570_, v_imode_x3f_571_, v_phase_572_, v_a_573_, v_a_574_, v_a_575_, v_a_576_);
+lean_dec(v_a_576_);
+lean_dec_ref(v_a_575_);
+lean_dec(v_a_574_);
+lean_dec_ref(v_a_573_);
+return v_res_578_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1(lean_object* v_00_u03b1_579_, lean_object* v_msg_580_, lean_object* v___y_581_, lean_object* v___y_582_, lean_object* v___y_583_, lean_object* v___y_584_){
+_start:
+{
+lean_object* v___x_586_; 
+v___x_586_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___redArg(v_msg_580_, v___y_581_, v___y_582_, v___y_583_, v___y_584_);
+return v___x_586_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1___boxed(lean_object* v_00_u03b1_587_, lean_object* v_msg_588_, lean_object* v___y_589_, lean_object* v___y_590_, lean_object* v___y_591_, lean_object* v___y_592_, lean_object* v___y_593_){
+_start:
+{
+lean_object* v_res_594_; 
+v_res_594_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1(v_00_u03b1_587_, v_msg_588_, v___y_589_, v___y_590_, v___y_591_, v___y_592_);
+lean_dec(v___y_592_);
+lean_dec_ref(v___y_591_);
+lean_dec(v___y_590_);
+lean_dec_ref(v___y_589_);
+return v_res_594_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0(lean_object* v_00_u03b1_595_, lean_object* v_constName_596_, lean_object* v___y_597_, lean_object* v___y_598_, lean_object* v___y_599_, lean_object* v___y_600_){
+_start:
+{
+lean_object* v___x_602_; 
+v___x_602_ = lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___redArg(v_constName_596_, v___y_597_, v___y_598_, v___y_599_, v___y_600_);
+return v___x_602_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0___boxed(lean_object* v_00_u03b1_603_, lean_object* v_constName_604_, lean_object* v___y_605_, lean_object* v___y_606_, lean_object* v___y_607_, lean_object* v___y_608_, lean_object* v___y_609_){
+_start:
+{
+lean_object* v_res_610_; 
+v_res_610_ = lp_aesop_Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0(v_00_u03b1_603_, v_constName_604_, v___y_605_, v___y_606_, v___y_607_, v___y_608_);
+lean_dec(v___y_608_);
+lean_dec_ref(v___y_607_);
+lean_dec(v___y_606_);
+lean_dec_ref(v___y_605_);
+return v_res_610_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2(lean_object* v_00_u03b1_611_, lean_object* v_ref_612_, lean_object* v_constName_613_, lean_object* v___y_614_, lean_object* v___y_615_, lean_object* v___y_616_, lean_object* v___y_617_){
+_start:
+{
+lean_object* v___x_619_; 
+v___x_619_ = lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___redArg(v_ref_612_, v_constName_613_, v___y_614_, v___y_615_, v___y_616_, v___y_617_);
+return v___x_619_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2___boxed(lean_object* v_00_u03b1_620_, lean_object* v_ref_621_, lean_object* v_constName_622_, lean_object* v___y_623_, lean_object* v___y_624_, lean_object* v___y_625_, lean_object* v___y_626_, lean_object* v___y_627_){
+_start:
+{
+lean_object* v_res_628_; 
+v_res_628_ = lp_aesop_Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2(v_00_u03b1_620_, v_ref_621_, v_constName_622_, v___y_623_, v___y_624_, v___y_625_, v___y_626_);
+lean_dec(v___y_626_);
+lean_dec_ref(v___y_625_);
+lean_dec(v___y_624_);
+lean_dec_ref(v___y_623_);
+lean_dec(v_ref_621_);
+return v_res_628_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5(lean_object* v_00_u03b1_629_, lean_object* v_ref_630_, lean_object* v_msg_631_, lean_object* v_declHint_632_, lean_object* v___y_633_, lean_object* v___y_634_, lean_object* v___y_635_, lean_object* v___y_636_){
+_start:
+{
+lean_object* v___x_638_; 
+v___x_638_ = lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___redArg(v_ref_630_, v_msg_631_, v_declHint_632_, v___y_633_, v___y_634_, v___y_635_, v___y_636_);
+return v___x_638_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5___boxed(lean_object* v_00_u03b1_639_, lean_object* v_ref_640_, lean_object* v_msg_641_, lean_object* v_declHint_642_, lean_object* v___y_643_, lean_object* v___y_644_, lean_object* v___y_645_, lean_object* v___y_646_, lean_object* v___y_647_){
+_start:
+{
+lean_object* v_res_648_; 
+v_res_648_ = lp_aesop_Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5(v_00_u03b1_639_, v_ref_640_, v_msg_641_, v_declHint_642_, v___y_643_, v___y_644_, v___y_645_, v___y_646_);
+lean_dec(v___y_646_);
+lean_dec_ref(v___y_645_);
+lean_dec(v___y_644_);
+lean_dec_ref(v___y_643_);
+lean_dec(v_ref_640_);
+return v_res_648_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7(lean_object* v_msg_649_, lean_object* v_declHint_650_, lean_object* v___y_651_, lean_object* v___y_652_, lean_object* v___y_653_, lean_object* v___y_654_){
+_start:
+{
+lean_object* v___x_656_; 
+v___x_656_ = lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___redArg(v_msg_649_, v_declHint_650_, v___y_654_);
+return v___x_656_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7___boxed(lean_object* v_msg_657_, lean_object* v_declHint_658_, lean_object* v___y_659_, lean_object* v___y_660_, lean_object* v___y_661_, lean_object* v___y_662_, lean_object* v___y_663_){
+_start:
+{
+lean_object* v_res_664_; 
+v_res_664_ = lp_aesop_Lean_mkUnknownIdentifierMessageCore___at___00Lean_mkUnknownIdentifierMessage___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__6_spec__7(v_msg_657_, v_declHint_658_, v___y_659_, v___y_660_, v___y_661_, v___y_662_);
+lean_dec(v___y_662_);
+lean_dec_ref(v___y_661_);
+lean_dec(v___y_660_);
+lean_dec_ref(v___y_659_);
+return v_res_664_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7(lean_object* v_00_u03b1_665_, lean_object* v_ref_666_, lean_object* v_msg_667_, lean_object* v___y_668_, lean_object* v___y_669_, lean_object* v___y_670_, lean_object* v___y_671_){
+_start:
+{
+lean_object* v___x_673_; 
+v___x_673_ = lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___redArg(v_ref_666_, v_msg_667_, v___y_668_, v___y_669_, v___y_670_, v___y_671_);
+return v___x_673_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7___boxed(lean_object* v_00_u03b1_674_, lean_object* v_ref_675_, lean_object* v_msg_676_, lean_object* v___y_677_, lean_object* v___y_678_, lean_object* v___y_679_, lean_object* v___y_680_, lean_object* v___y_681_){
+_start:
+{
+lean_object* v_res_682_; 
+v_res_682_ = lp_aesop_Lean_throwErrorAt___at___00Lean_throwUnknownIdentifierAt___at___00Lean_throwUnknownConstantAt___at___00Lean_throwUnknownConstant___at___00Lean_getConstInfo___at___00Aesop_RuleBuilder_tacticCore_spec__0_spec__0_spec__2_spec__5_spec__7(v_00_u03b1_674_, v_ref_675_, v_msg_676_, v___y_677_, v___y_678_, v___y_679_, v___y_680_);
+lean_dec(v___y_680_);
+lean_dec_ref(v___y_679_);
+lean_dec(v___y_678_);
+lean_dec_ref(v___y_677_);
+lean_dec(v_ref_675_);
+return v_res_682_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg(lean_object* v_msg_683_, lean_object* v___y_684_, lean_object* v___y_685_, lean_object* v___y_686_, lean_object* v___y_687_){
+_start:
+{
+lean_object* v_ref_689_; lean_object* v___x_690_; lean_object* v_a_691_; lean_object* v___x_693_; uint8_t v_isShared_694_; uint8_t v_isSharedCheck_699_; 
+v_ref_689_ = lean_ctor_get(v___y_686_, 5);
+v___x_690_ = lp_aesop_Lean_addMessageContextFull___at___00Lean_throwError___at___00Aesop_RuleBuilder_tacticCore_spec__1_spec__2(v_msg_683_, v___y_684_, v___y_685_, v___y_686_, v___y_687_);
+v_a_691_ = lean_ctor_get(v___x_690_, 0);
+v_isSharedCheck_699_ = !lean_is_exclusive(v___x_690_);
+if (v_isSharedCheck_699_ == 0)
+{
+v___x_693_ = v___x_690_;
+v_isShared_694_ = v_isSharedCheck_699_;
+goto v_resetjp_692_;
+}
+else
+{
+lean_inc(v_a_691_);
+lean_dec(v___x_690_);
+v___x_693_ = lean_box(0);
+v_isShared_694_ = v_isSharedCheck_699_;
+goto v_resetjp_692_;
+}
+v_resetjp_692_:
+{
+lean_object* v___x_695_; lean_object* v___x_697_; 
+lean_inc(v_ref_689_);
+v___x_695_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_695_, 0, v_ref_689_);
+lean_ctor_set(v___x_695_, 1, v_a_691_);
+if (v_isShared_694_ == 0)
+{
+lean_ctor_set_tag(v___x_693_, 1);
+lean_ctor_set(v___x_693_, 0, v___x_695_);
+v___x_697_ = v___x_693_;
+goto v_reusejp_696_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_698_; 
+v_reuseFailAlloc_698_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_698_, 0, v___x_695_);
+v___x_697_ = v_reuseFailAlloc_698_;
+goto v_reusejp_696_;
+}
+v_reusejp_696_:
+{
+return v___x_697_;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg___boxed(lean_object* v_msg_700_, lean_object* v___y_701_, lean_object* v___y_702_, lean_object* v___y_703_, lean_object* v___y_704_, lean_object* v___y_705_){
+_start:
+{
+lean_object* v_res_706_; 
+v_res_706_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg(v_msg_700_, v___y_701_, v___y_702_, v___y_703_, v___y_704_);
+lean_dec(v___y_704_);
+lean_dec_ref(v___y_703_);
+lean_dec(v___y_702_);
+lean_dec_ref(v___y_701_);
+return v_res_706_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tactic___closed__1(void){
+_start:
+{
+lean_object* v___x_708_; lean_object* v___x_709_; 
+v___x_708_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tactic___closed__0));
+v___x_709_ = l_Lean_stringToMessageData(v___x_708_);
+return v___x_709_;
+}
+}
+static lean_object* _init_lp_aesop_Aesop_RuleBuilder_tactic___closed__3(void){
+_start:
+{
+lean_object* v___x_711_; lean_object* v___x_712_; 
+v___x_711_ = ((lean_object*)(lp_aesop_Aesop_RuleBuilder_tactic___closed__2));
+v___x_712_ = l_Lean_stringToMessageData(v___x_711_);
+return v___x_712_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tactic(lean_object* v_input_713_, lean_object* v_a_714_, lean_object* v_a_715_, lean_object* v_a_716_, lean_object* v_a_717_, lean_object* v_a_718_, lean_object* v_a_719_, lean_object* v_a_720_){
+_start:
+{
+lean_object* v_term_722_; lean_object* v_options_723_; lean_object* v_phase_724_; lean_object* v_t_726_; lean_object* v___y_727_; lean_object* v___y_728_; lean_object* v___y_729_; lean_object* v___y_730_; uint8_t v___x_733_; 
+v_term_722_ = lean_ctor_get(v_input_713_, 0);
+lean_inc(v_term_722_);
+v_options_723_ = lean_ctor_get(v_input_713_, 1);
+lean_inc_ref(v_options_723_);
+v_phase_724_ = lean_ctor_get(v_input_713_, 2);
+lean_inc_ref(v_phase_724_);
+lean_dec_ref(v_input_713_);
+v___x_733_ = l_Lean_Syntax_isIdent(v_term_722_);
+if (v___x_733_ == 0)
+{
+lean_object* v___x_734_; 
+lean_inc(v_term_722_);
+v___x_734_ = lp_aesop_Aesop_matchByTactic_x3f(v_term_722_);
+if (lean_obj_tag(v___x_734_) == 1)
+{
+lean_object* v_val_735_; lean_object* v___x_737_; uint8_t v_isShared_738_; uint8_t v_isSharedCheck_742_; 
+lean_dec(v_term_722_);
+v_val_735_ = lean_ctor_get(v___x_734_, 0);
+v_isSharedCheck_742_ = !lean_is_exclusive(v___x_734_);
+if (v_isSharedCheck_742_ == 0)
+{
+v___x_737_ = v___x_734_;
+v_isShared_738_ = v_isSharedCheck_742_;
+goto v_resetjp_736_;
+}
+else
+{
+lean_inc(v_val_735_);
+lean_dec(v___x_734_);
+v___x_737_ = lean_box(0);
+v_isShared_738_ = v_isSharedCheck_742_;
+goto v_resetjp_736_;
+}
+v_resetjp_736_:
+{
+lean_object* v___x_740_; 
+if (v_isShared_738_ == 0)
+{
+v___x_740_ = v___x_737_;
+goto v_reusejp_739_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_741_; 
+v_reuseFailAlloc_741_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_741_, 0, v_val_735_);
+v___x_740_ = v_reuseFailAlloc_741_;
+goto v_reusejp_739_;
+}
+v_reusejp_739_:
+{
+v_t_726_ = v___x_740_;
+v___y_727_ = v_a_717_;
+v___y_728_ = v_a_718_;
+v___y_729_ = v_a_719_;
+v___y_730_ = v_a_720_;
+goto v___jp_725_;
+}
+}
+}
+else
+{
+lean_object* v___x_743_; lean_object* v___x_744_; lean_object* v___x_745_; lean_object* v___x_746_; lean_object* v___x_747_; lean_object* v___x_748_; lean_object* v_a_749_; lean_object* v___x_751_; uint8_t v_isShared_752_; uint8_t v_isSharedCheck_756_; 
+lean_dec(v___x_734_);
+lean_dec_ref(v_phase_724_);
+lean_dec_ref(v_options_723_);
+v___x_743_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tactic___closed__1, &lp_aesop_Aesop_RuleBuilder_tactic___closed__1_once, _init_lp_aesop_Aesop_RuleBuilder_tactic___closed__1);
+v___x_744_ = l_Lean_MessageData_ofSyntax(v_term_722_);
+v___x_745_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_745_, 0, v___x_743_);
+lean_ctor_set(v___x_745_, 1, v___x_744_);
+v___x_746_ = lean_obj_once(&lp_aesop_Aesop_RuleBuilder_tactic___closed__3, &lp_aesop_Aesop_RuleBuilder_tactic___closed__3_once, _init_lp_aesop_Aesop_RuleBuilder_tactic___closed__3);
+v___x_747_ = lean_alloc_ctor(7, 2, 0);
+lean_ctor_set(v___x_747_, 0, v___x_745_);
+lean_ctor_set(v___x_747_, 1, v___x_746_);
+v___x_748_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg(v___x_747_, v_a_717_, v_a_718_, v_a_719_, v_a_720_);
+v_a_749_ = lean_ctor_get(v___x_748_, 0);
+v_isSharedCheck_756_ = !lean_is_exclusive(v___x_748_);
+if (v_isSharedCheck_756_ == 0)
+{
+v___x_751_ = v___x_748_;
+v_isShared_752_ = v_isSharedCheck_756_;
+goto v_resetjp_750_;
+}
+else
+{
+lean_inc(v_a_749_);
+lean_dec(v___x_748_);
+v___x_751_ = lean_box(0);
+v_isShared_752_ = v_isSharedCheck_756_;
+goto v_resetjp_750_;
+}
+v_resetjp_750_:
+{
+lean_object* v___x_754_; 
+if (v_isShared_752_ == 0)
+{
+v___x_754_ = v___x_751_;
+goto v_reusejp_753_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_755_; 
+v_reuseFailAlloc_755_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_755_, 0, v_a_749_);
+v___x_754_ = v_reuseFailAlloc_755_;
+goto v_reusejp_753_;
+}
+v_reusejp_753_:
+{
+return v___x_754_;
+}
+}
+}
+}
+else
+{
+uint8_t v___x_757_; lean_object* v___x_758_; 
+v___x_757_ = 6;
+v___x_758_ = lp_aesop_Aesop_elabGlobalRuleIdent(v___x_757_, v_term_722_, v_a_715_, v_a_716_, v_a_717_, v_a_718_, v_a_719_, v_a_720_);
+if (lean_obj_tag(v___x_758_) == 0)
+{
+lean_object* v_a_759_; lean_object* v___x_760_; 
+v_a_759_ = lean_ctor_get(v___x_758_, 0);
+lean_inc(v_a_759_);
+lean_dec_ref_known(v___x_758_, 1);
+v___x_760_ = lean_alloc_ctor(0, 1, 0);
+lean_ctor_set(v___x_760_, 0, v_a_759_);
+v_t_726_ = v___x_760_;
+v___y_727_ = v_a_717_;
+v___y_728_ = v_a_718_;
+v___y_729_ = v_a_719_;
+v___y_730_ = v_a_720_;
+goto v___jp_725_;
+}
+else
+{
+lean_object* v_a_761_; lean_object* v___x_763_; uint8_t v_isShared_764_; uint8_t v_isSharedCheck_768_; 
+lean_dec_ref(v_phase_724_);
+lean_dec_ref(v_options_723_);
+v_a_761_ = lean_ctor_get(v___x_758_, 0);
+v_isSharedCheck_768_ = !lean_is_exclusive(v___x_758_);
+if (v_isSharedCheck_768_ == 0)
+{
+v___x_763_ = v___x_758_;
+v_isShared_764_ = v_isSharedCheck_768_;
+goto v_resetjp_762_;
+}
+else
+{
+lean_inc(v_a_761_);
+lean_dec(v___x_758_);
+v___x_763_ = lean_box(0);
+v_isShared_764_ = v_isSharedCheck_768_;
+goto v_resetjp_762_;
+}
+v_resetjp_762_:
+{
+lean_object* v___x_766_; 
+if (v_isShared_764_ == 0)
+{
+v___x_766_ = v___x_763_;
+goto v_reusejp_765_;
+}
+else
+{
+lean_object* v_reuseFailAlloc_767_; 
+v_reuseFailAlloc_767_ = lean_alloc_ctor(1, 1, 0);
+lean_ctor_set(v_reuseFailAlloc_767_, 0, v_a_761_);
+v___x_766_ = v_reuseFailAlloc_767_;
+goto v_reusejp_765_;
+}
+v_reusejp_765_:
+{
+return v___x_766_;
+}
+}
+}
+}
+v___jp_725_:
+{
+lean_object* v_indexingMode_x3f_731_; lean_object* v___x_732_; 
+v_indexingMode_x3f_731_ = lean_ctor_get(v_options_723_, 1);
+lean_inc(v_indexingMode_x3f_731_);
+lean_dec_ref(v_options_723_);
+v___x_732_ = lp_aesop_Aesop_RuleBuilder_tacticCore(v_t_726_, v_indexingMode_x3f_731_, v_phase_724_, v___y_727_, v___y_728_, v___y_729_, v___y_730_);
+return v___x_732_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Aesop_RuleBuilder_tactic___boxed(lean_object* v_input_769_, lean_object* v_a_770_, lean_object* v_a_771_, lean_object* v_a_772_, lean_object* v_a_773_, lean_object* v_a_774_, lean_object* v_a_775_, lean_object* v_a_776_, lean_object* v_a_777_){
+_start:
+{
+lean_object* v_res_778_; 
+v_res_778_ = lp_aesop_Aesop_RuleBuilder_tactic(v_input_769_, v_a_770_, v_a_771_, v_a_772_, v_a_773_, v_a_774_, v_a_775_, v_a_776_);
+lean_dec(v_a_776_);
+lean_dec_ref(v_a_775_);
+lean_dec(v_a_774_);
+lean_dec_ref(v_a_773_);
+lean_dec(v_a_772_);
+lean_dec_ref(v_a_771_);
+lean_dec_ref(v_a_770_);
+return v_res_778_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0(lean_object* v_00_u03b1_779_, lean_object* v_msg_780_, lean_object* v___y_781_, lean_object* v___y_782_, lean_object* v___y_783_, lean_object* v___y_784_, lean_object* v___y_785_, lean_object* v___y_786_, lean_object* v___y_787_){
+_start:
+{
+lean_object* v___x_789_; 
+v___x_789_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___redArg(v_msg_780_, v___y_784_, v___y_785_, v___y_786_, v___y_787_);
+return v___x_789_;
+}
+}
+LEAN_EXPORT lean_object* lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0___boxed(lean_object* v_00_u03b1_790_, lean_object* v_msg_791_, lean_object* v___y_792_, lean_object* v___y_793_, lean_object* v___y_794_, lean_object* v___y_795_, lean_object* v___y_796_, lean_object* v___y_797_, lean_object* v___y_798_, lean_object* v___y_799_){
+_start:
+{
+lean_object* v_res_800_; 
+v_res_800_ = lp_aesop_Lean_throwError___at___00Aesop_RuleBuilder_tactic_spec__0(v_00_u03b1_790_, v_msg_791_, v___y_792_, v___y_793_, v___y_794_, v___y_795_, v___y_796_, v___y_797_, v___y_798_);
+lean_dec(v___y_798_);
+lean_dec_ref(v___y_797_);
+lean_dec(v___y_796_);
+lean_dec_ref(v___y_795_);
+lean_dec(v___y_794_);
+lean_dec_ref(v___y_793_);
+lean_dec_ref(v___y_792_);
+return v_res_800_;
+}
+}
+lean_object* runtime_initialize_Init(uint8_t builtin);
+lean_object* runtime_initialize_aesop_Aesop_Builder_Basic(uint8_t builtin);
+void lean_initialize();
+static bool _G_runtime_initialized = false;
+LEAN_EXPORT lean_object* runtime_initialize_aesop_Aesop_Builder_Tactic(uint8_t builtin) {
+lean_object * res;
+if (_G_runtime_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_runtime_initialized = true;
+lean_initialize();
+res = runtime_initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_aesop_Aesop_Builder_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return lean_io_result_mk_ok(lean_box(0));
+}
+lean_object* runtime_initialize_Init(uint8_t builtin);
+static bool _G_meta_initialized = false;
+LEAN_EXPORT lean_object* meta_initialize_aesop_Aesop_Builder_Tactic(uint8_t builtin) {
+lean_object * res;
+if (_G_meta_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_meta_initialized = true;
+res = runtime_initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return lean_io_result_mk_ok(lean_box(0));
+}
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_aesop_Aesop_Builder_Basic(uint8_t builtin);
+static bool _G_initialized = false;
+LEAN_EXPORT lean_object* initialize_aesop_Aesop_Builder_Tactic(uint8_t builtin) {
+lean_object * res;
+if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_initialized = true;
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_aesop_Aesop_Builder_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_aesop_Aesop_Builder_Tactic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = meta_initialize_aesop_Aesop_Builder_Tactic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return initialize_aesop_Aesop_Builder_Tactic(builtin);
+}
+#ifdef __cplusplus
+}
+#endif

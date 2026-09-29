@@ -413,13 +413,13 @@ return v_res_95_;
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_openvm_x2dfv_VmVerifier_Spec_Runtime(uint8_t builtin);
-void lean_initialize_runtime_module();
+void lean_initialize();
 static bool _G_initialized = false;
 LEAN_EXPORT lean_object* initialize_openvm_x2dfv_VmVerifier_Main(uint8_t builtin) {
 lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
-lean_initialize_runtime_module();
+lean_initialize();
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
