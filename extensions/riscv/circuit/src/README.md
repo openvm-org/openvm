@@ -116,7 +116,9 @@ Given
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
-- The full access at `val(rs1) + imm` fits within the configured pointer bound without wrapping
+- The effective address `val(rs1) + sign_extend(imm)` is computed modulo `2^64` as in RV64I, and
+  the full access at it fits within the configured pointer bound without wrapping. `val(rs1)`'s
+  upper 32 bits are `0`, `0xffff_ffff` or `1`; no other upper word can reach the 32-bit address space
 - One or two aligned memory blocks are read from the RV64 memory address space
 - A memory write to register `rd` is performed if `rd` is not `x0`
 - The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
@@ -133,7 +135,9 @@ This circuit proves the following:
 
 - A memory read from register `rs1` is performed
 - A memory read from register `rs2` is performed
-- The full access at `val(rs1) + imm` fits within the configured pointer bound without wrapping
+- The effective address `val(rs1) + sign_extend(imm)` is computed modulo `2^64` as in RV64I, and
+  the full access at it fits within the configured pointer bound without wrapping. `val(rs1)`'s
+  upper 32 bits are `0`, `0xffff_ffff` or `1`; no other upper word can reach the 32-bit address space
 - One or two aligned memory blocks are written in the RV64 memory address space (`2`)
 - The instruction is correctly fetched from the program ROM at `from_pc_idx` and the PC index is set to `from_pc_idx + 1`
 
@@ -294,7 +298,7 @@ This circuit proves that:
 
 Given:
 
-- `rs1` is the decomposition of the operand, with its limbs assumed to be in the range `[0, 2^BYTE_BITS)`
+- `rs1` is the decomposition of the operand's low 32 bits, with its limbs assumed to be in the range `[0, 2^BYTE_BITS)`
 - `rd` is the decomposition of the result
 - `imm` is the immediate value
 - `raw_target_bit0` is the least significant bit of `compose(rs1) + imm`
@@ -304,8 +308,10 @@ Given:
 
 This circuit proves that:
 
-- `raw_target_bit0 + 4 * compose(to_pc_idx_limbs) == compose(rs1) + imm` as a non-wrapping u32
-  addition; a byte target with bit 1 set (misaligned) is unsatisfiable
+- `raw_target_bit0 + 4 * compose(to_pc_idx_limbs) == compose(rs1) + sign_extend(imm)` modulo
+  `2^64`, with a target below `2^32`; `rs1`'s upper 32 bits are `0`, `0xffff_ffff` or `1`, selected
+  by the boolean flags `rs1_hi_neg` / `rs1_hi_one`. A byte target with bit 1 set (misaligned) is
+  unsatisfiable
 - The destination PC index is `compose(to_pc_idx_limbs)`, so the least significant bit of the
   byte target is cleared as required by `jalr`
 - `compose(rd) == 4 * (pc_idx + 1)`, including the possible bit-32 carry

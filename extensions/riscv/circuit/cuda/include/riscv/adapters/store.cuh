@@ -4,6 +4,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "riscv-adapters/pointer_conv.cuh"
+#include "riscv/adapters/base_register.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -13,6 +14,8 @@ template <typename T> struct StoreMultiByteAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;
     T rs1_data[PTR_U16_LIMBS];
+    T rs1_hi_neg;
+    T rs1_hi_one;
     MemoryReadAuxCols<T> rs1_aux_cols;
     T rs2_ptr;
     MemoryReadAuxCols<T> read_data_aux;
@@ -41,7 +44,7 @@ struct StoreAdapter {
         uint32_t from_timestamp,
         uint32_t rs1_ptr,
         uint32_t rs2_ptr,
-        uint32_t rs1_val,
+        uint64_t rs1_val,
         uint32_t rs1_prev_timestamp,
         uint32_t rs2_prev_timestamp,
         uint32_t write0_prev_timestamp,
@@ -53,9 +56,16 @@ struct StoreAdapter {
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, rs1_ptr, rs1_ptr);
 
+        uint32_t rs1_low = static_cast<uint32_t>(rs1_val);
         Fp rs1_data[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, rs1_val);
+        ptr_to_u16_limbs(rs1_data, rs1_low);
         COL_WRITE_ARRAY(row, StoreMultiByteAdapterCols, rs1_data, rs1_data);
+        // The replay already rejected unreachable upper words.
+        bool rs1_hi_neg;
+        bool rs1_hi_one;
+        base_high_flags(static_cast<uint32_t>(rs1_val >> 32), rs1_hi_neg, rs1_hi_one);
+        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, rs1_hi_neg, rs1_hi_neg);
+        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, rs1_hi_one, rs1_hi_one);
 
         mem_helper.fill(
             row.slice_from(COL_INDEX(StoreMultiByteAdapterCols, rs1_aux_cols)),
@@ -89,7 +99,8 @@ struct StoreAdapter {
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, imm_sign, imm_sign);
 
-        uint32_t ptr = rs1_val + uint32_t(imm) +
+        // Low 32 bits of rs1 + sign_extend(imm); the upper word cancels (see the AIR).
+        uint32_t ptr = rs1_low + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
@@ -108,6 +119,8 @@ template <typename T> struct StoreByteAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;
     T rs1_data[PTR_U16_LIMBS];
+    T rs1_hi_neg;
+    T rs1_hi_one;
     MemoryReadAuxCols<T> rs1_aux_cols;
     T rs2_ptr;
     MemoryReadAuxCols<T> read_data_aux;
@@ -136,7 +149,7 @@ struct StoreByteAdapter {
         uint32_t from_timestamp,
         uint32_t rs1_ptr,
         uint32_t rs2_ptr,
-        uint32_t rs1_val,
+        uint64_t rs1_val,
         uint32_t rs1_prev_timestamp,
         uint32_t rs2_prev_timestamp,
         uint32_t write_prev_timestamp,
@@ -149,9 +162,16 @@ struct StoreByteAdapter {
         );
         COL_WRITE_VALUE(row, StoreByteAdapterCols, rs1_ptr, rs1_ptr);
 
+        uint32_t rs1_low = static_cast<uint32_t>(rs1_val);
         Fp rs1_data[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, rs1_val);
+        ptr_to_u16_limbs(rs1_data, rs1_low);
         COL_WRITE_ARRAY(row, StoreByteAdapterCols, rs1_data, rs1_data);
+        // The replay already rejected unreachable upper words.
+        bool rs1_hi_neg;
+        bool rs1_hi_one;
+        base_high_flags(static_cast<uint32_t>(rs1_val >> 32), rs1_hi_neg, rs1_hi_one);
+        COL_WRITE_VALUE(row, StoreByteAdapterCols, rs1_hi_neg, rs1_hi_neg);
+        COL_WRITE_VALUE(row, StoreByteAdapterCols, rs1_hi_one, rs1_hi_one);
 
         mem_helper.fill(
             row.slice_from(COL_INDEX(StoreByteAdapterCols, rs1_aux_cols)),
@@ -173,7 +193,8 @@ struct StoreByteAdapter {
         COL_WRITE_VALUE(row, StoreByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, StoreByteAdapterCols, imm_sign, imm_sign);
 
-        uint32_t ptr = rs1_val + uint32_t(imm) +
+        // Low 32 bits of rs1 + sign_extend(imm); the upper word cancels (see the AIR).
+        uint32_t ptr = rs1_low + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);

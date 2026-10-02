@@ -64,6 +64,10 @@ fn into_limbs(num: u32) -> [u32; REGISTER_NUM_LIMBS] {
     })
 }
 
+fn into_limbs64(num: u64) -> [u32; REGISTER_NUM_LIMBS] {
+    num.to_le_bytes().map(u32::from)
+}
+
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
@@ -168,7 +172,7 @@ fn set_and_execute<E: openvm_circuit::arch::Executor<F> + Clone>(
     );
     let final_pc = tester.last_to_pc();
 
-    let rs1 = limbs_to_u64(rs1) as u32;
+    let rs1 = limbs_to_u64(rs1);
 
     let (raw_target_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
     // The register write is suppressed for x0.
@@ -277,6 +281,8 @@ fn jalr_max_pc_test() {
 struct JalrPrankValues {
     pub rd_high: Option<[u32; PTR_U16_LIMBS]>,
     pub rs1_data: Option<[u32; PTR_U16_LIMBS]>,
+    /// `[rs1_hi_neg, rs1_hi_one]`
+    pub rs1_hi: Option<[u32; 2]>,
     pub raw_target_bit0: Option<u32>,
     pub to_pc_idx_limbs: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_sign: Option<u32>,
@@ -325,6 +331,10 @@ fn run_negative_jalr_test_with_rd_ptr(
         }
         if let Some(data) = prank_vals.rs1_data {
             core_cols.rs1_data = data.map(F::from_u32);
+        }
+        if let Some([hi_neg, hi_one]) = prank_vals.rs1_hi {
+            core_cols.rs1_hi_neg = F::from_u32(hi_neg);
+            core_cols.rs1_hi_one = F::from_u32(hi_one);
         }
         if let Some(data) = prank_vals.raw_target_bit0 {
             core_cols.raw_target_bit0 = F::from_u32(data);
@@ -423,7 +433,7 @@ fn invalid_cols_negative_tests() {
 }
 
 #[test]
-#[should_panic(expected = "JALR source register has nonzero upper 32 bits")]
+#[should_panic(expected = "JALR target is outside implemented PC address space or misaligned")]
 fn rs1_upper_bytes_preflight_rejects_test() {
     run_negative_jalr_test(
         JALR,
@@ -474,10 +484,54 @@ fn rs1_upper_bytes_postflight_rejects_test() {
     let memory_config = MemoryConfig::default();
     let postflight = Postflight::new(&program, history, &memory_config, None).unwrap();
     let error = generate_trace_from_postflight(&harness.chip, &postflight)
-        .expect_err("postflight must reject a JALR source wider than 32 bits");
+        .expect_err("postflight must reject a JALR target above the 32-bit PC space");
     assert!(error
         .to_string()
-        .contains("JALR source register has nonzero upper 32 bits"));
+        .contains("JALR target is outside implemented PC address space or misaligned"));
+}
+
+#[test]
+fn rs1_high_flags_negative_tests() {
+    // A zero upper word cannot be claimed as all ones or as one.
+    for rs1_hi in [[1, 0], [0, 1], [1, 1]] {
+        run_negative_jalr_test(
+            JALR,
+            Some(0x1234),
+            Some(into_limbs(0x20000)),
+            Some(16),
+            Some(0),
+            JalrPrankValues {
+                rs1_hi: Some(rs1_hi),
+                ..Default::default()
+            },
+            true,
+        );
+    }
+    // A wrapped base cannot be claimed as a zero upper word.
+    run_negative_jalr_test(
+        JALR,
+        Some(0x1234),
+        Some(into_limbs64(-8i64 as u64)),
+        Some(16),
+        Some(0),
+        JalrPrankValues {
+            rs1_hi: Some([0, 0]),
+            ..Default::default()
+        },
+        true,
+    );
+    run_negative_jalr_test(
+        JALR,
+        Some(0x1234),
+        Some(into_limbs64((1 << 32) + 8)),
+        Some(0xfff0),
+        Some(1),
+        JalrPrankValues {
+            rs1_hi: Some([0, 0]),
+            ..Default::default()
+        },
+        true,
+    );
 }
 
 #[test]
@@ -610,18 +664,69 @@ fn run_jalr_sanity_test() {
 
 #[test]
 fn run_jalr_clears_bit_zero_before_max_pc_check() {
-    let (raw_target_pc, _) = run_jalr(0, MAX_ALLOWED_PC + 1, 0, false);
+    let (raw_target_pc, _) = run_jalr(0, u64::from(MAX_ALLOWED_PC) + 1, 0, false);
     assert_eq!(raw_target_pc, MAX_ALLOWED_PC + 1);
     assert_eq!(raw_target_pc & !1, MAX_ALLOWED_PC);
 
     // Clearing bit 0 of u32::MAX leaves bit 1 set, so the result is still misaligned.
-    assert!(try_run_jalr(0, u32::MAX, 0, false).is_none());
+    assert!(try_run_jalr(0, u64::from(u32::MAX), 0, false).is_none());
+}
+
+#[test]
+fn run_jalr_wraps_base_register_test() {
+    // RV64I computes the target as rs1 + sign_extend(imm) modulo 2^64.
+    let (raw_target_pc, _) = run_jalr(0, -8i64 as u64, 16, false);
+    assert_eq!(raw_target_pc, 8);
+    let (raw_target_pc, _) = run_jalr(0, (1 << 32) + 8, 0xfff0, true);
+    assert_eq!(raw_target_pc, u32::MAX - 7);
+
+    // Upper words that cannot reach the 32-bit PC space are rejected.
+    assert!(try_run_jalr(0, 1 << 32, 0, false).is_none());
+    assert!(try_run_jalr(0, -8i64 as u64, 0xfff0, true).is_none());
+    assert!(try_run_jalr(0, 2 << 32, 0xfff0, true).is_none());
 }
 
 #[test]
 #[should_panic(expected = "JALR target is outside implemented PC address space or misaligned")]
 fn run_jalr_rejects_low_32_wraparound_test() {
     run_jalr(0, 0xffff_fff8, 16, false);
+}
+
+#[test]
+fn jalr_wrapped_base_register_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    for (rs1, imm, imm_sign) in [
+        // Small negative base plus a positive immediate.
+        (-8i64 as u64, 16, 0),
+        (-0x7f8i64 as u64, 0x7fc, 0),
+        // Base just above 2^32 plus a negative immediate, including the max PC slot.
+        ((1 << 32) + 8, 0xfff0, 1),
+        ((1 << 32) + 0x10, 0xf810, 1),
+        ((1 << 32) + 4, 0xfff8, 1),
+    ] {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            JALR,
+            Some(imm),
+            Some(imm_sign),
+            None,
+            Some(into_limbs64(rs1)),
+            None,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]
@@ -725,6 +830,20 @@ fn test_cuda_rand_jalr_tracegen() {
         Some(into_limbs(MAX_ALLOWED_PC)),
         None,
     );
+    for (rs1, imm, imm_sign) in [(-8i64 as u64, 16, 0), ((1 << 32) + 8, 0xfff0, 1)] {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            JALR,
+            Some(imm),
+            Some(imm_sign),
+            None,
+            Some(into_limbs64(rs1)),
+            None,
+        );
+    }
 
     tester
         .build()

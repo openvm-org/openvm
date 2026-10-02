@@ -15,7 +15,6 @@ use openvm_riscv_transpiler::JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::{checked_jalr_target, JalrExecutor};
-use crate::adapters::try_bytes_to_u32;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -150,11 +149,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
-    let rs1 = exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32);
-    let rs1 = try_bytes_to_u32(rs1).ok_or(ExecutionError::Fail {
-        pc,
-        msg: "JALR source register has nonzero upper 32 bits",
-    })?;
+    let rs1 = u64::from_le_bytes(
+        exec_state.vm_read_bytes::<REGISTER_NUM_LIMBS>(REGISTER_AS, pre_compute.b as u32),
+    );
     let (_, to_pc) =
         checked_jalr_target(rs1, pre_compute.imm_extended).ok_or(ExecutionError::Fail {
             pc,
@@ -259,7 +256,7 @@ mod tests {
             ),
             (
                 jalr_exe(0x1_0000_0000, 0),
-                "JALR source register has nonzero upper 32 bits",
+                "JALR target is outside implemented PC address space or misaligned",
             ),
         ] {
             let interpreter =
@@ -289,7 +286,7 @@ mod tests {
             ),
             (
                 jalr_exe(0x1_0000_0000, 0),
-                "JALR source register has nonzero upper 32 bits",
+                "JALR target is outside implemented PC address space or misaligned",
             ),
         ] {
             let interpreter = InterpretedInstance::<MeteredCostCtx>::new_metered::<BabyBear, _>(
@@ -320,6 +317,24 @@ mod tests {
             .err()
             .expect("invalid JALR source must fail");
 
-        assert_jalr_failure(error, "JALR source register has nonzero upper 32 bits");
+        assert_jalr_failure(
+            error,
+            "JALR target is outside implemented PC address space or misaligned",
+        );
+    }
+
+    #[test]
+    fn jalr_wrapped_base_register_execution() {
+        // RV64I: rs1 = -4 with imm = 8 jumps to pc 4 (the first TERMINATE).
+        let config = Rv64IConfig::default();
+        let inventory =
+            <Rv64IConfig as VmExecutionConfig<BabyBear>>::create_executors(&config).unwrap();
+        let exe = jalr_exe(-4i64 as u64, 8);
+        let interpreter =
+            InterpretedInstance::<ExecutionCtx>::new::<BabyBear, _>(&inventory, &exe).unwrap();
+        let state = interpreter
+            .execute(Streams::default())
+            .expect("JALR with a wrapped base register must execute");
+        assert_eq!(state.pc(), 4);
     }
 }

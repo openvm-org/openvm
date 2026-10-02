@@ -26,9 +26,10 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    address_add_imm, checked_byte_ptr_to_u16_ptr_value, checked_register_u16_pointer,
-    expand_to_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs,
-    sign_extend_imm16, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, REGISTER_NUM_LIMBS, U16_BITS,
+    base_high_flags, base_high_wrap, base_register_add_imm, checked_byte_ptr_to_u16_ptr_value,
+    checked_register_u16_pointer, eval_base_register_block, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, sign_extend_imm16, u16_block_to_u64,
+    BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
@@ -57,6 +58,10 @@ pub struct LoadByteAdapterCols<T> {
     pub rs1_ptr: T,
     /// Low 32 bits of the rs1 register, packed as two u16 cells.
     pub rs1_data: [T; PTR_U16_LIMBS],
+    /// Whether the upper 32 bits of rs1 are all ones (see [`base_high_flags`]).
+    pub rs1_hi_neg: T,
+    /// Whether the upper 32 bits of rs1 equal one (see [`base_high_flags`]).
+    pub rs1_hi_one: T,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     /// Destination register pointer.
     pub rd_ptr: T,
@@ -115,8 +120,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_ptr);
 
-        // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
-        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_block(&local_cols.rs1_data);
+        // Read the full 64-bit rs1. Its upper word is one of the few values from which
+        // rs1 + sign_extend(imm) can reach the 32-bit address space.
+        let rs1_data = eval_base_register_block(
+            builder,
+            &local_cols.rs1_data,
+            local_cols.rs1_hi_neg,
+            local_cols.rs1_hi_one,
+        );
         self.memory_bridge
             .read(
                 MemoryAddress::new(
@@ -129,14 +140,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadByteAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
-        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
+        // Constrain mem_ptr = rs1 + sign_extend(imm) (mod 2^64). The low 32 bits are a two-limb
+        // addition; when rs1's upper word is nonzero, the low sum must carry out of (or borrow
+        // into) bit 32 to cancel it, which shifts the high limb by 2^16.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let low_carry =
             (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_low_limb) * inv;
         builder.assert_bool(low_carry.clone());
 
         builder.assert_bool(local_cols.imm_sign);
-        let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
+        let mem_ptr_hi = local_cols.rs1_data[1] + low_carry
+            - local_cols.imm_sign
+            - base_high_wrap::<AB>(local_cols.rs1_hi_neg, local_cols.rs1_hi_one)
+                * AB::F::from_u32(1 << U16_BITS);
 
         // Alignment: the aligned heap byte pointer's low limb is divisible by 8, i.e.
         // `aligned_limb / 8 < 2^13`, which also implies `aligned_limb < 2^16`. (The derived high
@@ -279,14 +295,13 @@ impl LoadByteAdapterFiller {
         let rd_u16_ptr = checked_register_u16_pointer(rd_ptr)?;
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(REGISTER_AS, rs1_u16_ptr)?;
-        if rs1.value[PTR_U16_LIMBS..].iter().any(|&x| x != 0) {
-            return Err(PostflightError::new(
-                "byte-load base register exceeds the implemented pointer width",
-            ));
-        }
-        let rs1_val = u32::from(rs1.value[0]) | (u32::from(rs1.value[1]) << U16_BITS);
-        let effective_ptr = u32::try_from(address_add_imm(
-            rs1_val,
+        let rs1_u64 = u16_block_to_u64(rs1.value);
+        let [rs1_hi_neg, rs1_hi_one] = base_high_flags((rs1_u64 >> 32) as u32).ok_or(
+            PostflightError::new("byte-load base register exceeds the implemented pointer width"),
+        )?;
+        let rs1_val = rs1_u64 as u32;
+        let effective_ptr = u32::try_from(base_register_add_imm(
+            rs1_u64,
             sign_extend_imm16(imm, u32::from(imm_sign)),
         ))
         .map_err(|_| PostflightError::new("byte-load effective address exceeds u32"))?;
@@ -343,6 +358,8 @@ impl LoadByteAdapterFiller {
             adapter_row.rs1_aux_cols.as_mut(),
         );
         adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
+        adapter_row.rs1_hi_neg = F::from_bool(rs1_hi_neg);
+        adapter_row.rs1_hi_one = F::from_bool(rs1_hi_one);
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
