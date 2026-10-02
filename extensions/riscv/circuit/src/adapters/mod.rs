@@ -399,13 +399,75 @@ pub fn try_bytes_to_u32(bytes: [u8; REGISTER_NUM_LIMBS]) -> Option<u32> {
 /// Adds an already-sign-extended 16-bit RV64 immediate to an implemented low-32-bit address.
 #[inline(always)]
 pub fn address_add_imm(base: u32, imm_extended: u32) -> u64 {
-    u64::from(base).wrapping_add(sext32_to_u64(imm_extended))
+    base_register_add_imm(u64::from(base), imm_extended)
+}
+
+/// RV64I effective address: the full 64-bit base register plus an already-sign-extended 16-bit
+/// immediate, wrapping modulo 2^64. Callers bound the result to the implemented address space.
+#[inline(always)]
+pub fn base_register_add_imm(base: u64, imm_extended: u32) -> u64 {
+    base.wrapping_add(sext32_to_u64(imm_extended))
+}
+
+/// Upper 32 bits of a base register that is exactly 2^32 above a low-32-bit address.
+pub const BASE_HIGH_ONE: u32 = 1;
+/// Upper 32 bits of a base register that is a small negative `i64`.
+pub const BASE_HIGH_NEG: u32 = u32::MAX;
+
+/// Boolean witnesses `[base_hi_neg, base_hi_one]` for the upper 32 bits of a JALR/load/store base
+/// register.
+///
+/// RV64I allows any base register as long as `rs1 + sign_extend(imm)` is a valid address. With a
+/// 16-bit signed immediate and a 32-bit address space, the only upper words that can reach a
+/// valid address are `0`, [`BASE_HIGH_ONE`] (`rs1` is just above 2^32 and the immediate is
+/// negative) and [`BASE_HIGH_NEG`] (`rs1` is a small negative value and the immediate is
+/// positive). Returns `None` for any other upper word.
+#[inline(always)]
+pub fn base_high_flags(base_high: u32) -> Option<[bool; 2]> {
+    match base_high {
+        0 => Some([false, false]),
+        BASE_HIGH_NEG => Some([true, false]),
+        BASE_HIGH_ONE => Some([false, true]),
+        _ => None,
+    }
+}
+
+/// Constrains the base-register high-word flags and returns the register-bus block of a base
+/// register with low u16 cells `low` and upper word selected by `[hi_neg, hi_one]`.
+///
+/// The flags are boolean and mutually exclusive, so the upper word is one of `0`,
+/// [`BASE_HIGH_NEG`] or [`BASE_HIGH_ONE`]; since these encode distinct register-bus values, the
+/// memory bus pins the flags to the register's actual upper word.
+pub(crate) fn eval_base_register_block<AB: InteractionBuilder>(
+    builder: &mut AB,
+    low: &[AB::Var; PTR_U16_LIMBS],
+    hi_neg: AB::Var,
+    hi_one: AB::Var,
+) -> [AB::Expr; BLOCK_FE_WIDTH] {
+    builder.assert_bool(hi_neg);
+    builder.assert_bool(hi_one);
+    builder.assert_bool(hi_neg + hi_one);
+    let u16_max = AB::F::from_u32(u16::MAX as u32);
+    [
+        low[0].into(),
+        low[1].into(),
+        hi_neg * u16_max + hi_one,
+        hi_neg * u16_max,
+    ]
+}
+
+/// Correction, in units of 2^32, between the low-32-bit sum `rs1_lo + sign_extend(imm)` and the
+/// RV64 effective address: `+1` when the base is a small negative value (the low sum carries out
+/// of bit 31 and that carry cancels the all-ones upper word) and `-1` when the base's upper word
+/// is one (the low sum borrows).
+pub(crate) fn base_high_wrap<AB: InteractionBuilder>(hi_neg: AB::Var, hi_one: AB::Var) -> AB::Expr {
+    hi_neg.into() - hi_one.into()
 }
 
 #[inline(always)]
 pub(crate) fn checked_memory_address(
     pc: u32,
-    base: u32,
+    base: u64,
     imm_extended: u32,
     access_width: usize,
 ) -> Result<u32, ExecutionError> {
@@ -413,7 +475,7 @@ pub(crate) fn checked_memory_address(
     // full `MEM_SIZE` (2^32-byte) range.
     // TODO: use `MemoryConfig::pointer_max_bits` once execution state carries the memory config.
     debug_assert!(access_width <= MEM_SIZE);
-    let address = address_add_imm(base, imm_extended);
+    let address = base_register_add_imm(base, imm_extended);
     if address > (MEM_SIZE - access_width) as u64 {
         return Err(ExecutionError::Fail {
             pc,
@@ -475,6 +537,11 @@ pub fn u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; REGISTER_NUM_LIM
         out[2 * i + 1] = hi;
     }
     out
+}
+
+#[inline(always)]
+pub fn u16_block_to_u64(block: [u16; BLOCK_FE_WIDTH]) -> u64 {
+    u64::from_le_bytes(u16_block_to_bytes(block))
 }
 
 /// Left shift applied to the high u16 limb for the pointer-width range check.

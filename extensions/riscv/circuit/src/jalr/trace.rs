@@ -9,7 +9,7 @@ use openvm_riscv_transpiler::JalrOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 
 use super::{try_run_jalr, JalrChip, JalrCoreCols};
-use crate::adapters::{JalrAdapterCols, JalrAdapterFiller, PTR_U16_LIMBS, U16_BITS};
+use crate::adapters::{u16_block_to_u64, JalrAdapterCols, JalrAdapterFiller};
 
 /// Generates the RV64 JALR trace directly from immutable preflight history.
 pub fn generate_trace_from_postflight<F: PrimeField32>(
@@ -30,24 +30,17 @@ pub fn generate_trace_from_postflight<F: PrimeField32>(
             &chip.mem_helper.as_borrowed(),
             adapter_row.borrow_mut(),
             |from_pc, rs1, immediate, imm_sign| {
-                if rs1[PTR_U16_LIMBS..].iter().any(|&limb| limb != 0) {
-                    return Err(PostflightError::new(
-                        "JALR source register has nonzero upper 32 bits",
-                    ));
-                }
-                let rs1_value = u32::from(rs1[0]) | (u32::from(rs1[1]) << U16_BITS);
-                try_run_jalr(from_pc, rs1_value, immediate, imm_sign).ok_or_else(|| {
+                try_run_jalr(from_pc, u16_block_to_u64(rs1), immediate, imm_sign).ok_or_else(|| {
                     PostflightError::new(
                         "JALR target is outside implemented PC address space or misaligned",
                     )
                 })
             },
         )?;
-        let rs1_value = u32::from(rs1[0]) | (u32::from(rs1[1]) << U16_BITS);
         let instruction = postflight.instruction(step);
         chip.inner.fill_core_row(
             core_row.borrow_mut(),
-            rs1_value,
+            u16_block_to_u64(rs1),
             instruction.c.as_u32() as u16,
             instruction.g.is_one(),
             raw_target_pc,

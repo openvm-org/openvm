@@ -26,8 +26,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{load_width_for_opcode, LoadExecutor};
 use crate::adapters::{
-    bytes_to_u32, checked_memory_address, sign_extend_imm16, BYTE_ACCESS_WIDTH,
-    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
+    checked_memory_address, sign_extend_imm16, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
+    HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -191,7 +191,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
     let pc = exec_state.pc();
     let rs1_bytes: [u8; REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(REGISTER_AS, pre_compute.b as u32);
-    let rs1_val = bytes_to_u32(rs1_bytes);
+    let rs1_val = u64::from_le_bytes(rs1_bytes);
     let ptr_val = checked_memory_address(pc, rs1_val, pre_compute.imm_extended, OP::WIDTH)?;
     let write_data = OP::read(exec_state, ptr_val);
     if OP::WIDTH != BYTE_ACCESS_WIDTH

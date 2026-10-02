@@ -2,6 +2,7 @@
 
 #include "primitives/constants.h"
 #include "arch/rvr/replay.cuh"
+#include "riscv/adapters/base_register.cuh"
 
 using namespace program;
 using namespace riscv;
@@ -11,7 +12,7 @@ struct ReplayStoreMultiByteInput {
     uint32_t from_timestamp;
     uint32_t rs1_ptr;
     uint32_t rs2_ptr;
-    uint32_t rs1_val;
+    uint64_t rs1_val;
     uint32_t rs1_prev_timestamp;
     uint32_t rs2_prev_timestamp;
     uint32_t write_prev_timestamps[2];
@@ -108,17 +109,18 @@ static __device__ bool replay_store_multibyte(
     replay_u16_block(rs1_read.value, rs1);
     replay_u16_block(rs2_read.value, rs2);
     replay_u16_block(write0.value, logged_post[0]);
-    if (rs1[2] != 0 || rs1[3] != 0) {
+    // RV64I: the effective address is rs1 + sign_extend(imm) modulo 2^64.
+    uint64_t rs1_val = u16_block_to_u64(rs1);
+    bool rs1_hi_neg;
+    bool rs1_hi_one;
+    if (!base_high_flags(static_cast<uint32_t>(rs1_val >> 32), rs1_hi_neg, rs1_hi_one)) {
         preflight_set_error(error, 266);
         return false;
     }
-
-    uint32_t rs1_val =
-        static_cast<uint32_t>(rs1[0]) | (static_cast<uint32_t>(rs1[1]) << U16_BITS);
     int64_t signed_imm = imm_sign ? static_cast<int64_t>(imm) - (int64_t(1) << U16_BITS)
                                   : static_cast<int64_t>(imm);
-    int64_t effective = static_cast<int64_t>(rs1_val) + signed_imm;
-    if (effective < 0 || effective > UINT32_MAX) {
+    uint64_t effective = base_register_add_imm(rs1_val, signed_imm);
+    if (effective > UINT32_MAX) {
         preflight_set_error(error, 267);
         return false;
     }

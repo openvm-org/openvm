@@ -4,6 +4,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv/adapters/base_register.cuh"
 #include "riscv/adapters/jalr.cuh"
 
 using namespace riscv;
@@ -12,6 +13,8 @@ using namespace program;
 template <typename T> struct JalrCoreCols {
     T imm;                                  // 2 bytes
     T rs1_data[PTR_U16_LIMBS];         // low 32 bits of rs1 as u16 cells
+    T rs1_hi_neg;                           // upper 32 bits of rs1 are all ones
+    T rs1_hi_one;                           // upper 32 bits of rs1 equal one
     T rd_high[PTR_U16_LIMBS];          // high u16 limb and bit-32 carry of rd
     T is_valid;                             // 1 byte
     T raw_target_bit0;                  // bit zero of the target before JALR masking
@@ -21,7 +24,7 @@ template <typename T> struct JalrCoreCols {
 
 __device__ void run_jalr(
     uint32_t pc,
-    uint32_t rs1,
+    uint64_t rs1,
     uint16_t imm,
     bool imm_sign,
     uint32_t &out_raw_target_pc,
@@ -29,7 +32,8 @@ __device__ void run_jalr(
 ) {
     uint32_t offset = imm + (imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
     int64_t signed_offset = (int64_t)(int32_t)offset;
-    uint64_t raw_target_pc = uint64_t(rs1) + signed_offset;
+    // RV64I: the target is rs1 + sign_extend(imm) modulo 2^64.
+    uint64_t raw_target_pc = base_register_add_imm(rs1, signed_offset);
 
     assert(raw_target_pc <= uint64_t(UINT32_MAX));
     uint32_t to_pc = uint32_t(raw_target_pc) & ~1u;
@@ -49,7 +53,7 @@ struct JalrCore {
     __device__ JalrCore(VariableRangeChecker rc) : rc(rc) {}
 
     __device__ void fill_trace_row(
-        RowSlice row, uint32_t from_pc, uint32_t rs1_val, uint16_t imm, bool imm_sign
+        RowSlice row, uint32_t from_pc, uint64_t rs1_val, uint16_t imm, bool imm_sign
     ) {
         uint32_t raw_target_pc;
         uint16_t rd_data[BLOCK_FE_WIDTH];
@@ -72,7 +76,11 @@ struct JalrCore {
         rc.add_count(rd_low_u16_hi, U16_BITS);
 
         uint16_t rs1_limbs[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_limbs, rs1_val);
+        ptr_to_u16_limbs(rs1_limbs, static_cast<uint32_t>(rs1_val));
+        // The replay already rejected unreachable upper words.
+        bool rs1_hi_neg;
+        bool rs1_hi_one;
+        base_high_flags(static_cast<uint32_t>(rs1_val >> 32), rs1_hi_neg, rs1_hi_one);
 
         COL_WRITE_VALUE(row, JalrCoreCols, imm_sign, imm_sign);
         COL_WRITE_ARRAY(row, JalrCoreCols, to_pc_idx_limbs, to_pc_idx_limbs);
@@ -82,6 +90,8 @@ struct JalrCore {
         COL_WRITE_VALUE(row, JalrCoreCols, is_valid, 1);
 
         COL_WRITE_ARRAY(row, JalrCoreCols, rs1_data, rs1_limbs);
+        COL_WRITE_VALUE(row, JalrCoreCols, rs1_hi_neg, rs1_hi_neg);
+        COL_WRITE_VALUE(row, JalrCoreCols, rs1_hi_one, rs1_hi_one);
         uint32_t rd_limbs[PTR_U16_LIMBS] = {rd_low_u16_hi, rd_data[2]};
         COL_WRITE_ARRAY(row, JalrCoreCols, rd_high, rd_limbs);
         COL_WRITE_VALUE(row, JalrCoreCols, imm, imm);

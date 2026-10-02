@@ -19,8 +19,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    address_add_imm, expand_to_block, ptr_to_u16_limbs, u64_to_u16_block, PC_IDX_LOW_BITS,
-    PTR_U16_LIMBS, U16_BITS,
+    base_high_flags, base_high_wrap, base_register_add_imm, eval_base_register_block,
+    ptr_to_u16_limbs, u64_to_u16_block, PC_IDX_LOW_BITS, PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -29,6 +29,10 @@ pub struct JalrCoreCols<T> {
     pub imm: T,
     // Low 32 bits of rs1 as u16 cells.
     pub rs1_data: [T; PTR_U16_LIMBS],
+    /// Whether the upper 32 bits of rs1 are all ones (see [`base_high_flags`]).
+    pub rs1_hi_neg: T,
+    /// Whether the upper 32 bits of rs1 equal one (see [`base_high_flags`]).
+    pub rs1_hi_one: T,
     // The high u16 limb and bit-32 carry of rd; the low limb is derived from from_pc_idx.
     pub rd_high: [T; PTR_U16_LIMBS],
     pub is_valid: T,
@@ -72,6 +76,8 @@ where
         let JalrCoreCols::<AB::Var> {
             imm,
             rs1_data: rs1,
+            rs1_hi_neg,
+            rs1_hi_one,
             rd_high,
             is_valid,
             imm_sign,
@@ -112,11 +118,11 @@ where
 
         let inv = AB::F::from_u32(1 << U16_BITS).inverse();
 
-        // Constrain raw_target_bit0 + 4 * to_pc_idx_limbs = rs1 + imm as a
-        // low-32-bit addition with two u16 limbs, where to_pc_idx_limbs decompose the target pc
-        // *index*. RISC-V explicitly clears the least significant bit of the JALR target;
-        // a target with bit 1 set (misaligned) makes the low carry non-boolean, so it is
-        // unprovable.
+        // Constrain raw_target_bit0 + 4 * to_pc_idx_limbs = rs1 + imm (mod 2^64) with two u16
+        // limbs, where to_pc_idx_limbs decompose the target pc *index*. The target's upper word
+        // must be zero, so the carry out of bit 32 must cancel rs1's upper word. RISC-V explicitly
+        // clears the least significant bit of the JALR target; a target with bit 1 set
+        // (misaligned) makes the low carry non-boolean, so it is unprovable.
         builder.assert_bool(raw_target_bit0);
         let carry = (rs1[0] + imm - to_pc_idx_limbs[0] * pc_step - raw_target_bit0) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
@@ -125,7 +131,12 @@ where
         let imm_extend_limb = imm_sign * AB::F::from_u32(u16::MAX as u32);
         let carry = (rs1[1] + imm_extend_limb + carry - to_pc_idx_limbs[1]) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
-        builder.when(is_valid).assert_eq(carry, imm_sign);
+        // Upper word: rs1_hi + sign_extend(imm)_hi + carry == 0 (mod 2^32). With rs1_hi = 0 the
+        // carry equals imm_sign; an all-ones rs1_hi needs one more carry and rs1_hi = 1 one less.
+        builder.when(is_valid).assert_eq(
+            carry,
+            imm_sign.into() + base_high_wrap::<AB>(rs1_hi_neg, rs1_hi_one),
+        );
 
         // The limb widths bound the target pc index by 2^PC_IDX_BITS, i.e. the byte target by
         // 2^32; together with the boolean carries this pins the integer value of rs1 + imm.
@@ -138,8 +149,8 @@ where
         let to_pc_idx =
             to_pc_idx_limbs[0] + to_pc_idx_limbs[1] * AB::F::from_u32(1 << PC_IDX_LOW_BITS);
 
-        // Zero-extend low-32 rs1; rd additionally includes its bit-32 carry.
-        let rs1_data = expand_to_block(&rs1);
+        // rs1's upper word is pinned by the register bus; rd includes its bit-32 carry.
+        let rs1_data = eval_base_register_block(builder, &rs1, rs1_hi_neg, rs1_hi_one);
         let rd_data = [
             least_sig_limb,
             rd_high[0].into(),
@@ -187,7 +198,7 @@ impl JalrFiller {
     pub(crate) fn fill_core_row<F: PrimeField32>(
         &self,
         core_row: &mut JalrCoreCols<F>,
-        rs1_val: u32,
+        rs1: u64,
         imm: u16,
         imm_sign: bool,
         raw_target_pc: u32,
@@ -220,7 +231,11 @@ impl JalrFiller {
         core_row.raw_target_bit0 = F::from_bool(raw_target_pc & 1 == 1);
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
-        core_row.rs1_data = ptr_to_u16_limbs(rs1_val).map(F::from_u16);
+        let [rs1_hi_neg, rs1_hi_one] = base_high_flags((rs1 >> 32) as u32)
+            .expect("JALR with a valid target has a reachable base register");
+        core_row.rs1_hi_one = F::from_bool(rs1_hi_one);
+        core_row.rs1_hi_neg = F::from_bool(rs1_hi_neg);
+        core_row.rs1_data = ptr_to_u16_limbs(rs1 as u32).map(F::from_u16);
         core_row.rd_high = [F::from_u16(rd_low_u16_hi), F::from_u16(rd_data[2])];
         core_row.imm = F::from_u16(imm);
     }
@@ -231,7 +246,7 @@ impl JalrFiller {
 #[inline(always)]
 pub(super) fn run_jalr(
     pc: u32,
-    rs1: u32,
+    rs1: u64,
     imm: u16,
     imm_sign: bool,
 ) -> (u32, [u16; BLOCK_FE_WIDTH]) {
@@ -241,7 +256,7 @@ pub(super) fn run_jalr(
 
 pub(super) fn try_run_jalr(
     pc: u32,
-    rs1: u32,
+    rs1: u64,
     imm: u16,
     imm_sign: bool,
 ) -> Option<(u32, [u16; BLOCK_FE_WIDTH])> {
@@ -255,8 +270,8 @@ pub(super) fn try_run_jalr(
 }
 
 #[inline(always)]
-pub(super) fn checked_jalr_target(rs1: u32, imm_extended: u32) -> Option<(u32, u32)> {
-    let raw_target_pc = u32::try_from(address_add_imm(rs1, imm_extended)).ok()?;
+pub(super) fn checked_jalr_target(rs1: u64, imm_extended: u32) -> Option<(u32, u32)> {
+    let raw_target_pc = u32::try_from(base_register_add_imm(rs1, imm_extended)).ok()?;
     // RISC-V clears bit 0 before checking instruction alignment.
     let to_pc = raw_target_pc & !1;
     to_pc
