@@ -473,7 +473,7 @@ The RV64IM extension defines the following phantom sub-instructions.
 |-------------------| ------------ | -------- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | HintInput     | 0x20         | `_`      | Pops a byte vector `hint` from the input stream and resets the hint stream to equal `[(hint.len() as u64).to_le_bytes(), hint, zero padding to 8-byte alignment].concat()`.                                                                       |
 | PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r64{0}(a)..r64{0}(a) + r64{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
-| HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `8 * r64{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                     |
+| HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `8 * r64{0}(a)` random bytes. The host draws them from `rand::rngs::StdRng`, seeded once per execution. Its result is not constrained in any way.                                                                     |
 
 ### Deferral Extension
 

@@ -99,10 +99,10 @@ This is not used by OpenVM and `unreachable!()`.
 ```rust
 pub unsafe extern "C" fn sys_rand(recv_buf: *mut u32, words: usize);
 ```
-Calls `hintrandom` intrinsic to generate `words` random `u32` values using a fixed-seed random number generator on the host machine. Then calls the `hintbuffer` intrinsic to write the random values into `recv_buf`.
+Calls `hintrandom` intrinsic to generate `words` random `u32` values using a random number generator on the host machine, seeded with 32 bytes from the operating system's random source once per run. Then calls the `hintbuffer` intrinsic to write the random values into `recv_buf`.
 
 :::warning
-Users should ensure that host-provided deterministic pseudo-randomness meets their security requirements.
+The values are unconstrained: the proof carries no attestation that the host drew them honestly. A guest's public output must not depend on them.
 :::
 
 ```rust
