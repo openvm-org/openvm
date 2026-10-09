@@ -4,7 +4,6 @@ use core::{
     ops::{Mul, Neg},
 };
 
-use itertools::{izip, Itertools};
 use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
 
@@ -29,7 +28,7 @@ where
     const PSEUDO_BINARY_ENCODING: &[i8];
 
     /// Function to evaluate the line functions of the Miller loop
-    fn evaluate_lines_vec(f: Self::Fp12, lines: Vec<EvaluatedLine<Self::Fp2>>) -> Self::Fp12;
+    fn evaluate_lines_vec(f: Self::Fp12, lines: &[EvaluatedLine<Self::Fp2>]) -> Self::Fp12;
 
     /// Runs before the main loop in the Miller loop function
     ///
@@ -94,24 +93,23 @@ where
         let mut f = f_out;
         Q_acc = Q_acc_out;
 
+        // One buffer holds every iteration's lines (two per pair on a double-and-add step, one
+        // on a double step), and `Q_acc` is advanced in place, so an iteration allocates
+        // nothing. Fresh vectors per iteration are freed right away by a reclaiming allocator,
+        // but a guest on a bump allocator never gets them back: its heap would grow with every
+        // iteration of every pairing.
+        let mut lines = Vec::with_capacity(2 * xy_fracs.len());
+
         for i in (0..Self::PSEUDO_BINARY_ENCODING.len() - 2).rev() {
             f.square_assign();
-
-            let mut lines = Vec::with_capacity(xy_fracs.len());
+            lines.clear();
 
             if Self::PSEUDO_BINARY_ENCODING[i] == 0 {
                 // Run miller double step if \sigma_i == 0
-                // OPT[jpw]: Q_acc could be mutated in-place for better memory allocation
-                let (Q_out, lines_2S) = Q_acc
-                    .iter()
-                    .map(Self::miller_double_step)
-                    .unzip::<_, _, Vec<_>, Vec<_>>();
-                Q_acc = Q_out;
-
-                let lines_iter = izip!(lines_2S.iter(), xy_fracs.iter());
-                for (line_2S, xy_frac) in lines_iter {
-                    let line = line_2S.evaluate(xy_frac);
-                    lines.push(line);
+                for (Q_acc, xy_frac) in Q_acc.iter_mut().zip(&xy_fracs) {
+                    let (Q_out, line_2S) = Self::miller_double_step(Q_acc);
+                    *Q_acc = Q_out;
+                    lines.push(line_2S.evaluate(xy_frac));
                 }
             } else {
                 // use embedded exponent technique if c is provided
@@ -126,37 +124,22 @@ where
                 };
 
                 // Run miller double and add if \sigma_i != 0
-                // OPT[jpw]: Q_acc could be mutated in-place for better memory allocation
-                let (Q_out, lines_S_plus_Q, lines_S_plus_Q_plus_S): (Vec<_>, Vec<_>, Vec<_>) =
-                    Q_acc
-                        .iter()
-                        .zip(&Q)
-                        .map(|(Q_acc, q)| {
-                            // OPT[jpw]: cache the neg q outside of the loop
-                            let q_signed = match Self::PSEUDO_BINARY_ENCODING[i] {
-                                1 => q,
-                                -1 => &q.neg_borrow(),
-                                _ => panic!("Invalid sigma_i"),
-                            };
-                            Self::miller_double_and_add_step(Q_acc, q_signed)
-                        })
-                        .multiunzip();
-                Q_acc = Q_out;
-
-                let lines_iter = izip!(
-                    lines_S_plus_Q.iter(),
-                    lines_S_plus_Q_plus_S.iter(),
-                    xy_fracs.iter(),
-                );
-                for (line_S_plus_Q, line_S_plus_Q_plus_S, xy_frac) in lines_iter {
-                    let line0 = line_S_plus_Q.evaluate(xy_frac);
-                    let line1 = line_S_plus_Q_plus_S.evaluate(xy_frac);
-                    lines.push(line0);
-                    lines.push(line1);
+                for ((Q_acc, q), xy_frac) in Q_acc.iter_mut().zip(&Q).zip(&xy_fracs) {
+                    // OPT[jpw]: cache the neg q outside of the loop
+                    let q_signed = match Self::PSEUDO_BINARY_ENCODING[i] {
+                        1 => q,
+                        -1 => &q.neg_borrow(),
+                        _ => panic!("Invalid sigma_i"),
+                    };
+                    let (Q_out, line_S_plus_Q, line_S_plus_Q_plus_S) =
+                        Self::miller_double_and_add_step(Q_acc, q_signed);
+                    *Q_acc = Q_out;
+                    lines.push(line_S_plus_Q.evaluate(xy_frac));
+                    lines.push(line_S_plus_Q_plus_S.evaluate(xy_frac));
                 }
             };
 
-            f = Self::evaluate_lines_vec(f, lines);
+            f = Self::evaluate_lines_vec(f, &lines);
         }
 
         let (f_out, _) = Self::post_loop(&f, Q_acc.clone(), &Q, c, &xy_fracs);
