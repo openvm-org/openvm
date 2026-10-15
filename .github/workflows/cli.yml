@@ -75,7 +75,7 @@ jobs:
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
       - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+        run: rustup component add rust-src --toolchain nightly-2026-02-28
 
       - name: Build and run book examples
         working-directory: examples

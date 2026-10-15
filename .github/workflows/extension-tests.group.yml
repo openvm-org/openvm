@@ -122,7 +122,7 @@ jobs:
             if [[ -f "extensions/$extension/tests/Cargo.toml" ]]; then
               echo "::group::Running integration tests for $extension"
               pushd "extensions/$extension/tests"
-              rustup component add rust-src --toolchain nightly-2026-01-18
+              rustup component add rust-src --toolchain nightly-2026-02-28
               if [[ "${{ inputs.mode }}" == "cuda" ]]; then
                 CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast --features=cuda --profile=heavy --no-tests=pass
               else
