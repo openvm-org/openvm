@@ -63,7 +63,7 @@ jobs:
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
 
       - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+        run: rustup component add rust-src --toolchain nightly-2026-02-28
 
       - name: Run guest library tests
         env:

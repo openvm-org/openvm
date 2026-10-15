@@ -177,7 +177,7 @@ jobs:
         run: ./target/x86_64-unknown-linux-gnu/release/${BINARY_NAME} openvm --version
 
       - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+        run: rustup component add rust-src --toolchain nightly-2026-02-28
 
       - name: Smoke test CUDA proving
         working-directory: crates/cli

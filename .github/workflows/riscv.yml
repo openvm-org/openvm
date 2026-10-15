@@ -115,7 +115,7 @@ jobs:
       - name: Run RISC-V test vector tests
         working-directory: crates/toolchain/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          rustup component add rust-src --toolchain nightly-2026-02-28
           if [[ "${{ matrix.platform.features }}" == *"cuda"* ]]; then
             TEST_NAME=test_rv32im_riscv_vector_prove
           else
