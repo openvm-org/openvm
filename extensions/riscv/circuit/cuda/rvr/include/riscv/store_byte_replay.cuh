@@ -2,6 +2,7 @@
 
 #include "primitives/constants.h"
 #include "arch/rvr/replay.cuh"
+#include "riscv/adapters/base_register.cuh"
 
 using namespace program;
 using namespace riscv;
@@ -95,19 +96,14 @@ static __device__ bool replay_store_byte(
     replay_u16_block(rs1_read.value, rs1);
     replay_u16_block(rs2_read.value, rs2);
     replay_u16_block(write.value, logged_post);
-    if (rs1[2] != 0 || rs1[3] != 0) {
-        preflight_set_error(error, 256);
-        return false;
-    }
-    uint32_t rs1_val =
-        static_cast<uint32_t>(rs1[0]) | (static_cast<uint32_t>(rs1[1]) << U16_BITS);
+    uint64_t rs1_val = u16_block_to_u64(rs1);
     int64_t signed_imm = imm_sign ? static_cast<int64_t>(imm) - (int64_t(1) << U16_BITS)
                                   : static_cast<int64_t>(imm);
-    int64_t effective = static_cast<int64_t>(rs1_val) + signed_imm;
+    uint64_t effective = base_register_add_imm(rs1_val, signed_imm);
     bool exceeds_configured_width =
         pointer_max_bits < 32 &&
         static_cast<uint64_t>(effective) >= (uint64_t(1) << pointer_max_bits);
-    if (effective < 0 || effective > UINT32_MAX || exceeds_configured_width) {
+    if (effective > UINT32_MAX || exceeds_configured_width) {
         preflight_set_error(error, 257);
         return false;
     }
@@ -159,7 +155,7 @@ static __device__ bool replay_store_byte(
     out.from_timestamp = from.timestamp;
     out.rs1_ptr = rs1_ptr;
     out.rs2_ptr = rs2_ptr;
-    out.rs1_val = rs1_val;
+    out.rs1_val = static_cast<uint32_t>(rs1_val);
     out.rs1_prev_timestamp = rs1_previous.timestamp;
     out.rs2_prev_timestamp = rs2_previous.timestamp;
     out.write_prev_timestamp = write_previous.timestamp;

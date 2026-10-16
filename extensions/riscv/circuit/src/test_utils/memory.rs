@@ -27,12 +27,24 @@ use {
 };
 
 use crate::{
-    adapters::{bytes_to_u16_block, bytes_to_u32, sign_extend_imm16, u16_block_to_bytes},
+    adapters::{base_register_add_imm, bytes_to_u16_block, sign_extend_imm16, u16_block_to_bytes},
     load::common::load_write_data,
     store::common::store_write_data,
 };
 
 pub(crate) const IMM_BITS: usize = 16;
+
+/// `(rs1, imm, imm_sign)` load/store operands whose base register has a nonzero upper word but
+/// whose RV64I effective address `rs1 + sign_extend(imm)` (mod 2^64) is in the 32-bit address
+/// space.
+pub(crate) const WRAPPED_BASE_CASES: [(u64, u32, u32); 4] = [
+    // Small negative base plus a positive immediate.
+    (-8i64 as u64, 16, 0),
+    (-0x7000i64 as u64, 0x7fff, 0),
+    // Base just above 2^32 plus a negative immediate.
+    ((1 << 32) + 8, 0xffe8, 1),
+    ((1 << 32) + 0x10, 0x8000, 1),
+];
 pub(crate) const MAX_INS_CAPACITY: usize = 128;
 pub(crate) type F = BabyBear;
 
@@ -72,8 +84,7 @@ fn random_memory_access(
     let rs1_low = (ptr_val as i64 - imm_signed) as u32;
     let ptr = rs1_low.to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
-    let rs1_low = bytes_to_u32(rs1);
-    let ptr_val = imm_ext.wrapping_add(rs1_low);
+    let ptr_val = base_register_add_imm(u64::from_le_bytes(rs1), imm_ext) as u32;
     let shift_amount = (ptr_val as usize) & 7;
     let base_ptr = (ptr_val as usize) - shift_amount;
 

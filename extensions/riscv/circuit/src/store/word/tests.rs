@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, sync::Arc};
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::arch::testing::{
@@ -18,19 +18,30 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LoadStoreOpcode::{self, STOREW};
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
 use openvm_stark_sdk::utils::create_seeded_rng;
 
 use super::trace::generate_trace_from_postflight;
 use crate::{
     adapters::{
-        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterFiller, BYTE_BITS,
+        bytes_to_u16_block, StoreMultiByteAdapterAir, StoreMultiByteAdapterCols,
+        StoreMultiByteAdapterFiller, BYTE_BITS,
     },
     store::{
         common::store_write_data, StoreWordAir, StoreWordChip, StoreWordCoreAir, StoreWordExecutor,
         StoreWordFiller,
     },
-    test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
+    test_utils::memory::{
+        set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY, WRAPPED_BASE_CASES,
+    },
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use crate::{
@@ -191,6 +202,89 @@ fn run_storew_sanity_test() {
     );
 }
 
+#[test]
+fn positive_storew_wrapped_base_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, bitwise) = create_store_word_harness(&mut tester);
+    for (rs1, imm, imm_sign) in WRAPPED_BASE_CASES {
+        set_and_execute_store(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            STOREW,
+            Some(rs1.to_le_bytes()),
+            Some(imm),
+            Some(imm_sign),
+        );
+    }
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+fn negative_storew_address_carries_test_case(
+    rs1: u64,
+    imm: u32,
+    imm_sign: u32,
+    address_carries: u32,
+    flip_sign: bool,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, bitwise) = create_store_word_harness(&mut tester);
+    set_and_execute_store(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.preflight,
+        &mut rng,
+        STOREW,
+        Some(rs1.to_le_bytes()),
+        Some(imm),
+        Some(imm_sign),
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter: &mut StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter.address_carries = F::from_u32(address_carries);
+        if flip_sign {
+            adapter.imm_sign = F::from_u32(1 - imm_sign);
+        }
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked address carries should fail");
+}
+
+#[test]
+fn negative_storew_address_carries_test() {
+    // Wrong valid states and non-ternary witnesses, with both immediate signs.
+    for carries in [1, 2, 3, 2_013_265_920] {
+        negative_storew_address_carries_test_case(0x1000, 8, 0, carries, false);
+        negative_storew_address_carries_test_case((1 << 32) + 8, 0xffe8, 1, carries, false);
+    }
+    for carries in [0, 1, 3, 2_013_265_920] {
+        negative_storew_address_carries_test_case(0x1000, 0xfff8, 1, carries, false);
+        negative_storew_address_carries_test_case(-8i64 as u64, 16, 0, carries, false);
+    }
+    // The instruction still pins the sign used to decode the carry pair.
+    negative_storew_address_carries_test_case(-8i64 as u64, 16, 0, 2, true);
+    negative_storew_address_carries_test_case((1 << 32) + 8, 0xffe8, 1, 0, true);
+}
+
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 type GpuStoreWordHarness =
     GpuTestChipHarness<F, StoreWordExecutor, StoreWordAir, StoreWordChipGpu, StoreWordChip<F>>;
@@ -253,6 +347,18 @@ fn test_cuda_rand_store_word_tracegen() {
             None,
             None,
             None,
+        );
+    }
+    for (rs1, imm, imm_sign) in WRAPPED_BASE_CASES {
+        set_and_execute_store(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.preflight,
+            &mut rng,
+            STOREW,
+            Some(rs1.to_le_bytes()),
+            Some(imm),
+            Some(imm_sign),
         );
     }
     tester

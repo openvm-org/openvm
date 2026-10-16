@@ -4,6 +4,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "riscv-adapters/pointer_conv.cuh"
+#include "riscv/adapters/base_register.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -18,7 +19,7 @@ template <typename T> struct StoreMultiByteAdapterCols {
     MemoryReadAuxCols<T> read_data_aux;
     T imm;
     T imm_sign;
-    T mem_ptr_low_limb;
+    T address_carries;
     MemoryBaseAuxCols<T> write_base_aux[2];
 };
 
@@ -32,7 +33,8 @@ struct StoreAdapter {
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
     )
-        : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
+        : pointer_max_bits(pointer_max_bits < 32 ? pointer_max_bits : 32),
+          range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(
@@ -93,7 +95,12 @@ struct StoreAdapter {
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
-        COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
+        COL_WRITE_VALUE(
+            row,
+            StoreMultiByteAdapterCols,
+            address_carries,
+            base_address_carries(rs1_val, imm, imm_sign)
+        );
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
@@ -113,7 +120,7 @@ template <typename T> struct StoreByteAdapterCols {
     MemoryReadAuxCols<T> read_data_aux;
     T imm;
     T imm_sign;
-    T mem_ptr_low_limb;
+    T address_carries;
     MemoryBaseAuxCols<T> write_base_aux;
 };
 
@@ -127,7 +134,8 @@ struct StoreByteAdapter {
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
     )
-        : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
+        : pointer_max_bits(pointer_max_bits < 32 ? pointer_max_bits : 32),
+          range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(
@@ -177,7 +185,9 @@ struct StoreByteAdapter {
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
-        COL_WRITE_VALUE(row, StoreByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
+        COL_WRITE_VALUE(
+            row, StoreByteAdapterCols, address_carries, base_address_carries(rs1_val, imm, imm_sign)
+        );
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         uint32_t aligned_limb = ptr_limbs[0] - shift_amount;

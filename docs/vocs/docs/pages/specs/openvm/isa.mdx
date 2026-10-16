@@ -352,14 +352,15 @@ The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` de
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering
 the 32 bits as the 2’s complement of an `i32`.
 
-We use the shorthand `r64{c,g}(b) := u32([b:8]_1) + sign_extend(decompose(c)[0:2], g)`. This reads
-the 64-bit register `[b:8]_1` as a u32 byte pointer (the upper 4 bytes must be zero), then adds the
-signed immediate without wrapping. For consistency with other notation,
+We use the shorthand `r64{c,g}(b) := u64([b:8]_1) + sign_extend(decompose(c)[0:2], g) (mod 2^64)`.
+As in RV64I, this adds the sign-extended immediate to the full 64-bit register `[b:8]_1` with 64-bit
+wrapping; the register itself may have nonzero upper bytes. For consistency with other notation,
 we define the shorthand `r64{c}(b)` to mean `r64{c,g}(b)` where `g` is set to the most significant bit of `c`.
 
 Memory access to `ptr = r64{c,g}(b)` in address space `e` is only valid if the full access lies in
 the configured memory range, which is `[0, 2^32)` by default. An access uses one or two aligned
-8-byte blocks. Address arithmetic must not wrap.
+8-byte blocks. Only the 64-bit effective address may wrap: the access itself must not wrap past the
+end of the memory range.
 The data size is `1` for LOADB_RV64, LOADBU_RV64, STOREB_RV64, `2` for LOADH_RV64, LOADHU_RV64, STOREH_RV64, `4` for LOADW_RV64, STOREW_RV64, and `8` for LOADD_RV64, STORED_RV64.
 
 All load/store instructions always do block accesses of block size `8`, even for LOADB_RV64 and STOREB_RV64.
@@ -400,7 +401,7 @@ For branch instructions, `i32(c)` is a signed byte offset in `[-2^12, 2^12)`; fo
 
 For JALR_RV64, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. It is then added to the register value `u32([b:8]_1)` (the upper 4 bytes of the 64-bit register must be zero) without wrapping. JALR clears bit 0 before checking that the target is in range and 4-byte aligned.
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. It is then added to the full 64-bit register value `u64([b:8]_1)` modulo `2^64`, as in RV64I, so the register may have nonzero upper bytes. JALR clears bit 0 before checking that the target is in range and 4-byte aligned.
 
 For LUI_RV64, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
 For AUIPC_RV64, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.

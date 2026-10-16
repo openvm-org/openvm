@@ -1826,6 +1826,96 @@ mod tests {
         Ok(())
     }
 
+    /// RV64I computes JALR, load and store addresses as `rs1 + sign_extend(imm)` modulo 2^64, so
+    /// a base register with a nonzero upper word is valid whenever the sum is. Exercises both
+    /// wraps: a small negative base with a positive offset, and a base just above 2^32 with a
+    /// negative offset.
+    #[test]
+    fn test_wrapped_base_register() -> Result<()> {
+        const X0: u32 = 0;
+        let i_type = |opcode: u32, funct3: u32, rd: u32, rs1: u32, imm: i32| {
+            ((imm as u32 & 0xfff) << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
+        };
+        let s_type = |funct3: u32, rs2: u32, rs1: u32, imm: i32| {
+            let imm = imm as u32 & 0xfff;
+            ((imm >> 5) << 25)
+                | (rs2 << 20)
+                | (rs1 << 15)
+                | (funct3 << 12)
+                | ((imm & 0x1f) << 7)
+                | 0x23
+        };
+        let addi = |rd, rs1, imm| i_type(0x13, 0, rd, rs1, imm);
+        let slli = |rd, rs1, shamt| i_type(0x13, 1, rd, rs1, shamt);
+        let load = |funct3, rd, rs1, imm| i_type(0x03, funct3, rd, rs1, imm);
+        let (lb, lw, ld, lbu) = (0, 2, 3, 4);
+        let (sb, sw, sd) = (0, 2, 3);
+        let jalr = |rd, rs1, imm| i_type(0x67, 0, rd, rs1, imm);
+        let terminate = |code| {
+            i_type(
+                openvm_riscv_guest::SYSTEM_OPCODE as u32,
+                openvm_riscv_guest::TERMINATE_FUNCT3 as u32,
+                X0,
+                X0,
+                code,
+            )
+        };
+
+        let value = 0x5a;
+        let words = [
+            addi(1, X0, -8),
+            addi(2, X0, value),
+            // Small negative base, positive offset: addresses 0x40 and 0x49.
+            s_type(sd, 2, 1, 0x48),
+            load(ld, 3, 1, 0x48),
+            s_type(sb, 2, 1, 0x51),
+            load(lbu, 4, 1, 0x51),
+            // Base 2^32 + 8, negative offset: addresses 2^32 - 4 and 2^32 - 8.
+            addi(5, X0, 1),
+            slli(5, 5, 32),
+            addi(5, 5, 8),
+            s_type(sw, 2, 5, -12),
+            load(lw, 6, 5, -12),
+            s_type(sb, 2, 5, -16),
+            load(lb, 7, 5, -16),
+            // JALR from a negative base to pc 0x40, skipping the failing TERMINATE.
+            addi(8, X0, -4),
+            jalr(9, 8, 0x44),
+            terminate(1),
+            terminate(0),
+        ];
+        let transpiler = Transpiler::default()
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension);
+        let instructions = transpiler
+            .transpile(&words)?
+            .into_iter()
+            .map(|instruction| instruction.expect("every word transpiles"))
+            .collect::<Vec<_>>();
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        // The default memory config covers the full 2^32-byte address space.
+        let config = Rv64ImConfig::default();
+
+        let executor = VmExecutor::<F, _>::new(config.clone())?;
+        let state = executor.instance(&exe)?.execute(Vec::<Vec<u8>>::new())?;
+        let register = |index: u32| {
+            u64::from_le_bytes(unsafe {
+                state
+                    .memory
+                    .read_bytes::<8>(openvm_instructions::riscv::REGISTER_AS, index * 8)
+            })
+        };
+        for index in [3, 4, 6, 7] {
+            assert_eq!(register(index), value as u64);
+        }
+        assert_eq!(register(9), 15 * 4);
+        assert_eq!(state.pc(), 16 * 4);
+
+        air_test(Rv64ImBuilder, config, exe);
+        Ok(())
+    }
+
     #[test]
     fn test_print() -> Result<()> {
         let config = test_rv64im_config();

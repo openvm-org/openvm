@@ -402,10 +402,48 @@ pub fn address_add_imm(base: u32, imm_extended: u32) -> u64 {
     u64::from(base).wrapping_add(sext32_to_u64(imm_extended))
 }
 
+/// RV64I effective address: the full 64-bit base register plus an already-sign-extended 16-bit
+/// immediate, wrapping modulo 2^64. Callers bound the result to the implemented address space.
+#[inline(always)]
+pub fn base_register_add_imm(base: u64, imm_extended: u32) -> u64 {
+    base.wrapping_add(sext32_to_u64(imm_extended))
+}
+
+/// Reconstructs the base and two addition carries from their sum in {0, 1, 2}.
+/// The immediate sign distinguishes the two carry pairs whose sum is one.
+pub(crate) fn eval_base_register_block<AB: InteractionBuilder>(
+    builder: &mut AB,
+    low: &[AB::Var; PTR_U16_LIMBS],
+    carries: AB::Var,
+    imm_sign: AB::Var,
+) -> ([AB::Expr; BLOCK_FE_WIDTH], AB::Expr, AB::Expr) {
+    // Ungated so the degree remains three, including padding rows.
+    builder.assert_zero(carries * (carries - AB::F::ONE) * (carries - AB::F::TWO));
+    let half = AB::F::TWO.inverse();
+    let l0 = (carries - AB::F::ONE) * (carries - AB::F::TWO) * half;
+    let l1 = carries * (AB::Expr::TWO - carries);
+    let l2 = carries * (carries - AB::F::ONE) * half;
+    let carry0 = l2.clone() + (AB::Expr::ONE - imm_sign) * l1.clone();
+    let carry1 = l2.clone() + imm_sign * l1;
+    let hi_neg = (AB::Expr::ONE - imm_sign) * l2;
+    let hi_one = imm_sign * l0;
+    let u16_max = AB::F::from_u32(u16::MAX as u32);
+    (
+        [
+            low[0].into(),
+            low[1].into(),
+            hi_neg.clone() * u16_max + hi_one,
+            hi_neg * u16_max,
+        ],
+        carry0,
+        carry1,
+    )
+}
+
 #[inline(always)]
 pub(crate) fn checked_memory_address(
     pc: u32,
-    base: u32,
+    base: u64,
     imm_extended: u32,
     access_width: usize,
 ) -> Result<u32, ExecutionError> {
@@ -413,7 +451,7 @@ pub(crate) fn checked_memory_address(
     // full `MEM_SIZE` (2^32-byte) range.
     // TODO: use `MemoryConfig::pointer_max_bits` once execution state carries the memory config.
     debug_assert!(access_width <= MEM_SIZE);
-    let address = address_add_imm(base, imm_extended);
+    let address = base_register_add_imm(base, imm_extended);
     if address > (MEM_SIZE - access_width) as u64 {
         return Err(ExecutionError::Fail {
             pc,
@@ -475,6 +513,11 @@ pub fn u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; REGISTER_NUM_LIM
         out[2 * i + 1] = hi;
     }
     out
+}
+
+#[inline(always)]
+pub fn u16_block_to_u64(block: [u16; BLOCK_FE_WIDTH]) -> u64 {
+    u64::from_le_bytes(u16_block_to_bytes(block))
 }
 
 /// Left shift applied to the high u16 limb for the pointer-width range check.

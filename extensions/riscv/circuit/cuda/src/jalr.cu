@@ -4,6 +4,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv/adapters/base_register.cuh"
 #include "riscv/adapters/jalr.cuh"
 
 using namespace riscv;
@@ -21,7 +22,7 @@ template <typename T> struct JalrCoreCols {
 
 __device__ void run_jalr(
     uint32_t pc,
-    uint32_t rs1,
+    uint64_t rs1,
     uint16_t imm,
     bool imm_sign,
     uint32_t &out_raw_target_pc,
@@ -29,7 +30,7 @@ __device__ void run_jalr(
 ) {
     uint32_t offset = imm + (imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
     int64_t signed_offset = (int64_t)(int32_t)offset;
-    uint64_t raw_target_pc = uint64_t(rs1) + signed_offset;
+    uint64_t raw_target_pc = base_register_add_imm(rs1, signed_offset);
 
     assert(raw_target_pc <= uint64_t(UINT32_MAX));
     uint32_t to_pc = uint32_t(raw_target_pc) & ~1u;
@@ -49,7 +50,7 @@ struct JalrCore {
     __device__ JalrCore(VariableRangeChecker rc) : rc(rc) {}
 
     __device__ void fill_trace_row(
-        RowSlice row, uint32_t from_pc, uint32_t rs1_val, uint16_t imm, bool imm_sign
+        RowSlice row, uint32_t from_pc, uint64_t rs1_val, uint16_t imm, bool imm_sign
     ) {
         uint32_t raw_target_pc;
         uint16_t rd_data[BLOCK_FE_WIDTH];
@@ -72,7 +73,7 @@ struct JalrCore {
         rc.add_count(rd_low_u16_hi, U16_BITS);
 
         uint16_t rs1_limbs[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_limbs, rs1_val);
+        ptr_to_u16_limbs(rs1_limbs, static_cast<uint32_t>(rs1_val));
 
         COL_WRITE_VALUE(row, JalrCoreCols, imm_sign, imm_sign);
         COL_WRITE_ARRAY(row, JalrCoreCols, to_pc_idx_limbs, to_pc_idx_limbs);
