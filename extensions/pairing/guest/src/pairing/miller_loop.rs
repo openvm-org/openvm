@@ -93,6 +93,12 @@ where
         let mut f = f_out;
         Q_acc = Q_acc_out;
 
+        let Q_neg = if Self::PSEUDO_BINARY_ENCODING.contains(&-1) {
+            Q.iter().map(AffinePoint::neg_borrow).collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+
         // One buffer holds every iteration's lines (two per pair on a double-and-add step, one
         // on a double step), and `Q_acc` is advanced in place, so an iteration allocates
         // nothing. Fresh vectors per iteration are freed right away by a reclaiming allocator,
@@ -124,13 +130,12 @@ where
                 };
 
                 // Run miller double and add if \sigma_i != 0
-                for ((Q_acc, q), xy_frac) in Q_acc.iter_mut().zip(&Q).zip(&xy_fracs) {
-                    // OPT[jpw]: cache the neg q outside of the loop
-                    let q_signed = match Self::PSEUDO_BINARY_ENCODING[i] {
-                        1 => q,
-                        -1 => &q.neg_borrow(),
-                        _ => panic!("Invalid sigma_i"),
-                    };
+                let Q_signed = match Self::PSEUDO_BINARY_ENCODING[i] {
+                    1 => &Q,
+                    -1 => &Q_neg,
+                    _ => panic!("Invalid sigma_i"),
+                };
+                for ((Q_acc, q_signed), xy_frac) in Q_acc.iter_mut().zip(Q_signed).zip(&xy_fracs) {
                     let (Q_out, line_S_plus_Q, line_S_plus_Q_plus_S) =
                         Self::miller_double_and_add_step(Q_acc, q_signed);
                     *Q_acc = Q_out;
