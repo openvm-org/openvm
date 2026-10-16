@@ -12,7 +12,7 @@ struct ReplayStoreByteInput {
     uint32_t from_timestamp;
     uint32_t rs1_ptr;
     uint32_t rs2_ptr;
-    uint64_t rs1_val;
+    uint32_t rs1_val;
     uint32_t rs1_prev_timestamp;
     uint32_t rs2_prev_timestamp;
     uint32_t write_prev_timestamp;
@@ -96,12 +96,7 @@ static __device__ bool replay_store_byte(
     replay_u16_block(rs1_read.value, rs1);
     replay_u16_block(rs2_read.value, rs2);
     replay_u16_block(write.value, logged_post);
-    // RV64I: the effective address is rs1 + sign_extend(imm) modulo 2^64.
     uint64_t rs1_val = u16_block_to_u64(rs1);
-    if (!valid_base_high(static_cast<uint32_t>(rs1_val >> 32))) {
-        preflight_set_error(error, 256);
-        return false;
-    }
     int64_t signed_imm = imm_sign ? static_cast<int64_t>(imm) - (int64_t(1) << U16_BITS)
                                   : static_cast<int64_t>(imm);
     uint64_t effective = base_register_add_imm(rs1_val, signed_imm);
@@ -160,7 +155,7 @@ static __device__ bool replay_store_byte(
     out.from_timestamp = from.timestamp;
     out.rs1_ptr = rs1_ptr;
     out.rs2_ptr = rs2_ptr;
-    out.rs1_val = rs1_val;
+    out.rs1_val = static_cast<uint32_t>(rs1_val);
     out.rs1_prev_timestamp = rs1_previous.timestamp;
     out.rs2_prev_timestamp = rs2_previous.timestamp;
     out.write_prev_timestamp = write_previous.timestamp;

@@ -12,7 +12,7 @@ struct ReplayLoadByteInput {
     uint32_t from_timestamp;
     uint32_t rs1_ptr;
     uint32_t rd_ptr;
-    uint64_t rs1_val;
+    uint32_t rs1_val;
     uint32_t rs1_prev_timestamp;
     uint32_t read_prev_timestamp;
     uint32_t write_prev_timestamp;
@@ -110,12 +110,7 @@ static __device__ bool replay_load_byte(
     uint16_t read_data[BLOCK_FE_WIDTH];
     replay_u16_block(rs1_read.value, rs1);
     replay_u16_block(read.value, read_data);
-    // RV64I: the effective address is rs1 + sign_extend(imm) modulo 2^64.
     uint64_t rs1_val = u16_block_to_u64(rs1);
-    if (!valid_base_high(static_cast<uint32_t>(rs1_val >> 32))) {
-        preflight_set_error(error, 226);
-        return false;
-    }
     int64_t signed_imm = imm_sign ? static_cast<int64_t>(imm) - (int64_t(1) << U16_BITS)
                                   : static_cast<int64_t>(imm);
     uint64_t effective = base_register_add_imm(rs1_val, signed_imm);
@@ -181,7 +176,7 @@ static __device__ bool replay_load_byte(
     out.from_timestamp = from.timestamp;
     out.rs1_ptr = rs1_ptr;
     out.rd_ptr = rd_ptr;
-    out.rs1_val = rs1_val;
+    out.rs1_val = static_cast<uint32_t>(rs1_val);
     out.rs1_prev_timestamp = rs1_previous.timestamp;
     out.read_prev_timestamp = read_previous.timestamp;
     out.write_prev_timestamp = write_previous.timestamp;

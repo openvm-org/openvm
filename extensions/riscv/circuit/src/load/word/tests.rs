@@ -223,8 +223,6 @@ fn negative_split_opcode_role_test() {
 
 #[test]
 fn positive_loadwu_wrapped_base_test() {
-    // RV64I: rs1 + sign_extend(imm) wraps modulo 2^64, so a base with a nonzero upper word can
-    // still address the 32-bit memory space.
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_word_harness(&mut tester);
@@ -250,7 +248,7 @@ fn positive_loadwu_wrapped_base_test() {
         .unwrap();
 }
 
-fn negative_loadwu_base_high_flags_test_case(
+fn negative_loadwu_address_carries_test_case(
     rs1: u64,
     imm: u32,
     imm_sign: u32,
@@ -293,19 +291,19 @@ fn negative_loadwu_base_high_flags_test_case(
 }
 
 #[test]
-fn negative_loadwu_base_high_flags_test() {
+fn negative_loadwu_address_carries_test() {
     // Wrong valid states and non-ternary witnesses, with both immediate signs.
     for carries in [1, 2, 3, 2_013_265_920] {
-        negative_loadwu_base_high_flags_test_case(0x1000, 8, 0, carries, false);
-        negative_loadwu_base_high_flags_test_case((1 << 32) + 8, 0xffe8, 1, carries, false);
+        negative_loadwu_address_carries_test_case(0x1000, 8, 0, carries, false);
+        negative_loadwu_address_carries_test_case((1 << 32) + 8, 0xffe8, 1, carries, false);
     }
     for carries in [0, 1, 3, 2_013_265_920] {
-        negative_loadwu_base_high_flags_test_case(0x1000, 0xfff8, 1, carries, false);
-        negative_loadwu_base_high_flags_test_case(-8i64 as u64, 16, 0, carries, false);
+        negative_loadwu_address_carries_test_case(0x1000, 0xfff8, 1, carries, false);
+        negative_loadwu_address_carries_test_case(-8i64 as u64, 16, 0, carries, false);
     }
     // The instruction still pins the sign used to decode the carry pair.
-    negative_loadwu_base_high_flags_test_case(-8i64 as u64, 16, 0, 2, true);
-    negative_loadwu_base_high_flags_test_case((1 << 32) + 8, 0xffe8, 1, 0, true);
+    negative_loadwu_address_carries_test_case(-8i64 as u64, 16, 0, 2, true);
+    negative_loadwu_address_carries_test_case((1 << 32) + 8, 0xffe8, 1, 0, true);
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]

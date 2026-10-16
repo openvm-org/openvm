@@ -28,10 +28,10 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    base_high_flags, base_register_add_imm, checked_byte_ptr_to_u16_ptr_value,
-    checked_register_pointer, eval_base_register_block, is_multi_byte_access_width,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, sign_extend_imm16,
-    u16_block_to_u64, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, U16_BITS,
+    base_register_add_imm, checked_byte_ptr_to_u16_ptr_value, checked_register_pointer,
+    eval_base_register_block, is_multi_byte_access_width, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    reg_byte_ptr_to_cell_ptr_limbs, sign_extend_imm16, u16_block_to_u64, BLOCK_INDEX_Q_BITS,
+    PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct StoreInstruction<T> {
@@ -114,8 +114,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
         let shift_amount = ctx.instruction.shift_amount;
         let cross = ctx.instruction.store_cross;
 
-        // Read the full 64-bit rs1. Its upper word is one of the few values from which
-        // rs1 + sign_extend(imm) can reach the 32-bit address space.
+        // Reconstruct the full base register from the carries and immediate sign.
         let (rs1_data, low_carry, high_carry) = eval_base_register_block(
             builder,
             &local_cols.rs1_data,
@@ -134,9 +133,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for StoreMultiByteAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
-        // Constrain mem_ptr = rs1 + sign_extend(imm) (mod 2^64). The low 32 bits are a two-limb
-        // addition; when rs1's upper word is nonzero, the low sum must carry out of (or borrow
-        // into) bit 32 to cancel it, which shifts the high limb by 2^16.
+        // Constrain mem_ptr = rs1 + sign_extend(imm) modulo 2^64.
         builder.assert_bool(local_cols.imm_sign);
         let mem_ptr_low_limb = local_cols.rs1_data[0] + local_cols.imm
             - low_carry.clone() * AB::F::from_u32(1 << U16_BITS);
@@ -303,9 +300,6 @@ impl StoreMultiByteAdapterFiller {
             checked_byte_ptr_to_u16_ptr_value(u32::from(rs1_ptr))?,
         )?;
         let rs1_u64 = u16_block_to_u64(rs1.value);
-        base_high_flags((rs1_u64 >> 32) as u32).ok_or(PostflightError::new(
-            "multi-byte store base register cannot reach the pointer domain",
-        ))?;
         let rs1_val = rs1_u64 as u32;
         let effective_ptr =
             base_register_add_imm(rs1_u64, sign_extend_imm16(imm, u32::from(imm_sign)));

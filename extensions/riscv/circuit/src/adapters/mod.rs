@@ -399,7 +399,7 @@ pub fn try_bytes_to_u32(bytes: [u8; REGISTER_NUM_LIMBS]) -> Option<u32> {
 /// Adds an already-sign-extended 16-bit RV64 immediate to an implemented low-32-bit address.
 #[inline(always)]
 pub fn address_add_imm(base: u32, imm_extended: u32) -> u64 {
-    base_register_add_imm(u64::from(base), imm_extended)
+    u64::from(base).wrapping_add(sext32_to_u64(imm_extended))
 }
 
 /// RV64I effective address: the full 64-bit base register plus an already-sign-extended 16-bit
@@ -409,30 +409,8 @@ pub fn base_register_add_imm(base: u64, imm_extended: u32) -> u64 {
     base.wrapping_add(sext32_to_u64(imm_extended))
 }
 
-/// Upper 32 bits of a base register that is exactly 2^32 above a low-32-bit address.
-pub const BASE_HIGH_ONE: u32 = 1;
-/// Upper 32 bits of a base register that is a small negative `i64`.
-pub const BASE_HIGH_NEG: u32 = u32::MAX;
-
-/// Boolean witnesses `[base_hi_neg, base_hi_one]` for the upper 32 bits of a JALR/load/store base
-/// register.
-///
-/// RV64I allows any base register as long as `rs1 + sign_extend(imm)` is a valid address. With a
-/// 16-bit signed immediate and a 32-bit address space, the only upper words that can reach a
-/// valid address are `0`, [`BASE_HIGH_ONE`] (`rs1` is just above 2^32 and the immediate is
-/// negative) and [`BASE_HIGH_NEG`] (`rs1` is a small negative value and the immediate is
-/// positive). Returns `None` for any other upper word.
-#[inline(always)]
-pub fn base_high_flags(base_high: u32) -> Option<[bool; 2]> {
-    match base_high {
-        0 => Some([false, false]),
-        BASE_HIGH_NEG => Some([true, false]),
-        BASE_HIGH_ONE => Some([false, true]),
-        _ => None,
-    }
-}
-
 /// Reconstructs the base and two addition carries from their sum in {0, 1, 2}.
+/// The immediate sign distinguishes the two carry pairs whose sum is one.
 pub(crate) fn eval_base_register_block<AB: InteractionBuilder>(
     builder: &mut AB,
     low: &[AB::Var; PTR_U16_LIMBS],

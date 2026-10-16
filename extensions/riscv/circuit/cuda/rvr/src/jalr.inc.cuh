@@ -89,12 +89,7 @@ __global__ void jalr_replay_tracegen(
 
     uint16_t rs1[BLOCK_FE_WIDTH];
     replay_u16_block(read.value, rs1);
-    // RV64I: the target is rs1 + sign_extend(imm) modulo 2^64.
     uint64_t rs1_val = u16_block_to_u64(rs1);
-    if (!valid_base_high(static_cast<uint32_t>(rs1_val >> 32))) {
-        preflight_set_error(error, 206);
-        return;
-    }
     uint32_t imm_extended = imm + imm_sign * 0xffff0000u;
     uint64_t unaligned = base_register_add_imm(
         rs1_val, static_cast<int64_t>(static_cast<int32_t>(imm_extended))

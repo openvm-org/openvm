@@ -43,7 +43,7 @@ struct StoreAdapter {
         uint32_t from_timestamp,
         uint32_t rs1_ptr,
         uint32_t rs2_ptr,
-        uint64_t rs1_val,
+        uint32_t rs1_val,
         uint32_t rs1_prev_timestamp,
         uint32_t rs2_prev_timestamp,
         uint32_t write0_prev_timestamp,
@@ -55,9 +55,8 @@ struct StoreAdapter {
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, rs1_ptr, rs1_ptr);
 
-        uint32_t rs1_low = static_cast<uint32_t>(rs1_val);
         Fp rs1_data[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, rs1_low);
+        ptr_to_u16_limbs(rs1_data, rs1_val);
         COL_WRITE_ARRAY(row, StoreMultiByteAdapterCols, rs1_data, rs1_data);
 
         mem_helper.fill(
@@ -92,8 +91,7 @@ struct StoreAdapter {
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, StoreMultiByteAdapterCols, imm_sign, imm_sign);
 
-        // Low 32 bits of rs1 + sign_extend(imm); the upper word cancels (see the AIR).
-        uint32_t ptr = rs1_low + uint32_t(imm) +
+        uint32_t ptr = rs1_val + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
@@ -101,7 +99,7 @@ struct StoreAdapter {
             row,
             StoreMultiByteAdapterCols,
             address_carries,
-            base_address_carries(rs1_low, imm, imm_sign)
+            base_address_carries(rs1_val, imm, imm_sign)
         );
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
@@ -146,7 +144,7 @@ struct StoreByteAdapter {
         uint32_t from_timestamp,
         uint32_t rs1_ptr,
         uint32_t rs2_ptr,
-        uint64_t rs1_val,
+        uint32_t rs1_val,
         uint32_t rs1_prev_timestamp,
         uint32_t rs2_prev_timestamp,
         uint32_t write_prev_timestamp,
@@ -159,9 +157,8 @@ struct StoreByteAdapter {
         );
         COL_WRITE_VALUE(row, StoreByteAdapterCols, rs1_ptr, rs1_ptr);
 
-        uint32_t rs1_low = static_cast<uint32_t>(rs1_val);
         Fp rs1_data[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, rs1_low);
+        ptr_to_u16_limbs(rs1_data, rs1_val);
         COL_WRITE_ARRAY(row, StoreByteAdapterCols, rs1_data, rs1_data);
 
         mem_helper.fill(
@@ -184,13 +181,12 @@ struct StoreByteAdapter {
         COL_WRITE_VALUE(row, StoreByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, StoreByteAdapterCols, imm_sign, imm_sign);
 
-        // Low 32 bits of rs1 + sign_extend(imm); the upper word cancels (see the AIR).
-        uint32_t ptr = rs1_low + uint32_t(imm) +
+        uint32_t ptr = rs1_val + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_VALUE(
-            row, StoreByteAdapterCols, address_carries, base_address_carries(rs1_low, imm, imm_sign)
+            row, StoreByteAdapterCols, address_carries, base_address_carries(rs1_val, imm, imm_sign)
         );
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);

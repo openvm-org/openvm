@@ -45,7 +45,7 @@ struct LoadAdapter {
         uint32_t rs1_ptr,
         uint32_t rd_ptr,
         bool needs_write,
-        uint64_t rs1_val,
+        uint32_t rs1_val,
         uint32_t rs1_prev_timestamp,
         uint32_t block0_prev_timestamp,
         uint32_t block1_prev_timestamp,
@@ -59,9 +59,8 @@ struct LoadAdapter {
         COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, from_state.timestamp, from_timestamp);
         COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, rs1_ptr, rs1_ptr);
 
-        uint32_t rs1_low = static_cast<uint32_t>(rs1_val);
         Fp rs1_data[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, rs1_low);
+        ptr_to_u16_limbs(rs1_data, rs1_val);
         COL_WRITE_ARRAY(row, LoadMultiByteAdapterCols, rs1_data, rs1_data);
 
         mem_helper.fill(
@@ -103,8 +102,7 @@ struct LoadAdapter {
         COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, LoadMultiByteAdapterCols, imm_sign, imm_sign);
 
-        // Low 32 bits of rs1 + sign_extend(imm); the upper word cancels (see the AIR).
-        uint32_t ptr = rs1_low + uint32_t(imm) +
+        uint32_t ptr = rs1_val + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
@@ -112,7 +110,7 @@ struct LoadAdapter {
             row,
             LoadMultiByteAdapterCols,
             address_carries,
-            base_address_carries(rs1_low, imm, imm_sign)
+            base_address_carries(rs1_val, imm, imm_sign)
         );
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
@@ -159,7 +157,7 @@ struct LoadByteAdapter {
         uint32_t rs1_ptr,
         uint32_t rd_ptr,
         bool needs_write,
-        uint64_t rs1_val,
+        uint32_t rs1_val,
         uint32_t rs1_prev_timestamp,
         uint32_t read_prev_timestamp,
         uint32_t write_prev_timestamp,
@@ -173,9 +171,8 @@ struct LoadByteAdapter {
         );
         COL_WRITE_VALUE(row, LoadByteAdapterCols, rs1_ptr, rs1_ptr);
 
-        uint32_t rs1_low = static_cast<uint32_t>(rs1_val);
         Fp rs1_data[PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, rs1_low);
+        ptr_to_u16_limbs(rs1_data, rs1_val);
         COL_WRITE_ARRAY(row, LoadByteAdapterCols, rs1_data, rs1_data);
 
         mem_helper.fill(
@@ -210,13 +207,12 @@ struct LoadByteAdapter {
         COL_WRITE_VALUE(row, LoadByteAdapterCols, imm, imm);
         COL_WRITE_VALUE(row, LoadByteAdapterCols, imm_sign, imm_sign);
 
-        // Low 32 bits of rs1 + sign_extend(imm); the upper word cancels (see the AIR).
-        uint32_t ptr = rs1_low + uint32_t(imm) +
+        uint32_t ptr = rs1_val + uint32_t(imm) +
                        uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_VALUE(
-            row, LoadByteAdapterCols, address_carries, base_address_carries(rs1_low, imm, imm_sign)
+            row, LoadByteAdapterCols, address_carries, base_address_carries(rs1_val, imm, imm_sign)
         );
 
         uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);

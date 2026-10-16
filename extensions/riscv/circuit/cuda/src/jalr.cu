@@ -30,7 +30,6 @@ __device__ void run_jalr(
 ) {
     uint32_t offset = imm + (imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
     int64_t signed_offset = (int64_t)(int32_t)offset;
-    // RV64I: the target is rs1 + sign_extend(imm) modulo 2^64.
     uint64_t raw_target_pc = base_register_add_imm(rs1, signed_offset);
 
     assert(raw_target_pc <= uint64_t(UINT32_MAX));
