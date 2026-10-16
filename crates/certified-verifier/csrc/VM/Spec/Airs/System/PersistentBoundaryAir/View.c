@@ -1,0 +1,459 @@
+// Lean compiler output
+// Module: VM.Spec.Airs.System.PersistentBoundaryAir.View
+// Imports: public import Init public meta import Init public import Fundamentals.Spec.BabyBear.Field public import VM.Spec.Airs.System.PersistentBoundaryAir.Extraction.Schema public import VM.Spec.Memory.Events
+#include <lean/lean.h>
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-label"
+#elif defined(__GNUC__) && !defined(__CLANG__)
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-label"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
+lean_object* lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(lean_object*);
+lean_object* lp_mathlib_ZMod_instField___redArg(lean_object*);
+lean_object* l_List_finRange(lean_object*);
+lean_object* lean_mk_empty_array_with_capacity(lean_object*);
+lean_object* lean_array_to_list(lean_object*);
+lean_object* lp_mathlib_Field_toSemifield___redArg(lean_object*);
+lean_object* lp_mathlib_instMulZeroClassOfSemiring___redArg(lean_object*);
+lean_object* lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(lean_object*, lean_object*, lean_object*);
+uint8_t lp_mathlib_ZMod_decidableEq(lean_object*, lean_object*, lean_object*);
+lean_object* lean_array_push(lean_object*, lean_object*);
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__1;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__2;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__3;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__4;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__5_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__5;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__6;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__7;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__8_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__8;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__9_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__9;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__10_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__10;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__11_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__11;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__12_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__12;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__13_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__13;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__14_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__14;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__15_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__15;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__16_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__16;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__17_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__17;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__18_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__18;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__19_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__19;
+static lean_once_cell_t lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__20_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__20;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow(lean_object*, lean_object*);
+static lean_once_cell_t lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__0;
+static lean_once_cell_t lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__1;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0(lean_object*, lean_object*, lean_object*);
+static const lean_array_object lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_events___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_array_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 246}, .m_size = 0, .m_capacity = 0, .m_data = {}};
+static const lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_events___closed__0 = (const lean_object*)&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_events___closed__0_value;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_events(lean_object*);
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0(void){
+_start:
+{
+lean_object* v___x_1_; lean_object* v___x_2_; 
+v___x_1_ = lean_unsigned_to_nat(0u);
+v___x_2_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_1_);
+return v___x_2_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__1(void){
+_start:
+{
+lean_object* v___x_3_; lean_object* v___x_4_; 
+v___x_3_ = lean_unsigned_to_nat(1u);
+v___x_4_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_3_);
+return v___x_4_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__2(void){
+_start:
+{
+lean_object* v___x_5_; lean_object* v___x_6_; 
+v___x_5_ = lean_unsigned_to_nat(2u);
+v___x_6_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_5_);
+return v___x_6_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__3(void){
+_start:
+{
+lean_object* v___x_7_; lean_object* v___x_8_; 
+v___x_7_ = lean_unsigned_to_nat(3u);
+v___x_8_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_7_);
+return v___x_8_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__4(void){
+_start:
+{
+lean_object* v___x_9_; lean_object* v___x_10_; 
+v___x_9_ = lean_unsigned_to_nat(4u);
+v___x_10_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_9_);
+return v___x_10_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__5(void){
+_start:
+{
+lean_object* v___x_11_; lean_object* v___x_12_; 
+v___x_11_ = lean_unsigned_to_nat(5u);
+v___x_12_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_11_);
+return v___x_12_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__6(void){
+_start:
+{
+lean_object* v___x_13_; lean_object* v___x_14_; 
+v___x_13_ = lean_unsigned_to_nat(6u);
+v___x_14_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_13_);
+return v___x_14_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__7(void){
+_start:
+{
+lean_object* v___x_15_; lean_object* v___x_16_; 
+v___x_15_ = lean_unsigned_to_nat(7u);
+v___x_16_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_15_);
+return v___x_16_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__8(void){
+_start:
+{
+lean_object* v___x_17_; lean_object* v___x_18_; 
+v___x_17_ = lean_unsigned_to_nat(8u);
+v___x_18_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_17_);
+return v___x_18_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__9(void){
+_start:
+{
+lean_object* v___x_19_; lean_object* v___x_20_; 
+v___x_19_ = lean_unsigned_to_nat(9u);
+v___x_20_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_19_);
+return v___x_20_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__10(void){
+_start:
+{
+lean_object* v___x_21_; lean_object* v___x_22_; 
+v___x_21_ = lean_unsigned_to_nat(10u);
+v___x_22_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_21_);
+return v___x_22_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__11(void){
+_start:
+{
+lean_object* v___x_23_; lean_object* v___x_24_; 
+v___x_23_ = lean_unsigned_to_nat(11u);
+v___x_24_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_23_);
+return v___x_24_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__12(void){
+_start:
+{
+lean_object* v___x_25_; lean_object* v___x_26_; 
+v___x_25_ = lean_unsigned_to_nat(12u);
+v___x_26_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_25_);
+return v___x_26_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__13(void){
+_start:
+{
+lean_object* v___x_27_; lean_object* v___x_28_; 
+v___x_27_ = lean_unsigned_to_nat(13u);
+v___x_28_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_27_);
+return v___x_28_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__14(void){
+_start:
+{
+lean_object* v___x_29_; lean_object* v___x_30_; 
+v___x_29_ = lean_unsigned_to_nat(14u);
+v___x_30_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_29_);
+return v___x_30_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__15(void){
+_start:
+{
+lean_object* v___x_31_; lean_object* v___x_32_; 
+v___x_31_ = lean_unsigned_to_nat(15u);
+v___x_32_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_31_);
+return v___x_32_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__16(void){
+_start:
+{
+lean_object* v___x_33_; lean_object* v___x_34_; 
+v___x_33_ = lean_unsigned_to_nat(16u);
+v___x_34_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_33_);
+return v___x_34_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__17(void){
+_start:
+{
+lean_object* v___x_35_; lean_object* v___x_36_; 
+v___x_35_ = lean_unsigned_to_nat(17u);
+v___x_36_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_35_);
+return v___x_36_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__18(void){
+_start:
+{
+lean_object* v___x_37_; lean_object* v___x_38_; 
+v___x_37_ = lean_unsigned_to_nat(18u);
+v___x_38_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_37_);
+return v___x_38_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__19(void){
+_start:
+{
+lean_object* v___x_39_; lean_object* v___x_40_; 
+v___x_39_ = lean_unsigned_to_nat(19u);
+v___x_40_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_39_);
+return v___x_40_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__20(void){
+_start:
+{
+lean_object* v___x_41_; lean_object* v___x_42_; 
+v___x_41_ = lean_unsigned_to_nat(20u);
+v___x_42_ = lp_swirl_x2dfv_Fundamentals_Air_ColumnRef_commonMain___redArg(v___x_41_);
+return v___x_42_;
+}
+}
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow(lean_object* v_trace_43_, lean_object* v_row_44_){
+_start:
+{
+lean_object* v___x_45_; lean_object* v___x_46_; lean_object* v___x_47_; lean_object* v___x_48_; lean_object* v___x_49_; lean_object* v___x_50_; lean_object* v___x_51_; lean_object* v___x_52_; lean_object* v___x_53_; lean_object* v___x_54_; lean_object* v___x_55_; lean_object* v___x_56_; lean_object* v___x_57_; lean_object* v___x_58_; lean_object* v___x_59_; lean_object* v___x_60_; lean_object* v___x_61_; lean_object* v___x_62_; lean_object* v___x_63_; lean_object* v___x_64_; lean_object* v___x_65_; lean_object* v___x_66_; lean_object* v___x_67_; lean_object* v___x_68_; lean_object* v___x_69_; lean_object* v___x_70_; lean_object* v___x_71_; lean_object* v___x_72_; lean_object* v___x_73_; lean_object* v___x_74_; lean_object* v___x_75_; lean_object* v___x_76_; lean_object* v___x_77_; lean_object* v___x_78_; lean_object* v___x_79_; lean_object* v___x_80_; lean_object* v___x_81_; lean_object* v___x_82_; lean_object* v___x_83_; lean_object* v___x_84_; lean_object* v___x_85_; lean_object* v___x_86_; lean_object* v___x_87_; lean_object* v___x_88_; lean_object* v___x_89_; lean_object* v___x_90_; lean_object* v___x_91_; lean_object* v___x_92_; lean_object* v___x_93_; lean_object* v___x_94_; lean_object* v___x_95_; lean_object* v___x_96_; lean_object* v___x_97_; lean_object* v___x_98_; lean_object* v___x_99_; lean_object* v___x_100_; lean_object* v___x_101_; lean_object* v___x_102_; lean_object* v___x_103_; lean_object* v___x_104_; lean_object* v___x_105_; lean_object* v___x_106_; lean_object* v___x_107_; lean_object* v___x_108_; lean_object* v___x_109_; 
+v___x_45_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0);
+lean_inc_n(v_row_44_, 20);
+lean_inc_ref_n(v_trace_43_, 20);
+v___x_46_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_45_, v_row_44_);
+v___x_47_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__1, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__1_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__1);
+v___x_48_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_47_, v_row_44_);
+v___x_49_ = lean_unsigned_to_nat(2u);
+v___x_50_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__2, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__2_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__2);
+v___x_51_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_50_, v_row_44_);
+v___x_52_ = lean_unsigned_to_nat(8u);
+v___x_53_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__3, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__3_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__3);
+v___x_54_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_53_, v_row_44_);
+v___x_55_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__4, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__4_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__4);
+v___x_56_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_55_, v_row_44_);
+v___x_57_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__5, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__5_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__5);
+v___x_58_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_57_, v_row_44_);
+v___x_59_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__6, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__6_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__6);
+v___x_60_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_59_, v_row_44_);
+v___x_61_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__7, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__7_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__7);
+v___x_62_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_61_, v_row_44_);
+v___x_63_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__8, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__8_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__8);
+v___x_64_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_63_, v_row_44_);
+v___x_65_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__9, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__9_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__9);
+v___x_66_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_65_, v_row_44_);
+v___x_67_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__10, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__10_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__10);
+v___x_68_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_67_, v_row_44_);
+v___x_69_ = lean_mk_empty_array_with_capacity(v___x_52_);
+lean_inc_ref(v___x_69_);
+v___x_70_ = lean_array_push(v___x_69_, v___x_54_);
+v___x_71_ = lean_array_push(v___x_70_, v___x_56_);
+v___x_72_ = lean_array_push(v___x_71_, v___x_58_);
+v___x_73_ = lean_array_push(v___x_72_, v___x_60_);
+v___x_74_ = lean_array_push(v___x_73_, v___x_62_);
+v___x_75_ = lean_array_push(v___x_74_, v___x_64_);
+v___x_76_ = lean_array_push(v___x_75_, v___x_66_);
+v___x_77_ = lean_array_push(v___x_76_, v___x_68_);
+v___x_78_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__11, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__11_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__11);
+v___x_79_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_78_, v_row_44_);
+v___x_80_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__12, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__12_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__12);
+v___x_81_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_80_, v_row_44_);
+v___x_82_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__13, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__13_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__13);
+v___x_83_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_82_, v_row_44_);
+v___x_84_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__14, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__14_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__14);
+v___x_85_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_84_, v_row_44_);
+v___x_86_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__15, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__15_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__15);
+v___x_87_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_86_, v_row_44_);
+v___x_88_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__16, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__16_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__16);
+v___x_89_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_88_, v_row_44_);
+v___x_90_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__17, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__17_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__17);
+v___x_91_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_90_, v_row_44_);
+v___x_92_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__18, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__18_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__18);
+v___x_93_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_92_, v_row_44_);
+v___x_94_ = lean_array_push(v___x_69_, v___x_79_);
+v___x_95_ = lean_array_push(v___x_94_, v___x_81_);
+v___x_96_ = lean_array_push(v___x_95_, v___x_83_);
+v___x_97_ = lean_array_push(v___x_96_, v___x_85_);
+v___x_98_ = lean_array_push(v___x_97_, v___x_87_);
+v___x_99_ = lean_array_push(v___x_98_, v___x_89_);
+v___x_100_ = lean_array_push(v___x_99_, v___x_91_);
+v___x_101_ = lean_array_push(v___x_100_, v___x_93_);
+v___x_102_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__19, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__19_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__19);
+v___x_103_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_102_, v_row_44_);
+v___x_104_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__20, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__20_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__20);
+v___x_105_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_43_, v___x_104_, v_row_44_);
+v___x_106_ = lean_mk_empty_array_with_capacity(v___x_49_);
+v___x_107_ = lean_array_push(v___x_106_, v___x_103_);
+v___x_108_ = lean_array_push(v___x_107_, v___x_105_);
+v___x_109_ = lean_alloc_ctor(0, 6, 0);
+lean_ctor_set(v___x_109_, 0, v___x_46_);
+lean_ctor_set(v___x_109_, 1, v___x_48_);
+lean_ctor_set(v___x_109_, 2, v___x_51_);
+lean_ctor_set(v___x_109_, 3, v___x_77_);
+lean_ctor_set(v___x_109_, 4, v___x_101_);
+lean_ctor_set(v___x_109_, 5, v___x_108_);
+return v___x_109_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__0(void){
+_start:
+{
+lean_object* v___x_110_; lean_object* v___x_111_; 
+v___x_110_ = lean_unsigned_to_nat(2013265921u);
+v___x_111_ = lp_mathlib_ZMod_instField___redArg(v___x_110_);
+return v___x_111_;
+}
+}
+static lean_object* _init_lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__1(void){
+_start:
+{
+lean_object* v___x_112_; lean_object* v___x_113_; 
+v___x_112_ = lean_obj_once(&lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__0, &lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__0_once, _init_lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__0);
+v___x_113_ = lp_mathlib_Field_toSemifield___redArg(v___x_112_);
+return v___x_113_;
+}
+}
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0(lean_object* v_trace_114_, lean_object* v_a_115_, lean_object* v_a_116_){
+_start:
+{
+if (lean_obj_tag(v_a_115_) == 0)
+{
+lean_object* v___x_117_; 
+lean_dec_ref(v_trace_114_);
+v___x_117_ = lean_array_to_list(v_a_116_);
+return v___x_117_;
+}
+else
+{
+lean_object* v_head_118_; lean_object* v_tail_119_; lean_object* v___x_120_; lean_object* v___x_121_; lean_object* v_toCommSemiring_122_; lean_object* v___x_123_; lean_object* v_toZero_124_; lean_object* v___x_125_; lean_object* v___x_126_; uint8_t v___x_127_; 
+v_head_118_ = lean_ctor_get(v_a_115_, 0);
+lean_inc_n(v_head_118_, 2);
+v_tail_119_ = lean_ctor_get(v_a_115_, 1);
+lean_inc(v_tail_119_);
+lean_dec_ref_known(v_a_115_, 2);
+v___x_120_ = lean_unsigned_to_nat(2013265921u);
+v___x_121_ = lean_obj_once(&lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__1, &lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__1_once, _init_lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0___closed__1);
+v_toCommSemiring_122_ = lean_ctor_get(v___x_121_, 0);
+lean_inc_ref(v_toCommSemiring_122_);
+v___x_123_ = lp_mathlib_instMulZeroClassOfSemiring___redArg(v_toCommSemiring_122_);
+v_toZero_124_ = lean_ctor_get(v___x_123_, 1);
+lean_inc(v_toZero_124_);
+lean_dec_ref(v___x_123_);
+v___x_125_ = lean_obj_once(&lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0, &lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0_once, _init_lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow___closed__0);
+lean_inc_ref(v_trace_114_);
+v___x_126_ = lp_swirl_x2dfv_Fundamentals_Air_Trace_col___redArg(v_trace_114_, v___x_125_, v_head_118_);
+v___x_127_ = lp_mathlib_ZMod_decidableEq(v___x_120_, v___x_126_, v_toZero_124_);
+lean_dec(v_toZero_124_);
+lean_dec(v___x_126_);
+if (v___x_127_ == 0)
+{
+lean_object* v___x_128_; lean_object* v___x_129_; 
+lean_inc_ref(v_trace_114_);
+v___x_128_ = lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_eventAtRow(v_trace_114_, v_head_118_);
+v___x_129_ = lean_array_push(v_a_116_, v___x_128_);
+v_a_115_ = v_tail_119_;
+v_a_116_ = v___x_129_;
+goto _start;
+}
+else
+{
+lean_dec(v_head_118_);
+v_a_115_ = v_tail_119_;
+goto _start;
+}
+}
+}
+}
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_events(lean_object* v_trace_134_){
+_start:
+{
+lean_object* v_height_135_; lean_object* v___x_136_; lean_object* v___x_137_; lean_object* v___x_138_; 
+v_height_135_ = lean_ctor_get(v_trace_134_, 0);
+lean_inc(v_height_135_);
+v___x_136_ = l_List_finRange(v_height_135_);
+v___x_137_ = ((lean_object*)(lp_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View_events___closed__0));
+v___x_138_ = lp_openvm_x2dfv_List_filterMapTR_go___at___00VM_Spec_Airs_System_PersistentBoundaryAir_View_events_spec__0(v_trace_134_, v___x_136_, v___x_137_);
+return v___x_138_;
+}
+}
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear_Field(uint8_t builtin);
+lean_object* initialize_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_Extraction_Schema(uint8_t builtin);
+lean_object* initialize_openvm_x2dfv_VM_Spec_Memory_Events(uint8_t builtin);
+void lean_initialize();
+static bool _G_initialized = false;
+LEAN_EXPORT lean_object* initialize_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_View(uint8_t builtin) {
+lean_object * res;
+if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_initialized = true;
+lean_initialize();
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear_Field(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_openvm_x2dfv_VM_Spec_Airs_System_PersistentBoundaryAir_Extraction_Schema(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_openvm_x2dfv_VM_Spec_Memory_Events(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return lean_io_result_mk_ok(lean_box(0));
+}
+#ifdef __cplusplus
+}
+#endif
