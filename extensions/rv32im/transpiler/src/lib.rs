@@ -5,15 +5,12 @@ use openvm_instructions::{
     SystemOpcode,
 };
 use openvm_rv32im_guest::{
-    PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STOREW_IMM,
-    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    PhantomImm, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STOREW_IMM, PHANTOM_FUNCT3,
+    REVEAL_FUNCT3, RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 pub use openvm_rv32im_guest::{MAX_HINT_BUFFER_WORDS, MAX_HINT_BUFFER_WORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::{
-    util::{nop, unimp},
-    TranspilerExtension, TranspilerOutput,
-};
+use openvm_transpiler::{util::unimp, TranspilerExtension, TranspilerOutput};
 use rrs::InstructionTranspiler;
 use rrs_lib::{
     instruction_formats::{IType, RType},
@@ -46,15 +43,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
 
         let instruction = match (opcode, funct3) {
             (CSR_OPCODE, _) => {
-                let dec_insn = IType::new(instruction_u32);
-                if dec_insn.funct3 as u8 == CSRRW_FUNCT3 {
-                    // CSRRW
-                    if dec_insn.rs1 == 0 && dec_insn.rd == 0 {
-                        // This resets the CSR counter to zero. Since we don't have any CSR
-                        // registers, this is a nop.
-                        return Some(TranspilerOutput::one_to_one(nop()));
-                    }
-                }
                 eprintln!(
                     "Transpiling system / CSR instruction: {instruction_u32:b} (opcode = {opcode:07b}, funct3 = {funct3:03b}) to unimp"
                 );
@@ -191,5 +179,25 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
         };
 
         instruction.map(TranspilerOutput::one_to_one)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+    use p3_baby_bear::BabyBear;
+
+    use super::*;
+
+    #[test]
+    fn csr_zero_writes_terminate() {
+        for csr in 0u32..4096 {
+            let output: TranspilerOutput<BabyBear> = Rv32ITranspilerExtension
+                .process_custom(&[(csr << 20) | 0x1073])
+                .unwrap();
+            let instruction = output.instructions[0].as_ref().unwrap();
+            assert_eq!(instruction.opcode, SystemOpcode::TERMINATE.global_opcode());
+            assert_eq!(instruction.c, BabyBear::TWO);
+        }
     }
 }
