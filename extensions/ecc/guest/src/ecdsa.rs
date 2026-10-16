@@ -98,8 +98,9 @@ where
     /// This does not check that `point` is on the curve. Use this only with points that have
     /// already been checked. For public keys from untrusted bytes, use [`Self::from_sec1_bytes`].
     pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
-        // Internally this calls `is_eq` on `x` and `y` coordinates, which will assert `x, y` are
-        // reduced.
+        point.x().assert_reduced();
+        point.y().assert_reduced();
+
         if point.is_identity() {
             Err(Error::new())
         } else {
@@ -552,8 +553,8 @@ where
     // public key
     let Q = pubkey;
     let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
-    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert x, y
-    // coordinates of R are both reduced.
+    // For Coordinate<C>: IntMod, is_identity checks that x is reduced. The comparison
+    // short-circuits when x != 0, so y may remain unchecked; only x is used below.
     if R.is_identity() {
         return Err(Error::new());
     }
