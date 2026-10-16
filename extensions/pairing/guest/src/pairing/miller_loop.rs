@@ -99,11 +99,7 @@ where
             Vec::new()
         };
 
-        // One buffer holds every iteration's lines (two per pair on a double-and-add step, one
-        // on a double step), and `Q_acc` is advanced in place, so an iteration allocates
-        // nothing. Fresh vectors per iteration are freed right away by a reclaiming allocator,
-        // but a guest on a bump allocator never gets them back: its heap would grow with every
-        // iteration of every pairing.
+        // Reuse the line buffer across iterations to limit guest heap growth.
         let mut lines = Vec::with_capacity(2 * xy_fracs.len());
 
         for i in (0..Self::PSEUDO_BINARY_ENCODING.len() - 2).rev() {
