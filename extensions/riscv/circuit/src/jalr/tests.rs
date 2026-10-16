@@ -281,8 +281,6 @@ fn jalr_max_pc_test() {
 struct JalrPrankValues {
     pub rd_high: Option<[u32; PTR_U16_LIMBS]>,
     pub rs1_data: Option<[u32; PTR_U16_LIMBS]>,
-    /// `[rs1_hi_neg, rs1_hi_one]`
-    pub rs1_hi: Option<[u32; 2]>,
     pub raw_target_bit0: Option<u32>,
     pub to_pc_idx_limbs: Option<[u32; PTR_U16_LIMBS]>,
     pub imm_sign: Option<u32>,
@@ -331,10 +329,6 @@ fn run_negative_jalr_test_with_rd_ptr(
         }
         if let Some(data) = prank_vals.rs1_data {
             core_cols.rs1_data = data.map(F::from_u32);
-        }
-        if let Some([hi_neg, hi_one]) = prank_vals.rs1_hi {
-            core_cols.rs1_hi_neg = F::from_u32(hi_neg);
-            core_cols.rs1_hi_one = F::from_u32(hi_one);
         }
         if let Some(data) = prank_vals.raw_target_bit0 {
             core_cols.raw_target_bit0 = F::from_u32(data);
@@ -491,9 +485,9 @@ fn rs1_upper_bytes_postflight_rejects_test() {
 }
 
 #[test]
-fn rs1_high_flags_negative_tests() {
-    // A zero upper word cannot be claimed as all ones or as one.
-    for rs1_hi in [[1, 0], [0, 1], [1, 1]] {
+fn rs1_derived_high_carry_negative_tests() {
+    // Changing the target high limb makes the derived final carry non-boolean.
+    for to_hi in [1, 3] {
         run_negative_jalr_test(
             JALR,
             Some(0x1234),
@@ -501,33 +495,38 @@ fn rs1_high_flags_negative_tests() {
             Some(16),
             Some(0),
             JalrPrankValues {
-                rs1_hi: Some(rs1_hi),
+                to_pc_idx_limbs: Some([4, to_hi]),
                 ..Default::default()
             },
             true,
         );
     }
-    // A wrapped base cannot be claimed as a zero upper word.
+    // Wrapped sources must still match the upper cells reconstructed on the register bus.
+    for (rs1, imm, sign, target) in [
+        (-8i64 as u64, 16, 0, [2, 65535]),
+        ((1 << 32) + 8, 0xfff0, 1, [16382, 0]),
+    ] {
+        run_negative_jalr_test(
+            JALR,
+            Some(0x1234),
+            Some(into_limbs64(rs1)),
+            Some(imm),
+            Some(sign),
+            JalrPrankValues {
+                to_pc_idx_limbs: Some(target),
+                ..Default::default()
+            },
+            true,
+        );
+    }
     run_negative_jalr_test(
         JALR,
         Some(0x1234),
-        Some(into_limbs64(-8i64 as u64)),
+        Some(into_limbs(0x20000)),
         Some(16),
         Some(0),
         JalrPrankValues {
-            rs1_hi: Some([0, 0]),
-            ..Default::default()
-        },
-        true,
-    );
-    run_negative_jalr_test(
-        JALR,
-        Some(0x1234),
-        Some(into_limbs64((1 << 32) + 8)),
-        Some(0xfff0),
-        Some(1),
-        JalrPrankValues {
-            rs1_hi: Some([0, 0]),
+            imm_sign: Some(2),
             ..Default::default()
         },
         true,

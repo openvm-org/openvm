@@ -13,8 +13,6 @@ using namespace program;
 template <typename T> struct JalrCoreCols {
     T imm;                                  // 2 bytes
     T rs1_data[PTR_U16_LIMBS];         // low 32 bits of rs1 as u16 cells
-    T rs1_hi_neg;                           // upper 32 bits of rs1 are all ones
-    T rs1_hi_one;                           // upper 32 bits of rs1 equal one
     T rd_high[PTR_U16_LIMBS];          // high u16 limb and bit-32 carry of rd
     T is_valid;                             // 1 byte
     T raw_target_bit0;                  // bit zero of the target before JALR masking
@@ -77,10 +75,6 @@ struct JalrCore {
 
         uint16_t rs1_limbs[PTR_U16_LIMBS];
         ptr_to_u16_limbs(rs1_limbs, static_cast<uint32_t>(rs1_val));
-        // The replay already rejected unreachable upper words.
-        bool rs1_hi_neg;
-        bool rs1_hi_one;
-        base_high_flags(static_cast<uint32_t>(rs1_val >> 32), rs1_hi_neg, rs1_hi_one);
 
         COL_WRITE_VALUE(row, JalrCoreCols, imm_sign, imm_sign);
         COL_WRITE_ARRAY(row, JalrCoreCols, to_pc_idx_limbs, to_pc_idx_limbs);
@@ -90,8 +84,6 @@ struct JalrCore {
         COL_WRITE_VALUE(row, JalrCoreCols, is_valid, 1);
 
         COL_WRITE_ARRAY(row, JalrCoreCols, rs1_data, rs1_limbs);
-        COL_WRITE_VALUE(row, JalrCoreCols, rs1_hi_neg, rs1_hi_neg);
-        COL_WRITE_VALUE(row, JalrCoreCols, rs1_hi_one, rs1_hi_one);
         uint32_t rd_limbs[PTR_U16_LIMBS] = {rd_low_u16_hi, rd_data[2]};
         COL_WRITE_ARRAY(row, JalrCoreCols, rd_high, rd_limbs);
         COL_WRITE_VALUE(row, JalrCoreCols, imm, imm);

@@ -230,7 +230,13 @@ fn positive_storew_wrapped_base_test() {
         .unwrap();
 }
 
-fn negative_storew_base_high_flags_test_case(rs1: u64, imm: u32, imm_sign: u32, rs1_hi: [u32; 2]) {
+fn negative_storew_base_high_flags_test_case(
+    rs1: u64,
+    imm: u32,
+    imm_sign: u32,
+    address_carries: u32,
+    flip_sign: bool,
+) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
     let (mut harness, bitwise) = create_store_word_harness(&mut tester);
@@ -249,8 +255,10 @@ fn negative_storew_base_high_flags_test_case(rs1: u64, imm: u32, imm_sign: u32, 
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter: &mut StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
-        adapter.rs1_hi_neg = F::from_u32(rs1_hi[0]);
-        adapter.rs1_hi_one = F::from_u32(rs1_hi[1]);
+        adapter.address_carries = F::from_u32(address_carries);
+        if flip_sign {
+            adapter.imm_sign = F::from_u32(1 - imm_sign);
+        }
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
     disable_debug_builder();
@@ -260,20 +268,23 @@ fn negative_storew_base_high_flags_test_case(rs1: u64, imm: u32, imm_sign: u32, 
         .load_periphery(bitwise)
         .finalize()
         .simple_test()
-        .expect_err("pranked base-register high-word flags should fail");
+        .expect_err("pranked address carries should fail");
 }
 
 #[test]
 fn negative_storew_base_high_flags_test() {
-    // A zero upper word cannot be claimed as all ones or as one.
-    for rs1_hi in [[1, 0], [0, 1], [1, 1]] {
-        negative_storew_base_high_flags_test_case(0x1000, 8, 0, rs1_hi);
+    // Wrong valid states and non-ternary witnesses, with both immediate signs.
+    for carries in [1, 2, 3, 2_013_265_920] {
+        negative_storew_base_high_flags_test_case(0x1000, 8, 0, carries, false);
+        negative_storew_base_high_flags_test_case((1 << 32) + 8, 0xffe8, 1, carries, false);
     }
-    // A wrapped base cannot be claimed as a zero upper word, nor as the other wrap.
-    negative_storew_base_high_flags_test_case(-8i64 as u64, 16, 0, [0, 0]);
-    negative_storew_base_high_flags_test_case(-8i64 as u64, 16, 0, [0, 1]);
-    negative_storew_base_high_flags_test_case((1 << 32) + 8, 0xffe8, 1, [0, 0]);
-    negative_storew_base_high_flags_test_case((1 << 32) + 8, 0xffe8, 1, [1, 0]);
+    for carries in [0, 1, 3, 2_013_265_920] {
+        negative_storew_base_high_flags_test_case(0x1000, 0xfff8, 1, carries, false);
+        negative_storew_base_high_flags_test_case(-8i64 as u64, 16, 0, carries, false);
+    }
+    // The instruction still pins the sign used to decode the carry pair.
+    negative_storew_base_high_flags_test_case(-8i64 as u64, 16, 0, 2, true);
+    negative_storew_base_high_flags_test_case((1 << 32) + 8, 0xffe8, 1, 0, true);
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]

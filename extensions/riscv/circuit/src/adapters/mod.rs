@@ -432,36 +432,34 @@ pub fn base_high_flags(base_high: u32) -> Option<[bool; 2]> {
     }
 }
 
-/// Constrains the base-register high-word flags and returns the register-bus block of a base
-/// register with low u16 cells `low` and upper word selected by `[hi_neg, hi_one]`.
-///
-/// The flags are boolean and mutually exclusive, so the upper word is one of `0`,
-/// [`BASE_HIGH_NEG`] or [`BASE_HIGH_ONE`]; since these encode distinct register-bus values, the
-/// memory bus pins the flags to the register's actual upper word.
+/// Reconstructs the base and two addition carries from their sum in {0, 1, 2}.
 pub(crate) fn eval_base_register_block<AB: InteractionBuilder>(
     builder: &mut AB,
     low: &[AB::Var; PTR_U16_LIMBS],
-    hi_neg: AB::Var,
-    hi_one: AB::Var,
-) -> [AB::Expr; BLOCK_FE_WIDTH] {
-    builder.assert_bool(hi_neg);
-    builder.assert_bool(hi_one);
-    builder.assert_bool(hi_neg + hi_one);
+    carries: AB::Var,
+    imm_sign: AB::Var,
+) -> ([AB::Expr; BLOCK_FE_WIDTH], AB::Expr, AB::Expr) {
+    // Ungated so the degree remains three, including padding rows.
+    builder.assert_zero(carries * (carries - AB::F::ONE) * (carries - AB::F::TWO));
+    let half = AB::F::TWO.inverse();
+    let l0 = (carries - AB::F::ONE) * (carries - AB::F::TWO) * half;
+    let l1 = carries * (AB::Expr::TWO - carries);
+    let l2 = carries * (carries - AB::F::ONE) * half;
+    let carry0 = l2.clone() + (AB::Expr::ONE - imm_sign) * l1.clone();
+    let carry1 = l2.clone() + imm_sign * l1;
+    let hi_neg = (AB::Expr::ONE - imm_sign) * l2;
+    let hi_one = imm_sign * l0;
     let u16_max = AB::F::from_u32(u16::MAX as u32);
-    [
-        low[0].into(),
-        low[1].into(),
-        hi_neg * u16_max + hi_one,
-        hi_neg * u16_max,
-    ]
-}
-
-/// Correction, in units of 2^32, between the low-32-bit sum `rs1_lo + sign_extend(imm)` and the
-/// RV64 effective address: `+1` when the base is a small negative value (the low sum carries out
-/// of bit 31 and that carry cancels the all-ones upper word) and `-1` when the base's upper word
-/// is one (the low sum borrows).
-pub(crate) fn base_high_wrap<AB: InteractionBuilder>(hi_neg: AB::Var, hi_one: AB::Var) -> AB::Expr {
-    hi_neg.into() - hi_one.into()
+    (
+        [
+            low[0].into(),
+            low[1].into(),
+            hi_neg.clone() * u16_max + hi_one,
+            hi_neg * u16_max,
+        ],
+        carry0,
+        carry1,
+    )
 }
 
 #[inline(always)]

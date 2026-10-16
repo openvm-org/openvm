@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-// CUDA mirror of `base_high_flags` and `base_register_add_imm` in
+// CUDA mirror of base-register validation and addition in
 // `openvm_riscv_circuit::adapters` (see `extensions/riscv/circuit/src/adapters/mod.rs`).
 //
 // RV64I JALR, loads and stores accept any base register as long as
@@ -13,11 +13,16 @@
 static constexpr uint32_t BASE_HIGH_NEG = UINT32_MAX;
 static constexpr uint32_t BASE_HIGH_ONE = 1u;
 
-// Returns whether `base_high` is a reachable upper word and sets the AIR witnesses.
-__device__ __forceinline__ bool base_high_flags(uint32_t base_high, bool &hi_neg, bool &hi_one) {
-    hi_neg = base_high == BASE_HIGH_NEG;
-    hi_one = base_high == BASE_HIGH_ONE;
-    return base_high == 0 || hi_neg || hi_one;
+__device__ __forceinline__ bool valid_base_high(uint32_t base_high) {
+    return base_high == 0 || base_high == BASE_HIGH_NEG || base_high == BASE_HIGH_ONE;
+}
+
+// Sum of the low-u16 and bit-32 carries; matches the Rust adapter filler.
+__device__ __forceinline__ uint32_t
+base_address_carries(uint32_t base_low, uint16_t imm, bool imm_sign) {
+    uint32_t carry0 = ((base_low & UINT16_MAX) + uint32_t(imm)) >> 16;
+    uint32_t carry1 = ((base_low >> 16) + uint32_t(imm_sign) * UINT16_MAX + carry0) >> 16;
+    return carry0 + carry1;
 }
 
 __device__ __forceinline__ uint64_t base_register_add_imm(uint64_t base, int64_t signed_imm) {

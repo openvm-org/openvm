@@ -98,9 +98,7 @@ static __device__ bool replay_store_byte(
     replay_u16_block(write.value, logged_post);
     // RV64I: the effective address is rs1 + sign_extend(imm) modulo 2^64.
     uint64_t rs1_val = u16_block_to_u64(rs1);
-    bool rs1_hi_neg;
-    bool rs1_hi_one;
-    if (!base_high_flags(static_cast<uint32_t>(rs1_val >> 32), rs1_hi_neg, rs1_hi_one)) {
+    if (!valid_base_high(static_cast<uint32_t>(rs1_val >> 32))) {
         preflight_set_error(error, 256);
         return false;
     }

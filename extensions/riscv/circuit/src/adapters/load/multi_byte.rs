@@ -26,7 +26,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    base_high_flags, base_high_wrap, base_register_add_imm, checked_byte_ptr_to_u16_ptr_value,
+    base_high_flags, base_register_add_imm, checked_byte_ptr_to_u16_ptr_value,
     checked_register_pointer, eval_base_register_block, is_multi_byte_access_width,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, sign_extend_imm16,
     u16_block_to_u64, BLOCK_INDEX_Q_BITS, PTR_U16_LIMBS, U16_BITS,
@@ -60,10 +60,6 @@ pub struct LoadMultiByteAdapterCols<T> {
     pub rs1_ptr: T,
     /// Low 32 bits of the rs1 register, packed as two u16 cells.
     pub rs1_data: [T; PTR_U16_LIMBS],
-    /// Whether the upper 32 bits of rs1 are all ones (see [`base_high_flags`]).
-    pub rs1_hi_neg: T,
-    /// Whether the upper 32 bits of rs1 equal one (see [`base_high_flags`]).
-    pub rs1_hi_one: T,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     /// Destination register pointer.
     pub rd_ptr: T,
@@ -71,8 +67,8 @@ pub struct LoadMultiByteAdapterCols<T> {
     pub read_data_aux: [MemoryReadAuxCols<T>; 2],
     pub imm: T,
     pub imm_sign: T,
-    /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
-    pub mem_ptr_low_limb: T,
+    /// Sum of the low-u16 and bit-32 addition carries, in {0, 1, 2}.
+    pub address_carries: T,
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     /// Only writes to rd if the load is valid and rd is not x0.
     pub needs_write: T,
@@ -126,11 +122,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadMultiByteAdapterAir {
 
         // Read the full 64-bit rs1. Its upper word is one of the few values from which
         // rs1 + sign_extend(imm) can reach the 32-bit address space.
-        let rs1_data = eval_base_register_block(
+        let (rs1_data, low_carry, high_carry) = eval_base_register_block(
             builder,
             &local_cols.rs1_data,
-            local_cols.rs1_hi_neg,
-            local_cols.rs1_hi_one,
+            local_cols.address_carries,
+            local_cols.imm_sign,
         );
         self.memory_bridge
             .read(
@@ -147,22 +143,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadMultiByteAdapterAir {
         // Constrain mem_ptr = rs1 + sign_extend(imm) (mod 2^64). The low 32 bits are a two-limb
         // addition; when rs1's upper word is nonzero, the low sum must carry out of (or borrow
         // into) bit 32 to cancel it, which shifts the high limb by 2^16.
-        let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
-        let low_carry =
-            (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_low_limb) * inv;
-        builder.assert_bool(low_carry.clone());
-
         builder.assert_bool(local_cols.imm_sign);
-        let mem_ptr_hi = local_cols.rs1_data[1] + low_carry
-            - local_cols.imm_sign
-            - base_high_wrap::<AB>(local_cols.rs1_hi_neg, local_cols.rs1_hi_one)
-                * AB::F::from_u32(1 << U16_BITS);
+        let mem_ptr_low_limb = local_cols.rs1_data[0] + local_cols.imm
+            - low_carry.clone() * AB::F::from_u32(1 << U16_BITS);
+        let mem_ptr_hi = local_cols.rs1_data[1]
+            + local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32)
+            + low_carry
+            - high_carry * AB::F::from_u32(1 << U16_BITS);
 
         // Alignment: the aligned heap byte pointer's low limb is divisible by 8, i.e.
         // `aligned_limb / 8 < 2^13`, which also implies `aligned_limb < 2^16`. (The derived high
         // byte limb `mem_ptr_hi` is bounded below.)
         let block_bytes = AB::F::from_u32(MEMORY_BLOCK_BYTES as u32);
-        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount;
+        let aligned_limb = mem_ptr_low_limb - shift_amount;
         self.range_bus
             .range_check(
                 // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
@@ -172,7 +165,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for LoadMultiByteAdapterAir {
             .eval(builder, is_valid.clone());
 
         self.range_bus
-            .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
+            .range_check(mem_ptr_hi.clone(), self.pointer_max_bits.min(32) - U16_BITS)
             .eval(builder, is_valid.clone());
         let block_index = aligned_limb * block_bytes.inverse()
             + mem_ptr_hi * AB::F::from_u32(1 << BLOCK_INDEX_Q_BITS);
@@ -310,9 +303,9 @@ impl LoadMultiByteAdapterFiller {
         let mut replay = postflight.replay(step);
         let rs1 = replay.read_u16(REGISTER_AS, checked_byte_ptr_to_u16_ptr_value(rs1_ptr)?)?;
         let rs1_u64 = u16_block_to_u64(rs1.value);
-        let [rs1_hi_neg, rs1_hi_one] = base_high_flags((rs1_u64 >> 32) as u32).ok_or(
-            PostflightError::new("multi-byte load base register exceeds the pointer domain"),
-        )?;
+        base_high_flags((rs1_u64 >> 32) as u32).ok_or(PostflightError::new(
+            "multi-byte load base register exceeds the pointer domain",
+        ))?;
         let rs1_val = rs1_u64 as u32;
         let effective_ptr =
             base_register_add_imm(rs1_u64, sign_extend_imm16(imm, u32::from(imm_sign)));
@@ -383,9 +376,11 @@ impl LoadMultiByteAdapterFiller {
         // Alignment check on the aligned low byte limb: `aligned_limb / 8 < 2^13`.
         self.range_checker_chip
             .add_count(aligned_limb / MEMORY_BLOCK_BYTES as u32, BLOCK_INDEX_Q_BITS);
-        adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
+        let carry0 = ((rs1_val & 0xffff) + imm) >> U16_BITS;
+        let carry1 = ((rs1_val >> U16_BITS) + u32::from(imm_sign) * 0xffff + carry0) >> U16_BITS;
+        adapter_row.address_carries = F::from_u32(carry0 + carry1);
         self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+            .add_count(ptr_limbs[1], self.pointer_max_bits.min(32) - U16_BITS);
 
         adapter_row.imm = F::from_u32(imm);
         adapter_row.imm_sign = F::from_bool(imm_sign);
@@ -409,8 +404,6 @@ impl LoadMultiByteAdapterFiller {
             adapter_row.rs1_aux_cols.as_mut(),
         );
         adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
-        adapter_row.rs1_hi_neg = F::from_bool(rs1_hi_neg);
-        adapter_row.rs1_hi_one = F::from_bool(rs1_hi_one);
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(pc_to_idx(from_pc));
