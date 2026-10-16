@@ -149,11 +149,13 @@ impl MultiMillerLoop for Bn254 {
     const SEED_ABS: u64 = BN254_SEED;
     const PSEUDO_BINARY_ENCODING: &[i8] = &BN254_PSEUDO_BINARY_ENCODING;
 
-    fn evaluate_lines_vec(f: Fq12, lines: Vec<EvaluatedLine<Fq2>>) -> Fq12 {
+    fn evaluate_lines_vec(f: Fq12, lines: &[EvaluatedLine<Fq2>]) -> Fq12 {
         let mut f = f;
         let mut lines = lines;
         if lines.len() % 2 == 1 {
-            f = Self::mul_by_013(&f, &lines.pop().unwrap());
+            let (last, rest) = lines.split_last().unwrap();
+            f = Self::mul_by_013(&f, last);
+            lines = rest;
         }
         for chunk in lines.chunks(2) {
             if let [line0, line1] = chunk {
@@ -194,7 +196,7 @@ impl MultiMillerLoop for Bn254 {
             initial_lines.push(line);
         }
 
-        f = Self::evaluate_lines_vec(f, initial_lines);
+        f = Self::evaluate_lines_vec(f, &initial_lines);
 
         (f, Q_acc)
     }
@@ -259,7 +261,7 @@ impl MultiMillerLoop for Bn254 {
         }
 
         let mut f = *f;
-        f = Self::evaluate_lines_vec(f, lines);
+        f = Self::evaluate_lines_vec(f, &lines);
 
         (f, Q_acc)
     }
