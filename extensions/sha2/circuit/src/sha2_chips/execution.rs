@@ -13,12 +13,27 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::{Sha2Config, Sha2VmExecutor, SHA2_READ_SIZE};
 use crate::SHA2_WRITE_SIZE;
 
+/// `extend_circuit` registers `Sha2BlockHasherVmAir` immediately before `Sha2MainAir`.
+/// With reverse AIR indexing, the block hasher index is therefore `main_air_idx + 1`.
+/// Keep this in sync with the add order in `extension/mod.rs`.
+const BLOCK_HASHER_AIR_IDX_OFFSET: u32 = 1;
+
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct Sha2PreCompute {
     a: u8,
     b: u8,
     c: u8,
+}
+
+/// Metered precompute stores both AIR indices explicitly so the hot path does not
+/// re-derive the block-hasher index from registration order.
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct Sha2MeteredPreCompute {
+    main_air_idx: u32,
+    block_hasher_air_idx: u32,
+    data: Sha2PreCompute,
 }
 
 impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C> {
@@ -59,7 +74,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
 
 impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExecutor<C> {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<Sha2PreCompute>>()
+        size_of::<Sha2MeteredPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -73,8 +88,9 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        let data: &mut Sha2MeteredPreCompute = data.borrow_mut();
+        data.main_air_idx = chip_idx as u32;
+        data.block_hasher_air_idx = chip_idx as u32 + BLOCK_HASHER_AIR_IDX_OFFSET;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_impl::<_, _, C>)
     }
@@ -90,8 +106,9 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        let data: &mut Sha2MeteredPreCompute = data.borrow_mut();
+        data.main_air_idx = chip_idx as u32;
+        data.block_hasher_air_idx = chip_idx as u32 + BLOCK_HASHER_AIR_IDX_OFFSET;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_handler::<_, _, C>)
     }
@@ -165,24 +182,20 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Sha2PreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Sha2PreCompute>>()).borrow();
-
-    let main_air_idx = pre_compute.chip_idx as usize;
+    let pre_compute: &Sha2MeteredPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<Sha2MeteredPreCompute>()).borrow();
 
     // Update Sha2MainChip height (1 row per instruction)
     let height = execute_e12_impl::<F, C, CTX, false>(&pre_compute.data, exec_state);
-    exec_state.ctx.on_height_change(main_air_idx, height);
-
-    // HACK: Sha2BlockHasherVmAir is added right before Sha2MainAir in extend_circuit,
-    // and due to reverse ordering of AIR indices, block_hasher_air_idx = main_air_idx + 1.
-    // See extension/mod.rs extend_circuit for the ordering.
-    let block_hasher_air_idx = main_air_idx + 1;
-
-    // Update Sha2BlockHasherChip height (ROWS_PER_BLOCK rows per block compression)
     exec_state
         .ctx
-        .on_height_change(block_hasher_air_idx, C::ROWS_PER_BLOCK as u32);
+        .on_height_change(pre_compute.main_air_idx as usize, height);
+
+    // Update Sha2BlockHasherChip height (ROWS_PER_BLOCK rows per block compression)
+    exec_state.ctx.on_height_change(
+        pre_compute.block_hasher_air_idx as usize,
+        C::ROWS_PER_BLOCK as u32,
+    );
 }
 
 #[cfg(feature = "aot")]

@@ -20,10 +20,25 @@ use p3_keccak_air::NUM_ROUNDS;
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
 use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE};
 
+/// `extend_circuit` registers `KeccakfPermAir` immediately before `KeccakfOpAir`.
+/// With reverse AIR indexing, the perm index is therefore `op_air_idx + 1`.
+/// Keep this in sync with the add order in `extension/mod.rs`.
+const PERM_AIR_IDX_OFFSET: u32 = 1;
+
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct KeccakfPreCompute {
     a: u8,
+}
+
+/// Metered precompute stores both AIR indices explicitly so the hot path does not
+/// re-derive the perm index from registration order.
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct KeccakfMeteredPreCompute {
+    op_air_idx: u32,
+    perm_air_idx: u32,
+    data: KeccakfPreCompute,
 }
 
 impl KeccakfExecutor {
@@ -97,7 +112,7 @@ impl<F: PrimeField32> AotExecutor<F> for KeccakfExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<KeccakfPreCompute>>()
+        size_of::<KeccakfMeteredPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -111,8 +126,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        let data: &mut KeccakfMeteredPreCompute = data.borrow_mut();
+        data.op_air_idx = chip_idx as u32;
+        data.perm_air_idx = chip_idx as u32 + PERM_AIR_IDX_OFFSET;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_impl::<_, _>)
     }
@@ -128,8 +144,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        let data: &mut KeccakfMeteredPreCompute = data.borrow_mut();
+        data.op_air_idx = chip_idx as u32;
+        data.perm_air_idx = chip_idx as u32 + PERM_AIR_IDX_OFFSET;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_handler)
     }
@@ -184,26 +201,18 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<KeccakfPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakfPreCompute>>())
-            .borrow();
+    let pre_compute: &KeccakfMeteredPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<KeccakfMeteredPreCompute>()).borrow();
 
-    let op_air_idx = pre_compute.chip_idx as usize;
-
-    // Update KeccakfOpChip height (2 rows per instruction)
+    // Update KeccakfOpChip height (NUM_OP_ROWS_PER_INS rows per instruction)
     exec_state
         .ctx
-        .on_height_change(op_air_idx, NUM_OP_ROWS_PER_INS as u32);
+        .on_height_change(pre_compute.op_air_idx as usize, NUM_OP_ROWS_PER_INS as u32);
 
-    // HACK: KeccakfPermAir is added right before KeccakfOpAir in extend_circuit,
-    // and due to reverse ordering of AIR indices, perm_air_idx = op_air_idx + 1.
-    // See extension/mod.rs extend_circuit for the ordering.
-    let perm_air_idx = op_air_idx + 1;
-
-    // Update KeccakfPermChip height (24 rows per keccakf permutation)
+    // Update KeccakfPermChip height (NUM_ROUNDS rows per keccakf permutation)
     exec_state
         .ctx
-        .on_height_change(perm_air_idx, NUM_ROUNDS as u32);
+        .on_height_change(pre_compute.perm_air_idx as usize, NUM_ROUNDS as u32);
 
     execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
 }

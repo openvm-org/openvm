@@ -167,6 +167,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         let subair_bus_index = inventory.new_bus_idx();
 
         // SHA-256
+        // Metered execution stores both AIR indices; with reverse indexing the block hasher
+        // must remain immediately before the main AIR (see BLOCK_HASHER_AIR_IDX_OFFSET).
         let sha256_block_hasher_air =
             Sha2BlockHasherVmAir::<Sha256Config>::new(bitwise_lu, subair_bus_index, sha2_bus_index);
         inventory.add_air(sha256_block_hasher_air);
@@ -180,7 +182,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         );
         inventory.add_air(sha256_main_air);
 
-        // SHA-512
+        // SHA-512 — same block-hasher-before-main ordering as SHA-256.
         let sha512_block_hasher_air =
             Sha2BlockHasherVmAir::<Sha512Config>::new(bitwise_lu, subair_bus_index, sha2_bus_index);
         inventory.add_air(sha512_block_hasher_air);
