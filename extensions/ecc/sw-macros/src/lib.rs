@@ -402,6 +402,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 } else {
                                     -y
                                 };
+                                // Negation may return an unreduced representative; parity needs the canonical one.
+                                correct_y.assert_reduced();
                                 // If y = 0 then negating y doesn't change its parity
                                 if correct_y.as_le_bytes()[0] & 1 != *rec_id & 1 {
                                     return None;
