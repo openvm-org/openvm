@@ -118,12 +118,14 @@ pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorM
         .map(|(pc, instruction, _)| (pc, instruction))
         .collect_vec();
 
+    // `instructions` is packed, so its length is not a PC index when the program has holes.
+    // Start padding after the original slot range so those PCs stay unique.
     let padding = padding_instruction();
+    let mut padding_index = program.len();
     while !instructions.len().is_power_of_two() {
-        instructions.push((
-            program.pc_base + instructions.len() as u32 * DEFAULT_PC_STEP,
-            padding.clone(),
-        ));
+        let padding_pc = program.pc_base + padding_index as u32 * DEFAULT_PC_STEP;
+        instructions.push((padding_pc, padding.clone()));
+        padding_index += 1;
     }
 
     let height = instructions.len();

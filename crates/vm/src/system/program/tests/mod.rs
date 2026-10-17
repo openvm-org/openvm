@@ -9,7 +9,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     any_air_arc_vec,
-    p3_field::PrimeCharacteristicRing,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CommittedTraceData, TraceCommitter},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
@@ -281,6 +281,35 @@ fn check_boundary_columns(num_instructions: usize, corrupt: Option<(usize, usize
     } else {
         result.expect("valid boundary columns must verify");
     }
+}
+
+#[test_case::test_case(&[true, false, true, true], &[0, 8, 12, 16]; "interior_hole")]
+#[test_case::test_case(&[true, false, true, true, false], &[0, 8, 12, 20]; "trailing_hole")]
+#[test_case::test_case(
+    &[true, false, true, true, true, true],
+    &[0, 8, 12, 16, 20, 24, 28, 32];
+    "multiple_padding_rows"
+)]
+fn test_cached_trace_padding_pcs_skip_program_holes(defined: &[bool], expected_offsets: &[u32]) {
+    let insn = Instruction::<BabyBear>::from_usize(LOADW, [0, 0, 0]);
+    let instructions = defined
+        .iter()
+        .map(|&is_defined| is_defined.then(|| insn.clone()))
+        .collect::<Vec<_>>();
+    let pc_base = 0x1000;
+    let program = Program::new_without_debug_infos_with_option(&instructions, pc_base);
+    let trace = generate_cached_trace(&program);
+    let pcs = (0..trace.height())
+        .map(|row| trace.row_slice(row).unwrap()[1].as_canonical_u32())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        pcs,
+        expected_offsets
+            .iter()
+            .map(|offset| pc_base + offset)
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test_case::test_case(0; "empty")]

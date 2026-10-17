@@ -72,6 +72,7 @@ impl ProgramChipGPU {
                 &records,
                 program.pc_base,
                 DEFAULT_PC_STEP,
+                program.len() as u32,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
                 device_ctx.stream.as_raw(),
             )
@@ -224,6 +225,20 @@ mod tests {
             )),
         ];
         let program = Program::new_without_debug_infos_with_option(&instructions, 0);
+        test_cached_committed_trace_data(program);
+    }
+
+    #[test]
+    fn test_cuda_program_cached_tracegen_sparse_padding() {
+        let instruction = Instruction::large_from_isize(STOREW, 2, 0, 0, 0, 1, 0, 1);
+        let instructions = [
+            Some(instruction.clone()),
+            None,
+            Some(instruction.clone()),
+            Some(instruction),
+            None,
+        ];
+        let program = Program::new_without_debug_infos_with_option(&instructions, 0x1000);
         test_cached_committed_trace_data(program);
     }
 
