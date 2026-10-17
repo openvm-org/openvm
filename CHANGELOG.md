@@ -8,8 +8,15 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 ## Unreleased
 
 ### Changed
-- Modular byte access and Serde serialization assert reduction. Native checks panic on noncanonical values.
-- Implementers of `IntMod` and `WeierstrassPoint` provide `*_unchecked` byte accessors. Point coordinates implement `CanonicalRepr` to check each base-field component before byte access.
+- (Guest Library/Algebra) Assert reduction before modular and point byte access and Serde serialization. Native checks panic on noncanonical values.
+- (Guest Library/Algebra) Require `IntMod` and `WeierstrassPoint` implementers to provide `*_unchecked` byte accessors, and point coordinates to implement `CanonicalRepr`.
+- (Guest Library/ECC) Assert reduction of the selected root before testing parity during point decompression.
+- (Guest Library/ECC) Assert reduction of both coordinates in `PublicKey::from_affine` before checking identity.
+- (Guest Library/Algebra) Compare zkVM field and scalar values modulo their modulus in `ct_eq` for `ff_derive`, `k256`, and `p256`.
+- (Guest Library/ff_derive) Fix encoding and decoding for differing representation and storage sizes in both byte orders. Invalid encodings return `None` instead of panicking.
+- (Transpiler) Reject unsupported SYSTEM/CSR instructions, including LLVM's `UNIMP` trap.
+- (Toolchain) Treat nonzero return statuses from Rust's `std` main wrapper as failures, including `Err` and nonzero `ExitCode` returns.
+- (Prover) Fix program-trace padding PC collisions in sparse programs on CPU and CUDA by placing padding after the original program slots.
 
 ## v2.1.0 (2026-08-25)
 
