@@ -201,7 +201,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                         let modulus_bytes = <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
                         let mut one = [0u8; <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                         one[0] = 1;
-                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
+                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes_unchecked(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
                         // p1 should be (p, a)
                         let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                         // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
@@ -239,7 +239,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 /// SAFETY: assumes that #intmod_type has a memory representation
                 /// such that with repr(C), two coordinates are packed contiguously.
                 #[inline(always)]
-                fn as_le_bytes(&self) -> &[u8] {
+                fn as_le_bytes_unchecked(&self) -> &[u8] {
                     unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
                 }
 
@@ -402,8 +402,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 } else {
                                     -y
                                 };
-                                // Negation may return an unreduced representative; parity needs the canonical one.
-                                correct_y.assert_reduced();
                                 // If y = 0 then negating y doesn't change its parity
                                 if correct_y.as_le_bytes()[0] & 1 != *rec_id & 1 {
                                     return None;

@@ -7,6 +7,10 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+### Changed
+- Modular byte access and Serde serialization assert reduction. Native checks panic on noncanonical values.
+- Implementers of `IntMod` and `WeierstrassPoint` provide `*_unchecked` byte accessors. Point coordinates implement `CanonicalRepr` to check each base-field component before byte access.
+
 ## v2.1.0 (2026-08-25)
 
 ### Added

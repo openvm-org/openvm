@@ -1,5 +1,72 @@
 #![allow(non_snake_case)]
 
+#[test]
+fn test_native_canonical_repr() {
+    use std::panic::catch_unwind;
+
+    use halo2curves_axiom::{bls12_381, bn256, ff::PrimeField};
+    use openvm_algebra_guest::{
+        field::{CanonicalRepr, FieldExtension},
+        Field,
+    };
+
+    fn check<F: Field + CanonicalRepr>() {
+        F::ZERO.assert_canonical();
+        F::ONE.assert_canonical();
+    }
+    check::<bn256::Fq>();
+    check::<bn256::Fq2>();
+    check::<bn256::Fq12>();
+    check::<bls12_381::Fq>();
+    check::<bls12_381::Fq2>();
+    check::<bls12_381::Fq12>();
+
+    let modulus = num_bigint::BigUint::parse_bytes(
+        bls12_381::Fq::MODULUS.trim_start_matches("0x").as_bytes(),
+        16,
+    )
+    .unwrap();
+    let raw = bls12_381::Fq::from_raw_unchecked(modulus.to_u64_digits().try_into().unwrap());
+    assert!(catch_unwind(|| raw.assert_canonical()).is_err());
+    let raw2 = bls12_381::Fq2 {
+        c0: bls12_381::Fq::ZERO,
+        c1: raw,
+    };
+    assert!(catch_unwind(|| raw2.assert_canonical()).is_err());
+    let mut coeffs = [bls12_381::Fq2::ZERO; 6];
+    coeffs[5] = raw2;
+    let raw12 = <bls12_381::Fq12 as FieldExtension<bls12_381::Fq2>>::from_coeffs(coeffs);
+    assert!(catch_unwind(|| raw12.assert_canonical()).is_err());
+}
+
+#[test]
+fn test_g2_checked_bytes() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    use openvm_algebra_guest::{field::FieldExtension, IntMod};
+    use openvm_ecc_guest::weierstrass::WeierstrassPoint;
+
+    fn check<F: IntMod, P: WeierstrassPoint>(point: P)
+    where
+        P::Coordinate: FieldExtension<F, Coeffs = [F; 2]>,
+    {
+        assert_eq!(point.as_le_bytes(), point.as_le_bytes_unchecked());
+        assert_eq!(point.as_le_bytes().len(), 4 * F::NUM_LIMBS);
+        for i in 0..4 {
+            let mut point = point.clone();
+            let coord = if i < 2 { point.x_mut() } else { point.y_mut() };
+            let mut coeffs = coord.clone().to_coeffs();
+            coeffs[i % 2] = F::from_repr(F::MODULUS);
+            *coord = P::Coordinate::from_coeffs(coeffs);
+            assert!(catch_unwind(AssertUnwindSafe(|| point.as_le_bytes())).is_err());
+        }
+    }
+
+    use openvm_pairing::{bls12_381, bn254};
+    check::<bn254::Fp, bn254::G2Affine>(bn254::G2Affine::IDENTITY);
+    check::<bls12_381::Fp, bls12_381::G2Affine>(bls12_381::G2Affine::IDENTITY);
+}
+
 #[cfg(feature = "bn254")]
 mod bn254 {
     use std::iter;

@@ -4,7 +4,19 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use crate::{DivAssignUnsafe, DivUnsafe};
+use crate::{DivAssignUnsafe, DivUnsafe, IntMod};
+
+/// Checks that a field or ring element has a canonical representation.
+/// Extension fields check each base-field component.
+pub trait CanonicalRepr {
+    fn assert_canonical(&self);
+}
+
+impl<T: IntMod> CanonicalRepr for T {
+    fn assert_canonical(&self) {
+        self.assert_reduced();
+    }
+}
 
 // TODO[jpw]: the shared parts of Field and IntMod should be moved into a new `IntegralDomain`
 // trait.

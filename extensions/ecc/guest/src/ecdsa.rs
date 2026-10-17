@@ -553,8 +553,6 @@ where
     // public key
     let Q = pubkey;
     let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
-    // For Coordinate<C>: IntMod, is_identity checks that x is reduced. The comparison
-    // short-circuits when x != 0, so y may remain unchecked; only x is used below.
     if R.is_identity() {
         return Err(Error::new());
     }

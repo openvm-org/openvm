@@ -29,6 +29,56 @@ mod guest_tests {
         config
     }
 
+    #[cfg(not(feature = "cuda"))]
+    #[test]
+    fn test_point_observations() -> Result<()> {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        use openvm_circuit::utils::air_test_with_min_segments;
+        use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+
+        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "point_observations",
+            &config,
+        )?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        // Rejection cases rely on executor debug assertions in the fast profile.
+        for case in 0..=9 {
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                air_test_with_min_segments(
+                    Rv32WeierstrassBuilder,
+                    config.clone(),
+                    exe.clone(),
+                    vec![vec![F::from_u8(case)]],
+                    1,
+                )
+            }));
+            if case == 0 {
+                assert!(result.unwrap().is_some());
+            } else {
+                let Err(panic) = result else {
+                    panic!("noncanonical coordinate was accepted");
+                };
+                let message = panic.downcast_ref::<String>().expect("reduction assertion");
+                assert!(
+                    message.starts_with('[') && message.contains(" >= ["),
+                    "{message}"
+                );
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_add() -> Result<()> {
         let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
@@ -44,6 +94,56 @@ mod guest_tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        Ok(())
+    }
+
+    #[cfg(not(feature = "cuda"))]
+    #[test]
+    fn test_scalar_observations() -> Result<()> {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        use openvm_circuit::utils::air_test_with_min_segments;
+        use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+
+        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "scalar_observations",
+            &config,
+        )?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        // Rejection cases rely on executor debug assertions in the fast profile.
+        for case in 0..=8 {
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                air_test_with_min_segments(
+                    Rv32WeierstrassBuilder,
+                    config.clone(),
+                    exe.clone(),
+                    vec![vec![F::from_u8(case)]],
+                    1,
+                )
+            }));
+            if case == 0 {
+                assert!(result.unwrap().is_some());
+            } else {
+                let Err(panic) = result else {
+                    panic!("noncanonical scalar was accepted");
+                };
+                let message = panic.downcast_ref::<String>().expect("reduction assertion");
+                assert!(
+                    message.starts_with('[') && message.contains(" >= ["),
+                    "{message}"
+                );
+            }
+        }
         Ok(())
     }
 
@@ -272,6 +372,55 @@ mod host_tests {
     use k256::{Scalar as Secp256k1Scalar, Secp256k1Coord, Secp256k1Point};
     use openvm_algebra_guest::IntMod;
     use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+
+    #[test]
+    fn test_checked_point_bytes() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+
+        use openvm_ecc_guest::CyclicGroup;
+
+        for x in [false, true] {
+            let mut point = Secp256k1Point::GENERATOR;
+            assert_eq!(point.as_le_bytes(), point.as_le_bytes_unchecked());
+            let coord = if x { point.x_mut() } else { point.y_mut() };
+            *coord = Secp256k1Coord::from_repr(Secp256k1Coord::MODULUS);
+            assert_eq!(point.as_le_bytes_unchecked().len(), 64);
+            assert!(catch_unwind(AssertUnwindSafe(|| point.as_le_bytes())).is_err());
+        }
+    }
+
+    #[test]
+    fn test_checked_byte_access() {
+        use std::panic::catch_unwind;
+
+        use elliptic_curve::subtle::{Choice, ConditionallySelectable};
+
+        fn check<T: IntMod + serde::Serialize + ConditionallySelectable>() {
+            let raw = T::from_le_bytes_unchecked(T::MODULUS.as_ref());
+            assert_eq!(raw.as_le_bytes_unchecked(), T::MODULUS.as_ref());
+            let mut expected = T::MODULUS.as_ref().to_vec();
+            expected.reverse();
+            assert_eq!(raw.to_be_bytes_unchecked().as_ref(), expected);
+            assert!(catch_unwind(std::panic::AssertUnwindSafe(|| raw.as_le_bytes())).is_err());
+            assert!(catch_unwind(std::panic::AssertUnwindSafe(|| raw.to_be_bytes())).is_err());
+            assert!(catch_unwind(std::panic::AssertUnwindSafe(|| raw == T::ZERO)).is_err());
+            assert!(catch_unwind(std::panic::AssertUnwindSafe(|| T::ZERO == raw)).is_err());
+            assert!(
+                catch_unwind(std::panic::AssertUnwindSafe(|| openvm::serde::to_vec(&raw))).is_err()
+            );
+            let selected = T::conditional_select(&T::ONE, &raw, Choice::from(0));
+            assert_eq!(selected.as_le_bytes(), T::ONE.as_le_bytes());
+            assert_eq!(
+                openvm::serde::to_vec(&selected).unwrap(),
+                openvm::serde::to_vec(
+                    &<[_; 32]>::try_from(T::ONE.as_le_bytes_unchecked()).unwrap()
+                )
+                .unwrap()
+            );
+        }
+        check::<Secp256k1Scalar>();
+        check::<Secp256k1Coord>();
+    }
 
     #[test]
     fn test_host_secp256k1() {

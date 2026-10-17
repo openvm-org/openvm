@@ -112,6 +112,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
 
         let module_name = format_ident!("algebra_impl_{}", mod_idx);
+        let serialize_repr = syn::LitStr::new(
+            &format!("{struct_name}::serialize_repr"),
+            struct_name.span(),
+        );
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             /// An element of the ring of integers modulo a positive integer.
@@ -127,7 +131,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             /// [`is_reduced`](openvm_algebra_guest::IntMod::is_reduced).
             #[derive(Clone, Eq, serde::Serialize, serde::Deserialize)]
             #[repr(C, align(#block_size))]
-            pub struct #struct_name(#[serde(with = "openvm_algebra_guest::BigArray")] [u8; #limbs]);
+            pub struct #struct_name(
+                #[serde(serialize_with = #serialize_repr, deserialize_with = "openvm_algebra_guest::BigArray::deserialize")]
+                [u8; #limbs]
+            );
 
             extern "C" {
                 fn #add_extern_func(rd: usize, rs1: usize, rs2: usize);
@@ -141,6 +148,11 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
             }
 
             impl #struct_name {
+                fn serialize_repr<S: serde::Serializer>(repr: &[u8; #limbs], serializer: S) -> ::core::result::Result<S::Ok, S::Error> {
+                    <Self as openvm_algebra_guest::IntMod>::assert_reduced(&Self(*repr));
+                    openvm_algebra_guest::BigArray::serialize(repr, serializer)
+                }
+
                 #[inline(always)]
                 const fn from_const_u8(val: u8) -> Self {
                     let mut bytes = [0; #limbs];
@@ -446,12 +458,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn as_le_bytes(&self) -> &[u8] {
+                    fn as_le_bytes_unchecked(&self) -> &[u8] {
                         &(self.0)
                     }
 
                     #[inline(always)]
-                    fn to_be_bytes(&self) -> [u8; #limbs] {
+                    fn to_be_bytes_unchecked(&self) -> [u8; #limbs] {
                         core::array::from_fn(|i| self.0[#limbs - 1 - i])
                     }
 
@@ -467,7 +479,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     #[cfg(not(target_os = "zkvm"))]
                     fn as_biguint(&self) -> num_bigint::BigUint {
-                        num_bigint::BigUint::from_bytes_le(self.as_le_bytes())
+                        num_bigint::BigUint::from_bytes_le(self.as_le_bytes_unchecked())
                     }
 
                     #[inline(always)]
@@ -513,10 +525,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
 
                     /// If `self` is not in its canonical form, the proof will fail to verify.
-                    /// This means guest execution will never terminate (either successfully or
-                    /// unsuccessfully) if `self` is not in its canonical form.
+                    /// On the host, this panics if `self` is not in its canonical form.
                     // is_eq_mod enforces `self` is less than `modulus`
                     fn assert_reduced(&self) {
+                        #[cfg(not(target_os = "zkvm"))]
+                        assert!(self.is_reduced(), "noncanonical modular integer");
+                        #[cfg(target_os = "zkvm")]
                         // This must not be optimized out
                         let _ = core::hint::black_box(PartialEq::eq(self, self));
                     }
@@ -776,7 +790,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 impl core::fmt::Debug for #struct_name {
                     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                        write!(f, "{:?}", self.as_le_bytes())
+                        write!(f, "{:?}", self.as_le_bytes_unchecked())
                     }
                 }
             }
@@ -941,7 +955,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                             let exp = -<Self as ::openvm_algebra_guest::IntMod>::ONE.div_unsafe(Self::from_const_u8(2));
                             <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(&exp);
 
-                            if non_qr.exp_bytes(true, &<Self as ::openvm_algebra_guest::IntMod>::to_be_bytes(&exp)) != -<Self as ::openvm_algebra_guest::IntMod>::ONE
+                            if non_qr.exp_bytes(true, &<Self as ::openvm_algebra_guest::IntMod>::to_be_bytes_unchecked(&exp)) != -<Self as ::openvm_algebra_guest::IntMod>::ONE
                             {
                                 // non_qr is not a non quadratic residue, so host is dishonest
                                 loop {

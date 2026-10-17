@@ -3,7 +3,7 @@ use core::{
     ops::{Add, AddAssign, Sub, SubAssign},
 };
 
-use openvm_algebra_guest::field::Field;
+use openvm_algebra_guest::field::{CanonicalRepr, Field};
 
 /// Sextic extension field of `F` with irreducible polynomial `X^6 - \xi`.
 /// Elements are represented as `c0 + c1 * w + ... + c5 * w^5` where `w^6 = \xi`, where `\xi in F`.
@@ -18,6 +18,14 @@ pub struct SexticExtField<F> {
 impl<F> SexticExtField<F> {
     pub const fn new(c: [F; 6]) -> Self {
         Self { c }
+    }
+}
+
+impl<F: CanonicalRepr> CanonicalRepr for SexticExtField<F> {
+    fn assert_canonical(&self) {
+        for coeff in &self.c {
+            coeff.assert_canonical();
+        }
     }
 }
 

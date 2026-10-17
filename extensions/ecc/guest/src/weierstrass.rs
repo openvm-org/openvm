@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::Mul;
 
-use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_guest::{field::CanonicalRepr, Field, IntMod};
 
 use super::group::Group;
 
@@ -13,14 +13,22 @@ pub trait WeierstrassPoint: Clone + Sized {
     const CURVE_B: Self::Coordinate;
     const IDENTITY: Self;
 
-    type Coordinate: Field;
+    type Coordinate: Field + CanonicalRepr;
 
     /// The concatenated `x, y` coordinates of the affine point, where
     /// coordinates are in little endian.
+    /// Asserts that both coordinates are reduced.
     ///
     /// **Warning**: The memory layout of `Self` is expected to pack
     /// `x` and `y` contiguously with no unallocated space in between.
-    fn as_le_bytes(&self) -> &[u8];
+    fn as_le_bytes(&self) -> &[u8] {
+        self.x().assert_canonical();
+        self.y().assert_canonical();
+        self.as_le_bytes_unchecked()
+    }
+
+    /// The concatenated `x, y` coordinates in their stored representations.
+    fn as_le_bytes_unchecked(&self) -> &[u8];
 
     /// Raw constructor without asserting point is on the curve.
     ///
@@ -154,6 +162,7 @@ pub trait IntrinsicCurve {
     /// Multi-scalar multiplication.
     /// The implementation may be specialized to use properties of the curve
     /// (e.g., if the curve order is prime).
+    /// See [`crate::msm()`] for how integer scalars are handled.
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
 }
 
@@ -237,6 +246,7 @@ where
     }
 
     /// Computes `sum scalars[i] * bases[i]`.
+    /// Scalars are handled as in [`crate::msm()`].
     ///
     /// For implementation simplicity, currently only implemented when
     /// `window_bits` divides 8 (number of bits in a byte).
@@ -275,7 +285,7 @@ where
                 }
             }
             for (base_idx, scalar) in scalars.iter().enumerate() {
-                let scalar = (scalar.as_le_bytes()[limb_idx] >> bit_idx) & mask;
+                let scalar = (scalar.as_le_bytes_unchecked()[limb_idx] >> bit_idx) & mask;
                 let summand = self.get_multiple(base_idx, scalar as usize);
                 // handles identity
                 // setup has been called above
@@ -322,7 +332,7 @@ macro_rules! impl_sw_affine {
             type Coordinate = $field;
 
             /// SAFETY: assumes that [$field] has internal representation in little-endian.
-            fn as_le_bytes(&self) -> &[u8] {
+            fn as_le_bytes_unchecked(&self) -> &[u8] {
                 unsafe {
                     &*core::ptr::slice_from_raw_parts(
                         self as *const Self as *const u8,

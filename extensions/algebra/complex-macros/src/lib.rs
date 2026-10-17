@@ -725,6 +725,13 @@ pub fn complex_impl_field(input: TokenStream) -> TokenStream {
         let struct_name = syn::Ident::new(&str_path, span.into());
 
         output.push(quote::quote_spanned! { span.into() =>
+            impl openvm_algebra_guest::field::CanonicalRepr for #struct_name {
+                fn assert_canonical(&self) {
+                    openvm_algebra_guest::field::CanonicalRepr::assert_canonical(&self.c0);
+                    openvm_algebra_guest::field::CanonicalRepr::assert_canonical(&self.c1);
+                }
+            }
+
             impl openvm_algebra_guest::field::Field for #struct_name {
                 type SelfRef<'a>
                     = &'a Self

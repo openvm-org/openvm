@@ -14,6 +14,26 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldReprEndianness = "little"]
 struct Fermat65537Field([u64; 1]);
 
+mod big_endian {
+    use openvm_ff_derive::openvm_prime_field;
+
+    #[openvm_prime_field]
+    #[PrimeFieldModulus = "65537"]
+    #[PrimeFieldGenerator = "3"]
+    #[PrimeFieldReprEndianness = "big"]
+    struct Fermat65537FieldBe([u64; 1]);
+
+    pub fn check() {
+        super::repr::check::<Fermat65537FieldBe>(true, 32);
+    }
+}
+
+#[path = "../repr.rs"]
+mod repr;
+
 openvm::init!("openvm_init_fermat.rs");
 
-fn main() {}
+fn main() {
+    repr::check::<Fermat65537Field>(false, 32);
+    big_endian::check();
+}

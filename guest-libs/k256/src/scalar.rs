@@ -42,14 +42,18 @@ impl Default for Secp256k1Scalar {
 }
 
 impl ConstantTimeEq for Secp256k1Scalar {
-    /// Compares raw little-endian byte representations for equality.
-    ///
-    /// **Note:** both operands must be in canonical (reduced) form.
-    /// Values created via `from_le_bytes_unchecked` or `from_be_bytes_unchecked`
-    /// must be reduced before calling `ct_eq`; otherwise two representations of
-    /// the same field element may compare as unequal.
+    /// Compares field elements for equality. On the host, both operands must be reduced.
     fn ct_eq(&self, other: &Self) -> Choice {
-        self.as_le_bytes().ct_eq(other.as_le_bytes())
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            self.as_le_bytes_unchecked()
+                .ct_eq(other.as_le_bytes_unchecked())
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            // Compare the difference with zero to test equality modulo the modulus.
+            Choice::from(((self - other) == <Self as IntMod>::ZERO) as u8)
+        }
     }
 }
 
@@ -60,9 +64,9 @@ impl ConditionallySelectable for Secp256k1Scalar {
         choice: Choice,
     ) -> Secp256k1Scalar {
         Secp256k1Scalar::from_le_bytes_unchecked(
-            &a.as_le_bytes()
+            &a.as_le_bytes_unchecked()
                 .iter()
-                .zip(b.as_le_bytes().iter())
+                .zip(b.as_le_bytes_unchecked().iter())
                 .map(|(a, b)| u8::conditional_select(a, b, choice))
                 .collect::<Vec<_>>(),
         )
@@ -174,9 +178,9 @@ impl PartialOrd for Secp256k1Scalar {
         self.assert_reduced();
         other.assert_reduced();
         Some(
-            self.to_be_bytes()
+            self.to_be_bytes_unchecked()
                 .iter()
-                .zip(other.to_be_bytes().iter())
+                .zip(other.to_be_bytes_unchecked().iter())
                 .map(|(a, b)| a.cmp(b))
                 .find(|ord| *ord != Ordering::Equal)
                 .unwrap_or(Ordering::Equal),

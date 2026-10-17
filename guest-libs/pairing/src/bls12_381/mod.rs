@@ -70,6 +70,7 @@ impl IntrinsicCurve for Bls12_381 {
     type Scalar = Scalar;
     type Point = G1Affine;
 
+    /// Uses integer scalars as described in [`openvm_ecc_guest::msm()`].
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
         openvm_ecc_guest::msm(coeffs, bases)
     }

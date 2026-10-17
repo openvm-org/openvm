@@ -6,6 +6,11 @@ use openvm_algebra_guest::IntMod;
 use super::Group;
 
 /// Multi-scalar multiplication via Pippenger's algorithm
+///
+/// Uses the stored integer value of each scalar.
+/// To use scalars as field elements, call `assert_reduced()` first.
+/// No reduction check is needed if `r * P` is the identity for every input point,
+/// where `r` is the scalar modulus.
 // Reference: https://github.com/privacy-scaling-explorations/halo2curves/blob/8771fe5a5d54fc03e74dbc8915db5dad3ab46a83/src/msm.rs#L335
 pub fn msm<EcPoint: Group, Scalar: IntMod>(coeffs: &[Scalar], bases: &[EcPoint]) -> EcPoint
 where
@@ -16,7 +21,7 @@ where
         bases.len(),
         "msm requires matching scalar/base lengths"
     );
-    let coeffs: Vec<_> = coeffs.iter().map(|c| c.as_le_bytes()).collect();
+    let coeffs: Vec<_> = coeffs.iter().map(|c| c.as_le_bytes_unchecked()).collect();
     let mut acc = EcPoint::IDENTITY;
 
     // c: window size. Will group scalars into c-bit windows

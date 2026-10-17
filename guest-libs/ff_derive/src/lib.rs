@@ -47,18 +47,31 @@ impl ReprEndianness {
 
     // Clippy things methods named from_* don't take self as a parameter
     #[allow(clippy::wrong_self_convention)]
-    fn from_repr(&self, name: &syn::Ident, limbs: usize) -> proc_macro2::TokenStream {
-        let read_repr = match self {
-            ReprEndianness::Big => quote! {
-                <#name as ::openvm_algebra_guest::IntMod>::from_be_bytes(&r.as_ref()).unwrap()
-            },
-            ReprEndianness::Little => quote! {
-                <#name as ::openvm_algebra_guest::IntMod>::from_le_bytes(&r.as_ref()).unwrap()
-            },
+    fn from_repr(
+        &self,
+        name: &syn::Ident,
+        modulus: &BigUint,
+        limbs: usize,
+    ) -> proc_macro2::TokenStream {
+        let input_le = match self {
+            ReprEndianness::Big => quote! { r.as_ref().iter().rev() },
+            ReprEndianness::Little => quote! { r.as_ref().iter() },
         };
-
+        let modulus_le = ReprEndianness::Little.modulus_repr(modulus, limbs * 8);
         let zkvm_impl = quote! {
-            #read_repr
+            // Check that the number represented by all input bytes is less than the modulus.
+            let mut borrow = 0;
+            for (a, b) in #input_le.zip([#(#modulus_le),*].iter()) {
+                borrow = ::ff::derive::sbb(u64::from(*a), u64::from(*b), borrow).1;
+            }
+            let is_some = ::ff::derive::subtle::Choice::from((borrow as u8) & 1);
+            let mut bytes = [0u8; <#name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS];
+            for (dst, src) in bytes.iter_mut().zip(#input_le) {
+                *dst = *src;
+            }
+            // The result uses `is_some` to reject invalid inputs.
+            let r = <#name as ::openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(&bytes);
+            (r, is_some)
         };
 
         let read_repr = match self {
@@ -83,7 +96,7 @@ impl ReprEndianness {
 
         quote! {
             #[cfg(target_os = "zkvm")]
-                let r = #zkvm_impl;
+                let (r, is_some) = { #zkvm_impl };
             #[cfg(not(target_os = "zkvm"))]
                 let r = #non_zkvm_impl;
         }
@@ -97,17 +110,16 @@ impl ReprEndianness {
     ) -> proc_macro2::TokenStream {
         let bytes = limbs * 8;
 
-        let write_repr = match self {
-            ReprEndianness::Big => quote! {
-                <Self as ::openvm_algebra_guest::IntMod>::to_be_bytes(self)[..#bytes].try_into().unwrap()
-            },
-            ReprEndianness::Little => quote! {
-                <Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(self)[..#bytes].try_into().unwrap()
-            },
+        let output_le = match self {
+            ReprEndianness::Big => quote! { repr.iter_mut().rev() },
+            ReprEndianness::Little => quote! { repr.iter_mut() },
         };
-
         let zkvm_impl = quote! {
-            #repr(#write_repr)
+            let mut repr = [0u8; #bytes];
+            for (dst, src) in #output_le.zip(<Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(self)) {
+                *dst = *src;
+            }
+            #repr(repr)
         };
 
         let write_repr = match self {
@@ -1033,7 +1045,7 @@ fn prime_field_impl(
     let mont_reduce_self_params = mont_reduce_params(quote! {self}, limbs);
     let mont_reduce_other_params = mont_reduce_params(quote! {other}, limbs);
 
-    let from_repr_impl = endianness.from_repr(name, limbs);
+    let from_repr_impl = endianness.from_repr(name, modulus, limbs);
     let to_repr_impl = endianness.to_repr(quote! {#repr}, &mont_reduce_self_params, limbs);
 
     let prime_field_bits_impl = if cfg!(feature = "bits") {
@@ -1092,15 +1104,16 @@ fn prime_field_impl(
         }
 
         impl ::ff::derive::subtle::ConstantTimeEq for #name {
-            /// Compares raw byte representations via `to_repr()`.
-            ///
-            /// **Note:** both operands must be in canonical (reduced) form.
-            /// Values created via `from_le_bytes_unchecked` or other unchecked
-            /// constructors must be reduced before calling `ct_eq`; non-canonical
-            /// values may compare as unequal even when congruent mod p.
             fn ct_eq(&self, other: &#name) -> ::ff::derive::subtle::Choice {
-                use ::ff::PrimeField;
-                self.to_repr().ct_eq(&other.to_repr())
+                #[cfg(target_os = "zkvm")]
+                {
+                    ::ff::derive::subtle::Choice::from(((self - other) == <Self as ::openvm_algebra_guest::IntMod>::ZERO) as u8)
+                }
+                #[cfg(not(target_os = "zkvm"))]
+                {
+                    use ::ff::PrimeField;
+                    self.to_repr().ct_eq(&other.to_repr())
+                }
             }
         }
 
@@ -1174,8 +1187,8 @@ fn prime_field_impl(
                 #[cfg(target_os = "zkvm")]
                 {
                     let mut res = [0u8; #zkvm_limbs];
-                    let a_le_bytes = <Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(a);
-                    let b_le_bytes = <Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(b);
+                    let a_le_bytes = <Self as ::openvm_algebra_guest::IntMod>::as_le_bytes_unchecked(a);
+                    let b_le_bytes = <Self as ::openvm_algebra_guest::IntMod>::as_le_bytes_unchecked(b);
                     for i in 0..#zkvm_limbs {
                         res[i] = u8::conditional_select(&a_le_bytes[i], &b_le_bytes[i], choice);
                     }
@@ -1383,7 +1396,7 @@ fn prime_field_impl(
 
                 #[cfg(target_os = "zkvm")]
                 {
-                    ::ff::derive::subtle::CtOption::new(r, r.constant_time_is_reduced())
+                    ::ff::derive::subtle::CtOption::new(r, is_some)
                 }
                 #[cfg(not(target_os = "zkvm"))]
                 {
@@ -1408,7 +1421,7 @@ fn prime_field_impl(
 
                 #[cfg(target_os = "zkvm")]
                 {
-                    if <Self as ::openvm_algebra_guest::IntMod>::is_reduced(&r) {
+                    if bool::from(is_some) {
                         Some(r)
                     } else {
                         None
@@ -1431,11 +1444,6 @@ fn prime_field_impl(
 
             #[inline(always)]
             fn is_odd(&self) -> ::ff::derive::subtle::Choice {
-                // On zkvm, is_odd checks the LSB of the raw byte representation and
-                // assumes the value is in canonical (reduced) form. Values created via
-                // `from_le_bytes_unchecked` must be reduced before calling `is_odd`,
-                // otherwise a non-canonical representation (e.g., storing p which is
-                // odd) would return incorrect results.
                 #[cfg(target_os = "zkvm")]
                 {
                     ::ff::derive::subtle::Choice::from((<Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(self)[0] & 1) as u8)
@@ -1677,21 +1685,7 @@ fn prime_field_impl(
                 self.reduce();
             }
 
-            // A variant of IntMod::is_reduced that runs in constant time
-            #[cfg(target_os = "zkvm")]
-            fn constant_time_is_reduced(&self) -> ::ff::derive::subtle::Choice {
-                let mut is_less = 0u8.into();
-                // Iterate over limbs in little endian order and retain the result of the last non-equal comparison.
-                for (x_limb, p_limb) in self.0.iter().zip(<Self as ::openvm_algebra_guest::IntMod>::MODULUS.iter()) {
-                    if x_limb < p_limb {
-                        is_less = 1u8.into();
-                    } else if x_limb > p_limb {
-                        is_less = 0u8.into();
-                    }
-                }
-                // If all limbs are equal, is_less is false
-                is_less
-            }
+
         }
     }
 }

@@ -1,6 +1,9 @@
 use halo2curves_axiom::ff;
 
-use crate::{field::Field, DivAssignUnsafe, DivUnsafe};
+use crate::{
+    field::{CanonicalRepr, Field, FieldExtension},
+    DivAssignUnsafe, DivUnsafe,
+};
 
 macro_rules! field_impls {
     ($($t:ty),*) => {
@@ -38,6 +41,12 @@ macro_rules! field_impls {
             impl<'a> DivAssignUnsafe<&'a $t> for $t {
                 fn div_assign_unsafe(&mut self, other: &'a $t) {
                     *self *= other.invert().unwrap();
+                }
+            }
+
+            impl CanonicalRepr for $t {
+                fn assert_canonical(&self) {
+                    assert_eq!(Option::<Self>::from(Self::from_bytes(&self.to_bytes())), Some(*self));
                 }
             }
 

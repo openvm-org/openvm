@@ -182,10 +182,26 @@ pub trait IntMod:
     fn from_u64(val: u64) -> Self;
 
     /// Value of this IntMod as an array of bytes, little endian.
-    fn as_le_bytes(&self) -> &[u8];
+    /// Asserts that the value is less than the modulus.
+    #[inline(always)]
+    fn as_le_bytes(&self) -> &[u8] {
+        self.assert_reduced();
+        self.as_le_bytes_unchecked()
+    }
 
     /// Value of this IntMod as an array of bytes, big endian.
-    fn to_be_bytes(&self) -> Self::Repr;
+    /// Asserts that the value is less than the modulus.
+    #[inline(always)]
+    fn to_be_bytes(&self) -> Self::Repr {
+        self.assert_reduced();
+        self.to_be_bytes_unchecked()
+    }
+
+    /// Raw representation of this IntMod as an array of bytes, little endian.
+    fn as_le_bytes_unchecked(&self) -> &[u8];
+
+    /// Raw representation of this IntMod as an array of bytes, big endian.
+    fn to_be_bytes_unchecked(&self) -> Self::Repr;
 
     /// Modulus N as a BigUint.
     #[cfg(not(target_os = "zkvm"))]
@@ -231,10 +247,8 @@ pub trait IntMod:
     /// VM specific concept: during guest execution, it is not enforced that the representation
     /// of `Self` must be the unique integer less than the modulus. The guest code may sometimes
     /// want to enforce that the representation is the canonical one less than the modulus.
-    /// the host to an honest host to provide the canonical representation less than the modulus.
     ///
-    /// This function should enforce that guest execution proceeds **if and only if** `self`
-    /// is in the unique representation less than the modulus.
+    /// If `self` is not less than the modulus, proving fails. On the host, this panics.
     fn assert_reduced(&self);
 
     /// Is the integer representation of `self` less than the modulus?

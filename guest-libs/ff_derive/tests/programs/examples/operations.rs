@@ -13,11 +13,54 @@ extern crate alloc;
 #[PrimeFieldReprEndianness = "little"]
 struct Bls381K12Scalar([u64; 4]);
 
+mod big_endian {
+    use openvm_ff_derive::openvm_prime_field;
+
+    #[openvm_prime_field]
+    #[PrimeFieldModulus = "52435875175126190479447740508185965837690552500527637822603658699938581184513"]
+    #[PrimeFieldGenerator = "7"]
+    #[PrimeFieldReprEndianness = "big"]
+    struct Bls381K12ScalarBe([u64; 4]);
+
+    pub fn check() {
+        super::repr::check::<Bls381K12ScalarBe>(true, 32);
+    }
+}
+
+#[path = "../repr.rs"]
+mod repr;
+
 openvm::init!("openvm_init_from_u128.rs");
 
 // Test arithmetic operations
 fn main() {
+    repr::check::<Bls381K12Scalar>(false, 32);
+    big_endian::check();
+
     use ff::{Field, PrimeField};
+
+    #[cfg(target_os = "zkvm")]
+    {
+        use ff::derive::subtle::{ConditionallySelectable, ConstantTimeEq};
+
+        let raw = <Bls381K12Scalar as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(
+            &<Bls381K12Scalar as openvm_algebra_guest::IntMod>::MODULUS,
+        );
+        assert!(bool::from(raw.ct_eq(&Bls381K12Scalar::ZERO)));
+        assert!(bool::from(raw.is_zero()));
+        let selected = Bls381K12Scalar::conditional_select(&Bls381K12Scalar::ONE, &raw, 0.into());
+        assert_eq!(selected.to_repr(), Bls381K12Scalar::ONE.to_repr());
+        let max =
+            <Bls381K12Scalar as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(&[255; 32]);
+        assert!(!bool::from(max.ct_eq(&Bls381K12Scalar::ZERO)));
+        assert!(!bool::from(Bls381K12Scalar::ZERO.ct_eq(&max)));
+        let invalid = ff::derive::subtle::CtOption::new(raw, 0.into());
+        assert!(bool::from(invalid.is_none()));
+        assert_eq!(
+            invalid.unwrap_or(Bls381K12Scalar::ONE),
+            Bls381K12Scalar::ONE
+        );
+    }
 
     let neg_one = -Bls381K12Scalar::ONE;
     assert_eq!(

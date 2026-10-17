@@ -18,9 +18,9 @@ impl Default for P256Coord {
 impl ConditionallySelectable for P256Coord {
     fn conditional_select(a: &P256Coord, b: &P256Coord, choice: Choice) -> P256Coord {
         P256Coord::from_le_bytes_unchecked(
-            &a.as_le_bytes()
+            &a.as_le_bytes_unchecked()
                 .iter()
-                .zip(b.as_le_bytes().iter())
+                .zip(b.as_le_bytes_unchecked().iter())
                 .map(|(a, b)| u8::conditional_select(a, b, choice))
                 .collect::<Vec<_>>(),
         )
@@ -28,17 +28,17 @@ impl ConditionallySelectable for P256Coord {
 }
 
 impl ConstantTimeEq for P256Coord {
-    fn ct_eq(&self, other: &P256Coord) -> Choice {
+    /// Compares field elements for equality. On the host, both operands must be reduced.
+    fn ct_eq(&self, other: &Self) -> Choice {
         #[cfg(not(target_os = "zkvm"))]
         {
-            // Requires canonical form
-            self.as_le_bytes().ct_eq(other.as_le_bytes())
+            self.as_le_bytes_unchecked()
+                .ct_eq(other.as_le_bytes_unchecked())
         }
         #[cfg(target_os = "zkvm")]
         {
-            // The zkVM implementation calls iseqmod opcode so it is constant time, _except_ a check
-            // of whether the setup opcode has been called already
-            Choice::from((self == other) as u8)
+            // Compare the difference with zero to test equality modulo the modulus.
+            Choice::from(((self - other) == <Self as IntMod>::ZERO) as u8)
         }
     }
 }
