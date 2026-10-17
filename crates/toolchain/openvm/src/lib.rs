@@ -104,6 +104,17 @@ unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
     openvm_platform::heap::embedded::init();
 
+    #[cfg(feature = "std")]
+    {
+        extern "C" {
+            fn main(argc: core::ffi::c_int, argv: *const *const u8) -> core::ffi::c_int;
+        }
+        if main(0, core::ptr::null()) != 0 {
+            process::panic();
+        }
+    }
+
+    #[cfg(not(feature = "std"))]
     {
         extern "C" {
             fn main();

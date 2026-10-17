@@ -131,6 +131,35 @@ mod tests {
     }
 
     #[test]
+    fn test_main_exit_status() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "main_exit_status",
+            ["std", "getrandom-unsupported"],
+            &config,
+        )?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+        let executor = VmExecutor::new(config)?;
+        for code in [0, 1, 2, 255] {
+            let input = vec![vec![F::from_u8(code), F::ZERO, F::ZERO, F::ZERO]];
+            let result = executor.instance(&exe)?.execute(input, None);
+            if code == 1 {
+                result?;
+            } else {
+                assert!(matches!(result, Err(ExecutionError::FailedWithExitCode(1))));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn test_read_vec() -> Result<()> {
         let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;

@@ -34,3 +34,7 @@ required-features = ["getrandom"]
 [[example]]
 name = "getrandom_v02"
 required-features = ["getrandom-v02"]
+
+[[example]]
+name = "main_exit_status"
+required-features = ["std"]
