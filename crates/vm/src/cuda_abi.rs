@@ -268,6 +268,7 @@ pub mod program {
             d_records: DeviceBufferView,
             pc_base: u32,
             pc_step: u32,
+            program_len: u32,
             terminate_opcode: usize,
             stream: cudaStream_t,
         ) -> i32;
@@ -281,6 +282,7 @@ pub mod program {
         d_records: &DeviceBuffer<T>,
         pc_base: u32,
         pc_step: u32,
+        program_len: u32,
         terminate_opcode: usize,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -291,6 +293,7 @@ pub mod program {
             d_records.view(),
             pc_base,
             pc_step,
+            program_len,
             terminate_opcode,
             stream,
         ))
