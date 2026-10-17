@@ -170,7 +170,7 @@ impl SystemAirInventory {
         }
     }
 
-    pub fn port(&self) -> SystemPort {
+    pub const fn port(&self) -> SystemPort {
         SystemPort {
             memory_bridge: self.memory.bridge,
             program_bus: self.program.bus,
@@ -314,7 +314,7 @@ where
         let memory_controller = MemoryController::<Val<SC>>::with_persistent_memory(
             memory_bus,
             config.memory_config.clone(),
-            range_checker.clone(),
+            range_checker,
             mem_inventory.interface.merkle.merkle_bus,
             mem_inventory.interface.merkle.compression_bus,
             hasher_chip,

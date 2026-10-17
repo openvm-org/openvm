@@ -468,7 +468,7 @@ mod conversions {
                 >,
             >,
         ) -> Self {
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
@@ -499,7 +499,7 @@ mod conversions {
         >
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
@@ -564,7 +564,7 @@ mod conversions {
             assert_eq!(BASIC_NUM_WRITES, BLOCKS_PER_WRITE);
             let mut writes_it = ctx.writes.into_iter();
             let writes = from_fn(|_| writes_it.next().unwrap());
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads,
                 writes,
@@ -599,14 +599,14 @@ mod conversions {
                 T,
                 BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
-        ) -> AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>> {
+        ) -> Self {
             assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
             assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
             let mut reads_it = ctx.reads.into_iter().flatten();
             let reads = from_fn(|_| reads_it.next().unwrap());
             let mut writes_it = ctx.writes.into_iter().flatten();
             let writes = from_fn(|_| writes_it.next().unwrap());
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads,
                 writes,
@@ -641,10 +641,7 @@ mod conversions {
                 writes,
                 instruction,
             }: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
-        ) -> AdapterAirContext<
-            T,
-            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        > {
+        ) -> Self {
             assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
             assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
             let mut reads_it = reads.into_iter();
@@ -653,7 +650,7 @@ mod conversions {
             let mut writes_it = writes.into_iter();
             let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
                 from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
-            AdapterAirContext {
+            Self {
                 to_pc,
                 reads,
                 writes,
@@ -669,7 +666,7 @@ mod conversions {
     }
 
     impl<T> From<DynArray<T>> for Vec<T> {
-        fn from(v: DynArray<T>) -> Vec<T> {
+        fn from(v: DynArray<T>) -> Self {
             v.0
         }
     }
@@ -764,7 +761,7 @@ mod conversions {
                 BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> Self {
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
@@ -790,7 +787,7 @@ mod conversions {
         PI: From<DynArray<T>>,
     {
         fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
@@ -805,7 +802,7 @@ mod conversions {
         for AdapterAirContext<T, DynAdapterInterface<T>>
     {
         fn from(ctx: AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>) -> Self {
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads: ctx.reads.to_vec().into(),
                 writes: ctx.writes.to_vec().into(),
@@ -823,7 +820,7 @@ mod conversions {
     impl<T> From<DynArray<T>> for MinimalInstruction<T> {
         fn from(m: DynArray<T>) -> Self {
             let mut m = m.0.into_iter();
-            MinimalInstruction {
+            Self {
                 is_valid: m.next().unwrap(),
                 opcode: m.next().unwrap(),
             }
@@ -833,7 +830,7 @@ mod conversions {
     impl<T> From<DynArray<T>> for ImmInstruction<T> {
         fn from(m: DynArray<T>) -> Self {
             let mut m = m.0.into_iter();
-            ImmInstruction {
+            Self {
                 is_valid: m.next().unwrap(),
                 opcode: m.next().unwrap(),
                 immediate: m.next().unwrap(),
@@ -843,7 +840,7 @@ mod conversions {
 
     impl<T> From<ImmInstruction<T>> for DynArray<T> {
         fn from(instruction: ImmInstruction<T>) -> Self {
-            DynArray::from(vec![
+            Self::from(vec![
                 instruction.is_valid,
                 instruction.opcode,
                 instruction.immediate,
@@ -879,7 +876,7 @@ mod conversions {
             assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
             let mut reads_it = ctx.reads.into_iter();
             let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
-            AdapterAirContext {
+            Self {
                 to_pc: ctx.to_pc,
                 reads,
                 writes: (),

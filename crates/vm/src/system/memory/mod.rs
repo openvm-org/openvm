@@ -45,7 +45,7 @@ pub struct MemoryAddress<S, T> {
 }
 
 impl<S, T> MemoryAddress<S, T> {
-    pub fn new(address_space: S, pointer: T) -> Self {
+    pub const fn new(address_space: S, pointer: T) -> Self {
         Self {
             address_space,
             pointer,
@@ -71,7 +71,7 @@ pub struct MemoryAirInventory {
 }
 
 impl MemoryAirInventory {
-    pub fn new(
+    pub const fn new(
         bridge: MemoryBridge,
         mem_config: &MemoryConfig,
         merkle_bus: PermutationCheckBus,

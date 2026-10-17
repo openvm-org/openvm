@@ -136,7 +136,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
+    const fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
         segment_check_insns as usize * MAX_MEM_PAGE_OPS_PER_INSN
     }
 
@@ -245,7 +245,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     /// Updates the checkpoint with current safe state
     #[inline(always)]
-    pub(crate) fn update_checkpoint(&mut self) {
+    pub(crate) const fn update_checkpoint(&mut self) {
         self.page_indices_since_checkpoint_len = 0;
     }
 

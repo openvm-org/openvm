@@ -256,19 +256,19 @@ impl<F: VmField> VmChipTestBuilder<F> {
         }
     }
 
-    pub fn execution_bridge(&self) -> ExecutionBridge {
+    pub const fn execution_bridge(&self) -> ExecutionBridge {
         ExecutionBridge::new(self.execution.bus, self.program.bus)
     }
 
-    pub fn execution_bus(&self) -> ExecutionBus {
+    pub const fn execution_bus(&self) -> ExecutionBus {
         self.execution.bus
     }
 
-    pub fn program_bus(&self) -> ProgramBus {
+    pub const fn program_bus(&self) -> ProgramBus {
         self.program.bus
     }
 
-    pub fn memory_bus(&self) -> MemoryBus {
+    pub const fn memory_bus(&self) -> MemoryBus {
         self.memory.controller.memory_bus
     }
 

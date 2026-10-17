@@ -553,7 +553,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
 }
 
 #[inline(always)]
-pub fn get_pc_index(pc: u32) -> usize {
+pub const fn get_pc_index(pc: u32) -> usize {
     (pc / DEFAULT_PC_STEP) as usize
 }
 
@@ -586,7 +586,7 @@ impl AlignedBuf {
         if ptr.is_null() {
             handle_alloc_error(layout);
         }
-        AlignedBuf { ptr, layout }
+        Self { ptr, layout }
     }
 }
 

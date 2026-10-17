@@ -95,7 +95,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         ctx
     }
 
-    pub fn with_max_memory(mut self, max_memory: usize) -> Self {
+    pub const fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
         self
     }

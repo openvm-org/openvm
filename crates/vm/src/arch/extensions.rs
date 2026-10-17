@@ -316,9 +316,9 @@ impl<E> ExecutorInventory<E> {
 
     /// Append `other` to current inventory. This means `self` comes earlier in the dependency
     /// chain.
-    fn append(&mut self, mut other: ExecutorInventory<E>) -> Result<(), ExecutorInventoryError> {
+    fn append(&mut self, mut other: Self) -> Result<(), ExecutorInventoryError> {
         let num_executors = self.executors.len();
-        for (opcode, mut id) in other.instruction_lookup.into_iter() {
+        for (opcode, mut id) in other.instruction_lookup {
             id = id.checked_add(num_executors.try_into().unwrap()).unwrap();
             if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
                 return Err(ExecutorInventoryError::ExecutorExists { opcode, id: old_id });
@@ -365,7 +365,7 @@ impl<E> ExecutorInventory<E> {
     }
 
     /// Returns the system config of the inventory.
-    pub fn config(&self) -> &SystemConfig {
+    pub const fn config(&self) -> &SystemConfig {
         &self.config
     }
 }
@@ -408,7 +408,7 @@ impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
     }
 
     /// Returns the maximum number of bits used to represent addresses in memory
-    pub fn pointer_max_bits(&self) -> usize {
+    pub const fn pointer_max_bits(&self) -> usize {
         self.new_inventory.config().memory_config.pointer_max_bits
     }
 }
@@ -434,7 +434,7 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
         self.ext_start.push(self.ext_airs.len());
     }
 
-    pub fn new_bus_idx(&mut self) -> BusIndex {
+    pub const fn new_bus_idx(&mut self) -> BusIndex {
         self.bus_idx_mgr.new_bus_idx()
     }
 
@@ -494,17 +494,17 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
     }
 
     /// Returns the maximum number of bits used to represent addresses in memory
-    pub fn pointer_max_bits(&self) -> usize {
+    pub const fn pointer_max_bits(&self) -> usize {
         self.config.memory_config.pointer_max_bits
     }
 }
 
 impl BusIndexManager {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { bus_idx_max: 0 }
     }
 
-    pub fn new_bus_idx(&mut self) -> BusIndex {
+    pub const fn new_bus_idx(&mut self) -> BusIndex {
         let idx = self.bus_idx_max;
         self.bus_idx_max = self.bus_idx_max.checked_add(1).unwrap();
         idx
@@ -525,7 +525,7 @@ where
         }
     }
 
-    pub fn config(&self) -> &SystemConfig {
+    pub const fn config(&self) -> &SystemConfig {
         &self.airs.config
     }
 
@@ -689,7 +689,7 @@ where
     PB: ProverBackend,
     SCC: SystemChipComplex<RA, PB>,
 {
-    pub fn system_config(&self) -> &SystemConfig {
+    pub const fn system_config(&self) -> &SystemConfig {
         self.inventory.config()
     }
 
@@ -749,7 +749,7 @@ where
                         {
                             let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
                             let labels = [
-                                ("air_name", air_name.to_string()),
+                                ("air_name", air_name),
                                 ("air_id", (num_sys_airs + insertion_idx).to_string()),
                             ];
                             metrics::counter!("trace_gen.record_arena_bytes", &labels)
@@ -842,15 +842,15 @@ mod tests {
     impl AnyEnum for EnumA {
         fn as_any_kind(&self) -> &dyn Any {
             match self {
-                EnumA::A(a) => a,
-                EnumA::B(b) => b,
+                Self::A(a) => a,
+                Self::B(b) => b,
             }
         }
 
         fn as_any_kind_mut(&mut self) -> &mut dyn Any {
             match self {
-                EnumA::A(a) => a,
-                EnumA::B(b) => b,
+                Self::A(a) => a,
+                Self::B(b) => b,
             }
         }
     }
@@ -858,15 +858,15 @@ mod tests {
     impl AnyEnum for EnumB {
         fn as_any_kind(&self) -> &dyn Any {
             match self {
-                EnumB::C(c) => c,
-                EnumB::D(d) => d.as_any_kind(),
+                Self::C(c) => c,
+                Self::D(d) => d.as_any_kind(),
             }
         }
 
         fn as_any_kind_mut(&mut self) -> &mut dyn Any {
             match self {
-                EnumB::C(c) => c,
-                EnumB::D(d) => d.as_any_kind_mut(),
+                Self::C(c) => c,
+                Self::D(d) => d.as_any_kind_mut(),
             }
         }
     }

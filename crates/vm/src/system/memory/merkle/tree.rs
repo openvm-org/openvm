@@ -45,8 +45,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     pub fn get_node(&self, index: u64) -> [F; CHUNK] {
         self.nodes
             .get(&index)
-            .cloned()
-            .unwrap_or(self.zero_nodes[self.height - index.ilog2() as usize])
+            .copied()
+            .unwrap_or_else(|| self.zero_nodes[self.height - index.ilog2() as usize])
     }
 
     #[allow(clippy::type_complexity)]
@@ -222,7 +222,10 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         md: &MemoryDimensions,
     ) -> FinalState<CHUNK, F> {
         let init_root = self.get_node(1);
-        let layer: Vec<_> = if !touched.is_empty() {
+        let layer: Vec<_> = if touched.is_empty() {
+            let index = 1 << self.height;
+            vec![(index, self.get_node(index))]
+        } else {
             touched
                 .iter()
                 .map(|((addr_sp, ptr), v)| {
@@ -232,9 +235,6 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     )
                 })
                 .collect()
-        } else {
-            let index = 1 << self.height;
-            vec![(index, self.get_node(index))]
         };
         let mut rows = Vec::with_capacity(if layer.is_empty() {
             0

@@ -14,13 +14,14 @@ pub struct BasicMemory {
 impl BasicMemory {
     #[allow(dead_code)]
     #[inline(always)]
-    pub fn as_ptr(&self) -> *const u8 {
+    pub const fn as_ptr(&self) -> *const u8 {
         self.ptr.as_ptr()
     }
 
     #[allow(dead_code)]
     #[inline(always)]
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+    #[allow(clippy::needless_pass_by_ref_mut)]
+    pub const fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr.as_ptr()
     }
 }
@@ -197,7 +198,7 @@ impl LinearMemory for BasicMemory {
         );
 
         // Use slice's copy_from_slice for safe byte-level copy
-        let src_bytes = std::slice::from_raw_parts(&values as *const BLOCK as *const u8, size);
+        let src_bytes = std::slice::from_raw_parts(&raw const values as *const u8, size);
         self.as_mut_slice()[start..start + size].copy_from_slice(src_bytes);
     }
 

@@ -154,7 +154,7 @@ impl VmMetrics {
         opcode_name: String,
         dsl_instr: Option<String>,
     ) {
-        let key = (dsl_instr, opcode_name.clone());
+        let key = (dsl_instr, opcode_name);
         self.cycle_tracker.increment_opcode(&key);
         *self.counts.entry(key.clone()).or_insert(0) += 1;
 
@@ -224,7 +224,7 @@ impl VmMetrics {
     }
 
     pub fn emit(&self) {
-        for ((dsl_ir, opcode), value) in self.counts.iter() {
+        for ((dsl_ir, opcode), value) in &self.counts {
             let labels = [
                 ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
                 ("opcode", opcode.clone()),
@@ -232,7 +232,7 @@ impl VmMetrics {
             counter!("frequency", &labels).absolute(*value as u64);
         }
 
-        for ((dsl_ir, opcode, air_name), value) in self.trace_cells.iter() {
+        for ((dsl_ir, opcode, air_name), value) in &self.trace_cells {
             let labels = [
                 ("dsl_ir", dsl_ir.clone().unwrap_or_else(String::new)),
                 ("opcode", opcode.clone()),

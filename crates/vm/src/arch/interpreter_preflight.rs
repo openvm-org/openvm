@@ -249,7 +249,7 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
 }
 
 impl<F> PcEntry<F> {
-    pub fn is_some(&self) -> bool {
+    pub const fn is_some(&self) -> bool {
         self.executor_idx != u32::MAX
     }
 }

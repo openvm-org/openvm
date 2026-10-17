@@ -157,12 +157,12 @@ impl<M: LinearMemory> AddressMap<M> {
     }
 
     #[inline(always)]
-    pub fn get_memory(&self) -> &Vec<M> {
+    pub const fn get_memory(&self) -> &Vec<M> {
         &self.mem
     }
 
     #[inline(always)]
-    pub fn get_memory_mut(&mut self) -> &mut Vec<M> {
+    pub const fn get_memory_mut(&mut self) -> &mut Vec<M> {
         &mut self.mem
     }
 
@@ -254,7 +254,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn set_from_sparse(&mut self, sparse_map: &SparseMemoryImage) {
-        for (&(addr_space, index), &data_byte) in sparse_map.iter() {
+        for (&(addr_space, index), &data_byte) in sparse_map {
             // SAFETY:
             // - safety assumptions in function doc comments
             unsafe {
@@ -276,7 +276,7 @@ pub struct GuestMemory {
 }
 
 impl GuestMemory {
-    pub fn new(addr: AddressMap) -> Self {
+    pub const fn new(addr: AddressMap) -> Self {
         Self { memory: addr }
     }
 
@@ -477,15 +477,15 @@ impl TracingMemory {
         (t_prev, values_prev)
     }
 
-    pub fn increment_timestamp(&mut self) {
+    pub const fn increment_timestamp(&mut self) {
         self.timestamp += 1;
     }
 
-    pub fn increment_timestamp_by(&mut self, amount: u32) {
+    pub const fn increment_timestamp_by(&mut self, amount: u32) {
         self.timestamp += amount;
     }
 
-    pub fn timestamp(&self) -> u32 {
+    pub const fn timestamp(&self) -> u32 {
         self.timestamp
     }
 
@@ -506,12 +506,10 @@ impl TracingMemory {
                 meta_page
                     .par_iter()
                     .filter_map(move |(idx, timestamp)| {
-                        if timestamp > INITIAL_TIMESTAMP {
+                        (timestamp > INITIAL_TIMESTAMP).then(|| {
                             let ptr = idx as u32 * DEFAULT_BLOCK_SIZE as u32;
-                            Some(((addr_space as u32, ptr), timestamp))
-                        } else {
-                            None
-                        }
+                            ((addr_space as u32, ptr), timestamp)
+                        })
                     })
                     .collect::<Vec<_>>()
             })

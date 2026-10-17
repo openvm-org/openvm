@@ -9,8 +9,8 @@ pub struct ExecutionCtx {
 }
 
 impl ExecutionCtx {
-    pub fn new(instret_left: Option<u64>) -> Self {
-        ExecutionCtx {
+    pub const fn new(instret_left: Option<u64>) -> Self {
+        Self {
             instret_left: if let Some(end) = instret_left {
                 end
             } else {

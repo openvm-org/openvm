@@ -123,7 +123,7 @@ impl<F: VmField> MemoryController<F> {
         }
     }
 
-    pub fn memory_config(&self) -> &MemoryConfig {
+    pub const fn memory_config(&self) -> &MemoryConfig {
         &self.memory_config
     }
 
@@ -208,7 +208,7 @@ impl<F: VmField> MemoryController<F> {
     }
 
     /// Return the number of AIRs in the memory controller.
-    pub fn num_airs(&self) -> usize {
+    pub const fn num_airs(&self) -> usize {
         2
     }
 }
@@ -251,7 +251,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
 
     /// # Safety
     /// We assume that `F::ZERO` has underlying memory equivalent to `mem::zeroed()`.
-    pub fn fill_zero(&self, buffer: &mut MemoryBaseAuxCols<F>) {
+    pub const fn fill_zero(&self, buffer: &mut MemoryBaseAuxCols<F>) {
         *buffer = unsafe { std::mem::zeroed() };
     }
 

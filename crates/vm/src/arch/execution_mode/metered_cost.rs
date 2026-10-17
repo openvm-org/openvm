@@ -24,7 +24,7 @@ pub struct MeteredCostCtx {
 }
 
 impl MeteredCostCtx {
-    pub fn new(widths: Vec<usize>) -> Self {
+    pub const fn new(widths: Vec<usize>) -> Self {
         Self {
             widths,
             max_execution_cost: DEFAULT_MAX_COST,

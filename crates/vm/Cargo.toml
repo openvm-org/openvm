@@ -110,3 +110,6 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-cuda-common/touchemall",
 ]
+
+[lints]
+workspace = true

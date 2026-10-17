@@ -63,7 +63,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             current_height: 0,
         }
     }
-    pub fn set_overridden_height(&mut self, override_height: usize) {
+    pub const fn set_overridden_height(&mut self, override_height: usize) {
         self.overridden_height = Some(override_height);
     }
 }
@@ -84,13 +84,7 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
             let num_nonzero_pages = space_mem
                 .par_chunks(PAGE_SIZE)
                 .enumerate()
-                .flat_map(|(idx, page)| {
-                    if page.iter().any(|x| *x != 0) {
-                        Some(idx + 1)
-                    } else {
-                        None
-                    }
-                })
+                .flat_map(|(idx, page)| page.iter().any(|x| *x != 0).then(|| idx + 1))
                 .max()
                 .unwrap_or(0);
 

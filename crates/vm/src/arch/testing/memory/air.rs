@@ -50,7 +50,7 @@ impl<'a, T> DummyMemoryInteractionColsRef<'a, T> {
 }
 
 impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
-    pub fn from_mut_slice(slice: &'a mut [T]) -> Self {
+    pub const fn from_mut_slice(slice: &'a mut [T]) -> Self {
         let (addr_space, slice) = slice.split_first_mut().unwrap();
         let (ptr, slice) = slice.split_first_mut().unwrap();
         let (count, slice) = slice.split_last_mut().unwrap();
@@ -104,7 +104,7 @@ pub struct MemoryDummyChip<F> {
 }
 
 impl<F> MemoryDummyChip<F> {
-    pub fn new(air: MemoryDummyAir) -> Self {
+    pub const fn new(air: MemoryDummyAir) -> Self {
         Self {
             air,
             trace: Vec::new(),

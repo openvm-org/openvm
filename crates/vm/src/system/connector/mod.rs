@@ -64,11 +64,8 @@ impl<F: PrimeField32> VmConnectorPvs<F> {
     }
 
     pub fn exit_code(&self) -> Option<u32> {
-        if self.is_terminate() && self.exit_code == F::ZERO {
-            Some(self.exit_code.as_canonical_u32())
-        } else {
-            None
-        }
+        (self.is_terminate() && self.exit_code == F::ZERO)
+            .then(|| self.exit_code.as_canonical_u32())
     }
 }
 
@@ -106,7 +103,7 @@ impl VmConnectorAir {
     }
 
     /// Returns (low_bits, high_bits) to range check.
-    fn timestamp_limb_bits(&self) -> (usize, usize) {
+    const fn timestamp_limb_bits(&self) -> (usize, usize) {
         let range_max_bits = self.range_bus.range_max_bits;
         if self.timestamp_max_bits <= range_max_bits {
             (self.timestamp_max_bits, 0)
@@ -142,7 +139,7 @@ impl<T: Copy> ConnectorCols<T> {
         }
     }
 
-    fn flatten(&self) -> [T; 6] {
+    const fn flatten(&self) -> [T; 6] {
         [
             self.pc,
             self.timestamp,
@@ -250,7 +247,7 @@ impl<F> VmConnectorChip<F> {
         }
     }
 
-    pub fn begin(&mut self, state: ExecutionState<u32>) {
+    pub const fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
             pc: state.pc,
             timestamp: state.timestamp,

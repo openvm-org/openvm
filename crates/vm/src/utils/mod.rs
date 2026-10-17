@@ -13,7 +13,7 @@ pub use stark_utils::*;
 pub use test_utils::*;
 
 #[inline(always)]
-pub fn add_one_or_zero(n: u32) -> usize {
+pub const fn add_one_or_zero(n: u32) -> usize {
     if n == 0 {
         0
     } else {
@@ -61,7 +61,7 @@ pub fn transmute_u32_to_field<F: PrimeField32>(value: &u32) -> F {
 /// The type `T` should be plain old data so there is no worry about [Drop] behavior in the
 /// transmutation.
 #[inline(always)]
-pub unsafe fn slice_as_bytes<T>(slice: &[T]) -> &[u8] {
+pub const unsafe fn slice_as_bytes<T>(slice: &[T]) -> &[u8] {
     let len = size_of_val(slice);
     // SAFETY: length and alignment are correct.
     unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
