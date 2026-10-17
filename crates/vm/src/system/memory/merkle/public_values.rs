@@ -75,7 +75,7 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
             hasher,
             top_tree,
         );
-        UserPublicValuesProof {
+        Self {
             proof,
             public_values,
             public_values_commit,

@@ -18,12 +18,12 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, merkle::MerkleTree, online::TracingMemory},
 };
 
-pub fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
+pub const fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
     // setting default range_max_bits to 17 because that's the default decomp value in MemoryConfig
     VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, 17)
 }
 
-pub fn default_bitwise_lookup_bus() -> BitwiseOperationLookupBus {
+pub const fn default_bitwise_lookup_bus() -> BitwiseOperationLookupBus {
     BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS)
 }
 

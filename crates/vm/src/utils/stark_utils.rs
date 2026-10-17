@@ -195,7 +195,7 @@ where
 {
     setup_tracing();
     let engine = E::new(params);
-    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
@@ -206,7 +206,7 @@ where
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx.clone())?;
+        .execute_metered(input.clone(), metered_ctx)?;
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);

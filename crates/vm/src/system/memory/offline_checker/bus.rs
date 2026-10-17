@@ -23,7 +23,7 @@ impl MemoryBus {
 
 impl MemoryBus {
     #[inline(always)]
-    pub fn index(&self) -> BusIndex {
+    pub const fn index(&self) -> BusIndex {
         self.inner.index
     }
 

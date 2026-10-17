@@ -107,7 +107,7 @@ impl<F: Field> MatrixRecordArena<F> {
         unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
     }
 
-    pub fn force_matrix_dimensions(&mut self) {
+    pub const fn force_matrix_dimensions(&mut self) {
         self.allow_truncate = false;
     }
 }
@@ -196,7 +196,7 @@ impl DenseRecordArena {
     /// Returns the allocated size of the arena in bytes.
     ///
     /// **Note**: This may include additional bytes for alignment.
-    pub fn capacity(&self) -> usize {
+    pub const fn capacity(&self) -> usize {
         self.records_buffer.get_ref().len()
     }
 
@@ -247,7 +247,7 @@ impl DenseRecordArena {
     }
 
     // Returns a [RecordSeeker] on the allocated buffer
-    pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<'_, DenseRecordArena, R, L> {
+    pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<'_, Self, R, L> {
         RecordSeeker::new(self.allocated_mut())
     }
 }
@@ -310,7 +310,7 @@ pub struct RecordSeeker<'a, RA, RecordMut, Layout> {
 }
 
 impl<'a, RA, RecordMut, Layout> RecordSeeker<'a, RA, RecordMut, Layout> {
-    pub fn new(record_buffer: &'a mut [u8]) -> Self {
+    pub const fn new(record_buffer: &'a mut [u8]) -> Self {
         Self {
             buffer: record_buffer,
             _phantom: PhantomData,
@@ -595,7 +595,7 @@ impl<M> AdapterCoreLayout<M> {
         Self::default()
     }
 
-    pub fn with_metadata(metadata: M) -> Self {
+    pub const fn with_metadata(metadata: M) -> Self {
         Self { metadata }
     }
 }
@@ -616,7 +616,7 @@ impl<F, AS> Clone for AdapterCoreEmptyMetadata<F, AS> {
 }
 
 impl<F, AS> AdapterCoreEmptyMetadata<F, AS> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             _phantom: PhantomData,
         }
@@ -647,11 +647,10 @@ pub type EmptyAdapterCoreLayout<F, AS> = AdapterCoreLayout<AdapterCoreEmptyMetad
 
 /// [RecordArena] implementation for [MatrixRecordArena], with [AdapterCoreLayout]
 /// **NOTE**: `A` is the adapter RecordMut type and `C` is the core RecordMut type
-impl<'a, F: Field, A, C, M: AdapterCoreMetadata> RecordArena<'a, AdapterCoreLayout<M>, (A, C)>
-    for MatrixRecordArena<F>
+impl<'a, F: Field, A, C, M: AdapterCoreMetadata + Clone>
+    RecordArena<'a, AdapterCoreLayout<M>, (A, C)> for MatrixRecordArena<F>
 where
     [u8]: CustomBorrow<'a, A, AdapterCoreLayout<M>> + CustomBorrow<'a, C, AdapterCoreLayout<M>>,
-    M: Clone,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout<M>) -> (A, C) {
         let adapter_width = M::get_adapter_width();

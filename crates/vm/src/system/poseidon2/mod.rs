@@ -1,3 +1,6 @@
+// derive(Chip) with #[chip(where = ...)] generates a duplicate bound that cannot be annotated
+// directly
+#![allow(clippy::trait_duplication_in_bounds)]
 //! Chip to handle **native kernel** instructions for Poseidon2 `compress` and `permute`.
 //! This chip is put in `intrinsics` for organizational convenience, but
 //! it is used as a system chip for the memory merkle tree and as a native kernel chip for
@@ -80,8 +83,8 @@ impl<F: VmField> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Peripher
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.compress(lhs, rhs),
-            Poseidon2PeripheryChip::Register1(chip) => chip.compress(lhs, rhs),
+            Self::Register0(chip) => chip.compress(lhs, rhs),
+            Self::Register1(chip) => chip.compress(lhs, rhs),
         }
     }
 }
@@ -93,8 +96,8 @@ impl<F: VmField> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Peri
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.compress_and_record(lhs, rhs),
-            Poseidon2PeripheryChip::Register1(chip) => chip.compress_and_record(lhs, rhs),
+            Self::Register0(chip) => chip.compress_and_record(lhs, rhs),
+            Self::Register1(chip) => chip.compress_and_record(lhs, rhs),
         }
     }
 }

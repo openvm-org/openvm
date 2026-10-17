@@ -131,13 +131,13 @@ impl<F> Default for Streams<F> {
 
 impl<F> From<VecDeque<Vec<F>>> for Streams<F> {
     fn from(value: VecDeque<Vec<F>>) -> Self {
-        Streams::new(value)
+        Self::new(value)
     }
 }
 
 impl<F> From<Vec<Vec<F>>> for Streams<F> {
     fn from(value: Vec<Vec<F>>) -> Self {
-        Streams::new(value)
+        Self::new(value)
     }
 }
 
@@ -430,7 +430,7 @@ where
         Ok((vm, pk))
     }
 
-    pub fn config(&self) -> &VB::VmConfig {
+    pub const fn config(&self) -> &VB::VmConfig {
         &self.executor.config
     }
 

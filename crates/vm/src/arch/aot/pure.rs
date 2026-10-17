@@ -98,7 +98,8 @@ where
         asm_str += &Self::rv32_regs_to_xmm();
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
-        asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
+        asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the
+                                                             // xmm3 register to REG_A
         asm_str += &format!("   mov {REG_A_W}, dword ptr [{REG_A}]\n");
         asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {REG_A}]\n");
         asm_str += &format!("   add {REG_A}, {REG_C}\n");
@@ -215,7 +216,8 @@ where
                 asm_str += &Self::rv32_regs_to_xmm();
                 asm_str += &format!("   je asm_run_end_{pc}\n");
                 asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
-                asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
+                asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of
+                                                                     // the xmm3 register to REG_A
                 asm_str += &format!("   mov {REG_A_W}, dword ptr [{REG_A}]\n");
                 asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {REG_A}]\n");
                 asm_str += &format!("   add {REG_A}, {REG_C}\n");

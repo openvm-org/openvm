@@ -307,7 +307,16 @@ pub struct E2PreCompute<DATA> {
 
 #[repr(C)]
 #[derive(
-    Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, StructReflection, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Default,
+    AlignedBorrow,
+    StructReflection,
+    Serialize,
+    Deserialize,
 )]
 pub struct ExecutionState<T> {
     pub pc: T,
@@ -327,7 +336,7 @@ impl ExecutionBus {
     }
 
     #[inline(always)]
-    pub fn index(&self) -> BusIndex {
+    pub const fn index(&self) -> BusIndex {
         self.inner.index
     }
 }
@@ -373,7 +382,7 @@ impl<T> ExecutionState<T> {
         [self.pc, self.timestamp]
     }
 
-    pub fn get_width() -> usize {
+    pub const fn get_width() -> usize {
         2
     }
 
@@ -421,7 +430,7 @@ impl ExecutionBus {
 }
 
 impl ExecutionBridge {
-    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
+    pub const fn new(execution_bus: ExecutionBus, program_bus: ProgramBus) -> Self {
         Self {
             execution_bus,
             program_bus,
@@ -502,8 +511,8 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
 impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
     fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
         match to_pc {
-            None => PcIncOrSet::Inc(T::from_u32(pc_inc)),
-            Some(to_pc) => PcIncOrSet::Set(to_pc),
+            None => Self::Inc(T::from_u32(pc_inc)),
+            Some(to_pc) => Self::Set(to_pc),
         }
     }
 }

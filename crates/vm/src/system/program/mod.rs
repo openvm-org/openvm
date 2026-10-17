@@ -24,7 +24,7 @@ pub struct ProgramChip<SC: StarkProtocolConfig> {
 }
 
 impl<SC: StarkProtocolConfig> ProgramChip<SC> {
-    pub(super) fn unloaded() -> Self {
+    pub(super) const fn unloaded() -> Self {
         Self {
             filtered_exec_frequencies: Vec::new(),
             cached: None,

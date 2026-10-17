@@ -32,7 +32,7 @@ impl<AB: InteractionBuilder> Air<AB> for ProgramDummyAir {
         let local = main.row_slice(0).expect("row 0 present");
         let local = local
             .iter()
-            .cloned()
+            .copied()
             .map(Into::into)
             .collect::<Vec<AB::Expr>>();
         self.bus.inner.add_key_with_lookups(

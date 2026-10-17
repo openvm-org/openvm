@@ -104,11 +104,11 @@ enum SegmentationTrigger {
 
 #[cfg(feature = "metrics")]
 impl SegmentationTrigger {
-    fn reason(self) -> &'static str {
+    const fn reason(self) -> &'static str {
         match self {
-            SegmentationTrigger::Height { .. } => "height",
-            SegmentationTrigger::Memory => "memory",
-            SegmentationTrigger::Interactions => "interactions",
+            Self::Height { .. } => "height",
+            Self::Memory => "memory",
+            Self::Interactions => "interactions",
         }
     }
 }
@@ -185,11 +185,11 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub(super) fn segment_check_insns(&self) -> u64 {
+    pub(super) const fn segment_check_insns(&self) -> u64 {
         self.params.segment_check_insns
     }
 
-    pub fn set_max_memory(&mut self, max_memory: usize) {
+    pub const fn set_max_memory(&mut self, max_memory: usize) {
         self.params.max_memory = max_memory;
     }
 
@@ -502,7 +502,7 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    fn create_segment_from_checkpoint(&mut self, instret: u64, trace_heights: &mut [u32]) {
+    fn create_segment_from_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
         let instret_start = self
             .segments
             .last()
@@ -535,7 +535,7 @@ impl SegmentationCtx {
     /// Initialize state for a new segment
     #[inline(always)]
     pub(crate) fn initialize_segment(
-        &mut self,
+        &self,
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
     ) {

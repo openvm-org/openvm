@@ -19,7 +19,7 @@ pub struct MemoryInterface<F> {
 }
 
 impl<F: PrimeField32> MemoryInterface<F> {
-    pub fn compression_bus(&self) -> PermutationCheckBus {
+    pub const fn compression_bus(&self) -> PermutationCheckBus {
         self.merkle_chip.air.compression_bus
     }
 }

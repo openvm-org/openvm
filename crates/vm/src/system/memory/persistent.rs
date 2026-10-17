@@ -187,7 +187,7 @@ pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
 }
 
 impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
-    pub fn new(
+    pub const fn new(
         memory_bus: MemoryBus,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
@@ -203,7 +203,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         }
     }
 
-    pub fn set_overridden_height(&mut self, overridden_height: usize) {
+    pub const fn set_overridden_height(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
     }
 

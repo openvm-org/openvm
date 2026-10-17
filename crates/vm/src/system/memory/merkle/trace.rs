@@ -106,8 +106,8 @@ impl<'a, F: VmField, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
 impl<'a, F: VmField> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
     fn receive(&self, perm_preimage: &'a [F]) {
         match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
-            Poseidon2PeripheryChip::Register1(chip) => chip.receive(perm_preimage),
+            Self::Register0(chip) => chip.receive(perm_preimage),
+            Self::Register1(chip) => chip.receive(perm_preimage),
         }
     }
 }

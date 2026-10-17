@@ -34,7 +34,7 @@ pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 
 impl<F, MEM> VmState<F, MEM> {
     #[inline(always)]
-    pub fn set_pc(&mut self, pc: u32) {
+    pub const fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
 }
@@ -57,7 +57,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     }
 
     #[inline(always)]
-    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
+    pub const fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,
@@ -79,7 +79,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         inputs: impl Into<Streams<F>>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
-        VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
+        Self::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
     }
 
     pub fn reset(
@@ -117,7 +117,7 @@ impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
 }
 
 impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
-    pub fn new(vm_state: VmState<F, MEM>, ctx: CTX) -> Self {
+    pub const fn new(vm_state: VmState<F, MEM>, ctx: CTX) -> Self {
         Self {
             vm_state,
             ctx,

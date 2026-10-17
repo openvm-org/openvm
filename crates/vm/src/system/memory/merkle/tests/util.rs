@@ -47,6 +47,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
         }
         RowMajorMatrix::new(rows, width)
     }
+    #[allow(clippy::needless_pass_by_ref_mut)]
     pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
         SC: StarkProtocolConfig<F = F>,

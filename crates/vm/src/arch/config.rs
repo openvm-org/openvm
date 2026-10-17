@@ -39,7 +39,7 @@ pub const POSEIDON2_WIDTH: usize = 16;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
 pub const ADDR_SPACE_OFFSET: u32 = 1;
 
-fn default_segmentation_max_memory() -> usize {
+const fn default_segmentation_max_memory() -> usize {
     DEFAULT_MAX_MEMORY
 }
 /// Returns a Poseidon2 config for the VM.
@@ -275,17 +275,17 @@ impl SystemConfig {
     }
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
-    pub fn memory_boundary_air_id(&self) -> usize {
+    pub const fn memory_boundary_air_id(&self) -> usize {
         BOUNDARY_AIR_ID
     }
 
     /// Returns the AIR ID of the memory merkle AIR.
-    pub fn memory_merkle_air_id(&self) -> usize {
+    pub const fn memory_merkle_air_id(&self) -> usize {
         self.memory_boundary_air_id() + 1
     }
 
     /// Whether the AIR ID must be present in a valid v2 proof.
-    pub fn is_required_air_id(&self, air_id: usize) -> bool {
+    pub const fn is_required_air_id(&self, air_id: usize) -> bool {
         air_id == PROGRAM_AIR_ID
             || air_id == CONNECTOR_AIR_ID
             || air_id == self.memory_boundary_air_id()
@@ -294,7 +294,7 @@ impl SystemConfig {
 
     /// This is O(1) and returns the length of
     /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
-    pub fn num_airs(&self) -> usize {
+    pub const fn num_airs(&self) -> usize {
         self.memory_boundary_air_id() + num_memory_airs()
     }
 }
@@ -305,14 +305,14 @@ impl Default for SystemConfig {
     }
 }
 
-impl AsRef<SystemConfig> for SystemConfig {
-    fn as_ref(&self) -> &SystemConfig {
+impl AsRef<Self> for SystemConfig {
+    fn as_ref(&self) -> &Self {
         self
     }
 }
 
-impl AsMut<SystemConfig> for SystemConfig {
-    fn as_mut(&mut self) -> &mut SystemConfig {
+impl AsMut<Self> for SystemConfig {
+    fn as_mut(&mut self) -> &mut Self {
         self
     }
 }
@@ -349,7 +349,7 @@ pub enum MemoryCellType {
 }
 
 impl MemoryCellType {
-    pub fn field32() -> Self {
+    pub const fn field32() -> Self {
         Self::F {
             size: size_of::<u32>() as u8,
         }
