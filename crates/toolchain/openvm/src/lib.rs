@@ -25,6 +25,8 @@ pub mod io;
 pub mod pal_abi;
 pub mod process;
 pub mod serde;
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+mod zkvm_random;
 
 #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 pub mod utils;

@@ -4673,6 +4673,7 @@ dependencies = [
  "derive_more 1.0.0",
  "eyre",
  "getset",
+ "hex",
  "itertools 0.14.0",
  "libc",
  "libloading",

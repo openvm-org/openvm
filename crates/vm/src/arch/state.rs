@@ -7,7 +7,10 @@ use std::{
 use eyre::eyre;
 use getset::{CopyGetters, MutGetters};
 use openvm_instructions::exe::SparseMemoryImage;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{
+    rngs::{OsRng, StdRng},
+    SeedableRng, TryRngCore,
+};
 use tracing::instrument;
 
 use super::{create_memory_image, ExecutionError, Streams};
@@ -31,7 +34,23 @@ pub struct VmState<MEM = GuestMemory> {
     pub metrics: VmMetrics,
 }
 
-pub(super) const DEFAULT_RNG_SEED: u64 = 0;
+/// Returns a fresh seed from the OS, or the hex seed in `OPENVM_RNG_SEED` if it is set.
+pub(super) fn new_rng_seed() -> [u8; 32] {
+    match std::env::var("OPENVM_RNG_SEED") {
+        Ok(seed) => hex::decode(seed)
+            .ok()
+            .and_then(|seed| seed.try_into().ok())
+            .expect("OPENVM_RNG_SEED must be 64 hex digits"),
+        Err(_) => {
+            let mut seed = [0; 32];
+            OsRng
+                .try_fill_bytes(&mut seed)
+                .expect("OS randomness must be available");
+            tracing::info!(rng_seed = hex::encode(seed), "drew host randomness seed");
+            seed
+        }
+    }
+}
 
 impl<MEM> VmState<MEM> {
     #[inline(always)]
@@ -73,7 +92,10 @@ impl VmState<GuestMemory> {
         inputs: impl Into<Streams>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
-        VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
+        // Placeholder seed: the next line seeds the RNG from the `Streams` instead.
+        let mut state = VmState::new_with_defaults(pc_start, memory, inputs, 0);
+        state.rng = StdRng::from_seed(state.streams.rng_seed);
+        state
     }
 
     pub fn reset(
@@ -86,7 +108,7 @@ impl VmState<GuestMemory> {
         self.memory.memory.fill_zero();
         self.memory.memory.set_from_sparse(init_memory);
         self.streams = streams.into();
-        self.rng = StdRng::seed_from_u64(DEFAULT_RNG_SEED);
+        self.rng = StdRng::from_seed(self.streams.rng_seed);
     }
 
     /// Deeply clone this state while copying only memory pages recorded in

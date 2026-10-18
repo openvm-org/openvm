@@ -1446,7 +1446,7 @@ where
 
 /// Phantom sub-executors
 mod phantom {
-    use std::{iter::repeat_with, sync::Once};
+    use std::iter::repeat_with;
 
     use eyre::{bail, eyre, WrapErr};
     use openvm_circuit::{
@@ -1498,11 +1498,6 @@ mod phantom {
             _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            static WARN_ONCE: Once = Once::new();
-            WARN_ONCE.call_once(|| {
-                eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
-            });
-
             let num_words: u64 = read_register(memory, a);
             let num_bytes: u64 = num_words
                 .checked_mul(HINT_DWORD_BYTES as u64)
