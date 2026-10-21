@@ -1,0 +1,967 @@
+// Lean compiler output
+// Module: Fundamentals.Spec.BabyBear
+// Imports: public import Init public meta import Init public import Mathlib.Data.ZMod.Basic public import Mathlib.Data.Fin.VecNotation public import Fundamentals.Spec.BabyBear.Raw
+#include <lean/lean.h>
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-label"
+#elif defined(__GNUC__) && !defined(__CLANG__)
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-label"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
+lean_object* lp_mathlib_ZMod_commRing(lean_object*);
+lean_object* lp_mathlib_Ring_toAddGroupWithOne___redArg(lean_object*);
+lean_object* l_Fin_cases___redArg(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_BB__prime;
+static lean_once_cell_t lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0;
+static lean_once_cell_t lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1;
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(lean_object*);
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator___closed__0;
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator;
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicity;
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__0(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__0___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed(lean_object*, lean_object*, lean_object*);
+static const lean_closure_object lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__0___boxed, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__0 = (const lean_object*)&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__0_value;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__1;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__2_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__2;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__3_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__3;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__4_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__4;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__5_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__5;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__6_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__6;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__7_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__7;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__8_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__8;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__9_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__9;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__10_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__10;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__11_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__11;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__12_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__12;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__13_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__13;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__14_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__14;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__15_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__15;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__16_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__16;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__17_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__17;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__18_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__18;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__19_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__19;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__20_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__20;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__21_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__21;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__22_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__22;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__23_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__23;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__24_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__24;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__25_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__25;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__26_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__26;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__27_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__27;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__28_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__28;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__29_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__29;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__30_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__30;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__31_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__31;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__32_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__32;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__33_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__33;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__34_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__34;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__35_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__35;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__36_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__36;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__37_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__37;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__38_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__38;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__39_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__39;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__40_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__40;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__41_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__41;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__42_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__42;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__43_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__43;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__44_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__44;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__45_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__45;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__46_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__46;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__47_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__47;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__48_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__48;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__49_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__49;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__50_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__50;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__51_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__51;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__52_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__52;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__53_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__53;
+static lean_once_cell_t lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__54_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__54;
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerator(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerator___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___redArg(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___redArg___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___redArg___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___boxed(lean_object*, lean_object*, lean_object*);
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_BB__prime(void){
+_start:
+{
+lean_object* v___x_1_; 
+v___x_1_ = lean_unsigned_to_nat(2013265921u);
+return v___x_1_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0(void){
+_start:
+{
+lean_object* v___x_2_; lean_object* v___x_3_; 
+v___x_2_ = lean_unsigned_to_nat(2013265921u);
+v___x_3_ = lp_mathlib_ZMod_commRing(v___x_2_);
+return v___x_3_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1(void){
+_start:
+{
+lean_object* v___x_4_; lean_object* v___x_5_; 
+v___x_4_ = lean_obj_once(&lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0, &lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0_once, _init_lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0);
+v___x_5_ = lp_mathlib_Ring_toAddGroupWithOne___redArg(v___x_4_);
+return v___x_5_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(lean_object* v_a_6_){
+_start:
+{
+lean_object* v___x_7_; lean_object* v_toAddMonoidWithOne_8_; lean_object* v_toNatCast_9_; lean_object* v___x_10_; 
+v___x_7_ = lean_obj_once(&lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1, &lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1_once, _init_lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1);
+v_toAddMonoidWithOne_8_ = lean_ctor_get(v___x_7_, 1);
+v_toNatCast_9_ = lean_ctor_get(v_toAddMonoidWithOne_8_, 0);
+lean_inc(v_toNatCast_9_);
+v___x_10_ = lean_apply_1(v_toNatCast_9_, v_a_6_);
+return v___x_10_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator___closed__0(void){
+_start:
+{
+lean_object* v___x_11_; lean_object* v___x_12_; 
+v___x_11_ = lean_unsigned_to_nat(31u);
+v___x_12_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_11_);
+return v___x_12_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator(void){
+_start:
+{
+lean_object* v___x_13_; 
+v___x_13_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator___closed__0, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator___closed__0_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator___closed__0);
+return v___x_13_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicity(void){
+_start:
+{
+lean_object* v___x_14_; 
+v___x_14_ = lean_unsigned_to_nat(27u);
+return v___x_14_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__0(lean_object* v___y_15_){
+_start:
+{
+lean_internal_panic_unreachable();
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__0___boxed(lean_object* v___y_16_){
+_start:
+{
+lean_object* v_res_17_; 
+v_res_17_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__0(v___y_16_);
+lean_dec(v___y_16_);
+return v_res_17_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1(lean_object* v___x_18_, lean_object* v___f_19_, lean_object* v___y_20_){
+_start:
+{
+lean_object* v___x_21_; 
+v___x_21_ = l_Fin_cases___redArg(v___x_18_, v___f_19_, v___y_20_);
+return v___x_21_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed(lean_object* v___x_22_, lean_object* v___f_23_, lean_object* v___y_24_){
+_start:
+{
+lean_object* v_res_25_; 
+v_res_25_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1(v___x_22_, v___f_23_, v___y_24_);
+lean_dec(v___y_24_);
+lean_dec(v___x_22_);
+return v_res_25_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__1(void){
+_start:
+{
+lean_object* v___x_27_; lean_object* v___x_28_; 
+v___x_27_ = lean_unsigned_to_nat(2013265920u);
+v___x_28_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_27_);
+return v___x_28_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__2(void){
+_start:
+{
+lean_object* v___x_29_; lean_object* v___x_30_; 
+v___x_29_ = lean_unsigned_to_nat(1728404513u);
+v___x_30_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_29_);
+return v___x_30_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__3(void){
+_start:
+{
+lean_object* v___x_31_; lean_object* v___x_32_; 
+v___x_31_ = lean_unsigned_to_nat(1592366214u);
+v___x_32_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_31_);
+return v___x_32_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__4(void){
+_start:
+{
+lean_object* v___x_33_; lean_object* v___x_34_; 
+v___x_33_ = lean_unsigned_to_nat(196396260u);
+v___x_34_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_33_);
+return v___x_34_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__5(void){
+_start:
+{
+lean_object* v___x_35_; lean_object* v___x_36_; 
+v___x_35_ = lean_unsigned_to_nat(760005850u);
+v___x_36_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_35_);
+return v___x_36_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__6(void){
+_start:
+{
+lean_object* v___x_37_; lean_object* v___x_38_; 
+v___x_37_ = lean_unsigned_to_nat(1721589904u);
+v___x_38_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_37_);
+return v___x_38_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__7(void){
+_start:
+{
+lean_object* v___x_39_; lean_object* v___x_40_; 
+v___x_39_ = lean_unsigned_to_nat(397765732u);
+v___x_40_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_39_);
+return v___x_40_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__8(void){
+_start:
+{
+lean_object* v___x_41_; lean_object* v___x_42_; 
+v___x_41_ = lean_unsigned_to_nat(1732600167u);
+v___x_42_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_41_);
+return v___x_42_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__9(void){
+_start:
+{
+lean_object* v___x_43_; lean_object* v___x_44_; 
+v___x_43_ = lean_unsigned_to_nat(1753498361u);
+v___x_44_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_43_);
+return v___x_44_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__10(void){
+_start:
+{
+lean_object* v___x_45_; lean_object* v___x_46_; 
+v___x_45_ = lean_unsigned_to_nat(341742893u);
+v___x_46_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_45_);
+return v___x_46_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__11(void){
+_start:
+{
+lean_object* v___x_47_; lean_object* v___x_48_; 
+v___x_47_ = lean_unsigned_to_nat(1340477990u);
+v___x_48_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_47_);
+return v___x_48_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__12(void){
+_start:
+{
+lean_object* v___x_49_; lean_object* v___x_50_; 
+v___x_49_ = lean_unsigned_to_nat(1282623253u);
+v___x_50_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_49_);
+return v___x_50_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__13(void){
+_start:
+{
+lean_object* v___x_51_; lean_object* v___x_52_; 
+v___x_51_ = lean_unsigned_to_nat(298008106u);
+v___x_52_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_51_);
+return v___x_52_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__14(void){
+_start:
+{
+lean_object* v___x_53_; lean_object* v___x_54_; 
+v___x_53_ = lean_unsigned_to_nat(1657000625u);
+v___x_54_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_53_);
+return v___x_54_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__15(void){
+_start:
+{
+lean_object* v___x_55_; lean_object* v___x_56_; 
+v___x_55_ = lean_unsigned_to_nat(2009781145u);
+v___x_56_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_55_);
+return v___x_56_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__16(void){
+_start:
+{
+lean_object* v___x_57_; lean_object* v___x_58_; 
+v___x_57_ = lean_unsigned_to_nat(1421947380u);
+v___x_58_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_57_);
+return v___x_58_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__17(void){
+_start:
+{
+lean_object* v___x_59_; lean_object* v___x_60_; 
+v___x_59_ = lean_unsigned_to_nat(1286330022u);
+v___x_60_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_59_);
+return v___x_60_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__18(void){
+_start:
+{
+lean_object* v___x_61_; lean_object* v___x_62_; 
+v___x_61_ = lean_unsigned_to_nat(1559589183u);
+v___x_62_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_61_);
+return v___x_62_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__19(void){
+_start:
+{
+lean_object* v___x_63_; lean_object* v___x_64_; 
+v___x_63_ = lean_unsigned_to_nat(1049899240u);
+v___x_64_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_63_);
+return v___x_64_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__20(void){
+_start:
+{
+lean_object* v___x_65_; lean_object* v___x_66_; 
+v___x_65_ = lean_unsigned_to_nat(195061667u);
+v___x_66_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_65_);
+return v___x_66_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__21(void){
+_start:
+{
+lean_object* v___x_67_; lean_object* v___x_68_; 
+v___x_67_ = lean_unsigned_to_nat(414040701u);
+v___x_68_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_67_);
+return v___x_68_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__22(void){
+_start:
+{
+lean_object* v___x_69_; lean_object* v___x_70_; 
+v___x_69_ = lean_unsigned_to_nat(570250684u);
+v___x_70_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_69_);
+return v___x_70_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__23(void){
+_start:
+{
+lean_object* v___x_71_; lean_object* v___x_72_; 
+v___x_71_ = lean_unsigned_to_nat(1267047229u);
+v___x_72_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_71_);
+return v___x_72_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__24(void){
+_start:
+{
+lean_object* v___x_73_; lean_object* v___x_74_; 
+v___x_73_ = lean_unsigned_to_nat(1003846038u);
+v___x_74_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_73_);
+return v___x_74_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__25(void){
+_start:
+{
+lean_object* v___x_75_; lean_object* v___x_76_; 
+v___x_75_ = lean_unsigned_to_nat(1149491290u);
+v___x_76_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_75_);
+return v___x_76_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__26(void){
+_start:
+{
+lean_object* v___x_77_; lean_object* v___x_78_; 
+v___x_77_ = lean_unsigned_to_nat(975630072u);
+v___x_78_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_77_);
+return v___x_78_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__27(void){
+_start:
+{
+lean_object* v___x_79_; lean_object* v___x_80_; 
+v___x_79_ = lean_unsigned_to_nat(440564289u);
+v___x_80_ = lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0(v___x_79_);
+return v___x_80_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__28(void){
+_start:
+{
+lean_object* v___f_81_; lean_object* v___x_82_; lean_object* v___f_83_; 
+v___f_81_ = ((lean_object*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__0));
+v___x_82_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__27, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__27_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__27);
+v___f_83_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_83_, 0, v___x_82_);
+lean_closure_set(v___f_83_, 1, v___f_81_);
+return v___f_83_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__29(void){
+_start:
+{
+lean_object* v___f_84_; lean_object* v___x_85_; lean_object* v___f_86_; 
+v___f_84_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__28, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__28_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__28);
+v___x_85_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__26, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__26_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__26);
+v___f_86_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_86_, 0, v___x_85_);
+lean_closure_set(v___f_86_, 1, v___f_84_);
+return v___f_86_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__30(void){
+_start:
+{
+lean_object* v___f_87_; lean_object* v___x_88_; lean_object* v___f_89_; 
+v___f_87_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__29, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__29_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__29);
+v___x_88_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__25, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__25_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__25);
+v___f_89_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_89_, 0, v___x_88_);
+lean_closure_set(v___f_89_, 1, v___f_87_);
+return v___f_89_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__31(void){
+_start:
+{
+lean_object* v___f_90_; lean_object* v___x_91_; lean_object* v___f_92_; 
+v___f_90_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__30, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__30_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__30);
+v___x_91_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__24, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__24_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__24);
+v___f_92_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_92_, 0, v___x_91_);
+lean_closure_set(v___f_92_, 1, v___f_90_);
+return v___f_92_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__32(void){
+_start:
+{
+lean_object* v___f_93_; lean_object* v___x_94_; lean_object* v___f_95_; 
+v___f_93_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__31, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__31_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__31);
+v___x_94_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__23, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__23_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__23);
+v___f_95_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_95_, 0, v___x_94_);
+lean_closure_set(v___f_95_, 1, v___f_93_);
+return v___f_95_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__33(void){
+_start:
+{
+lean_object* v___f_96_; lean_object* v___x_97_; lean_object* v___f_98_; 
+v___f_96_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__32, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__32_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__32);
+v___x_97_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__22, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__22_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__22);
+v___f_98_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_98_, 0, v___x_97_);
+lean_closure_set(v___f_98_, 1, v___f_96_);
+return v___f_98_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__34(void){
+_start:
+{
+lean_object* v___f_99_; lean_object* v___x_100_; lean_object* v___f_101_; 
+v___f_99_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__33, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__33_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__33);
+v___x_100_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__21, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__21_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__21);
+v___f_101_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_101_, 0, v___x_100_);
+lean_closure_set(v___f_101_, 1, v___f_99_);
+return v___f_101_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__35(void){
+_start:
+{
+lean_object* v___f_102_; lean_object* v___x_103_; lean_object* v___f_104_; 
+v___f_102_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__34, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__34_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__34);
+v___x_103_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__20, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__20_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__20);
+v___f_104_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_104_, 0, v___x_103_);
+lean_closure_set(v___f_104_, 1, v___f_102_);
+return v___f_104_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__36(void){
+_start:
+{
+lean_object* v___f_105_; lean_object* v___x_106_; lean_object* v___f_107_; 
+v___f_105_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__35, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__35_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__35);
+v___x_106_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__19, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__19_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__19);
+v___f_107_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_107_, 0, v___x_106_);
+lean_closure_set(v___f_107_, 1, v___f_105_);
+return v___f_107_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__37(void){
+_start:
+{
+lean_object* v___f_108_; lean_object* v___x_109_; lean_object* v___f_110_; 
+v___f_108_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__36, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__36_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__36);
+v___x_109_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__18, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__18_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__18);
+v___f_110_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_110_, 0, v___x_109_);
+lean_closure_set(v___f_110_, 1, v___f_108_);
+return v___f_110_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__38(void){
+_start:
+{
+lean_object* v___f_111_; lean_object* v___x_112_; lean_object* v___f_113_; 
+v___f_111_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__37, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__37_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__37);
+v___x_112_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__17, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__17_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__17);
+v___f_113_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_113_, 0, v___x_112_);
+lean_closure_set(v___f_113_, 1, v___f_111_);
+return v___f_113_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__39(void){
+_start:
+{
+lean_object* v___f_114_; lean_object* v___x_115_; lean_object* v___f_116_; 
+v___f_114_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__38, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__38_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__38);
+v___x_115_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__16, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__16_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__16);
+v___f_116_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_116_, 0, v___x_115_);
+lean_closure_set(v___f_116_, 1, v___f_114_);
+return v___f_116_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__40(void){
+_start:
+{
+lean_object* v___f_117_; lean_object* v___x_118_; lean_object* v___f_119_; 
+v___f_117_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__39, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__39_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__39);
+v___x_118_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__15, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__15_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__15);
+v___f_119_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_119_, 0, v___x_118_);
+lean_closure_set(v___f_119_, 1, v___f_117_);
+return v___f_119_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__41(void){
+_start:
+{
+lean_object* v___f_120_; lean_object* v___x_121_; lean_object* v___f_122_; 
+v___f_120_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__40, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__40_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__40);
+v___x_121_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__14, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__14_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__14);
+v___f_122_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_122_, 0, v___x_121_);
+lean_closure_set(v___f_122_, 1, v___f_120_);
+return v___f_122_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__42(void){
+_start:
+{
+lean_object* v___f_123_; lean_object* v___x_124_; lean_object* v___f_125_; 
+v___f_123_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__41, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__41_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__41);
+v___x_124_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__13, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__13_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__13);
+v___f_125_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_125_, 0, v___x_124_);
+lean_closure_set(v___f_125_, 1, v___f_123_);
+return v___f_125_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__43(void){
+_start:
+{
+lean_object* v___f_126_; lean_object* v___x_127_; lean_object* v___f_128_; 
+v___f_126_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__42, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__42_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__42);
+v___x_127_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__12, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__12_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__12);
+v___f_128_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_128_, 0, v___x_127_);
+lean_closure_set(v___f_128_, 1, v___f_126_);
+return v___f_128_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__44(void){
+_start:
+{
+lean_object* v___f_129_; lean_object* v___x_130_; lean_object* v___f_131_; 
+v___f_129_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__43, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__43_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__43);
+v___x_130_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__11, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__11_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__11);
+v___f_131_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_131_, 0, v___x_130_);
+lean_closure_set(v___f_131_, 1, v___f_129_);
+return v___f_131_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__45(void){
+_start:
+{
+lean_object* v___f_132_; lean_object* v___x_133_; lean_object* v___f_134_; 
+v___f_132_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__44, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__44_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__44);
+v___x_133_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__10, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__10_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__10);
+v___f_134_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_134_, 0, v___x_133_);
+lean_closure_set(v___f_134_, 1, v___f_132_);
+return v___f_134_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__46(void){
+_start:
+{
+lean_object* v___f_135_; lean_object* v___x_136_; lean_object* v___f_137_; 
+v___f_135_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__45, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__45_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__45);
+v___x_136_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__9, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__9_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__9);
+v___f_137_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_137_, 0, v___x_136_);
+lean_closure_set(v___f_137_, 1, v___f_135_);
+return v___f_137_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__47(void){
+_start:
+{
+lean_object* v___f_138_; lean_object* v___x_139_; lean_object* v___f_140_; 
+v___f_138_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__46, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__46_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__46);
+v___x_139_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__8, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__8_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__8);
+v___f_140_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_140_, 0, v___x_139_);
+lean_closure_set(v___f_140_, 1, v___f_138_);
+return v___f_140_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__48(void){
+_start:
+{
+lean_object* v___f_141_; lean_object* v___x_142_; lean_object* v___f_143_; 
+v___f_141_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__47, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__47_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__47);
+v___x_142_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__7, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__7_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__7);
+v___f_143_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_143_, 0, v___x_142_);
+lean_closure_set(v___f_143_, 1, v___f_141_);
+return v___f_143_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__49(void){
+_start:
+{
+lean_object* v___f_144_; lean_object* v___x_145_; lean_object* v___f_146_; 
+v___f_144_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__48, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__48_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__48);
+v___x_145_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__6, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__6_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__6);
+v___f_146_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_146_, 0, v___x_145_);
+lean_closure_set(v___f_146_, 1, v___f_144_);
+return v___f_146_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__50(void){
+_start:
+{
+lean_object* v___f_147_; lean_object* v___x_148_; lean_object* v___f_149_; 
+v___f_147_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__49, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__49_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__49);
+v___x_148_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__5, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__5_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__5);
+v___f_149_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_149_, 0, v___x_148_);
+lean_closure_set(v___f_149_, 1, v___f_147_);
+return v___f_149_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__51(void){
+_start:
+{
+lean_object* v___f_150_; lean_object* v___x_151_; lean_object* v___f_152_; 
+v___f_150_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__50, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__50_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__50);
+v___x_151_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__4, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__4_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__4);
+v___f_152_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_152_, 0, v___x_151_);
+lean_closure_set(v___f_152_, 1, v___f_150_);
+return v___f_152_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__52(void){
+_start:
+{
+lean_object* v___f_153_; lean_object* v___x_154_; lean_object* v___f_155_; 
+v___f_153_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__51, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__51_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__51);
+v___x_154_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__3, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__3_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__3);
+v___f_155_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_155_, 0, v___x_154_);
+lean_closure_set(v___f_155_, 1, v___f_153_);
+return v___f_155_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__53(void){
+_start:
+{
+lean_object* v___f_156_; lean_object* v___x_157_; lean_object* v___f_158_; 
+v___f_156_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__52, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__52_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__52);
+v___x_157_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__2, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__2_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__2);
+v___f_158_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_158_, 0, v___x_157_);
+lean_closure_set(v___f_158_, 1, v___f_156_);
+return v___f_158_;
+}
+}
+static lean_object* _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__54(void){
+_start:
+{
+lean_object* v___f_159_; lean_object* v___x_160_; lean_object* v___f_161_; 
+v___f_159_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__53, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__53_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__53);
+v___x_160_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__1, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__1_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__1);
+v___f_161_ = lean_alloc_closure((void*)(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___lam__1___boxed), 3, 2);
+lean_closure_set(v___f_161_, 0, v___x_160_);
+lean_closure_set(v___f_161_, 1, v___f_159_);
+return v___f_161_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(lean_object* v_a_162_){
+_start:
+{
+lean_object* v___x_163_; lean_object* v_toAddMonoidWithOne_164_; lean_object* v_toOne_165_; lean_object* v___f_166_; lean_object* v___x_167_; 
+v___x_163_ = lean_obj_once(&lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1, &lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1_once, _init_lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__1);
+v_toAddMonoidWithOne_164_ = lean_ctor_get(v___x_163_, 1);
+v_toOne_165_ = lean_ctor_get(v_toAddMonoidWithOne_164_, 2);
+v___f_166_ = lean_obj_once(&lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__54, &lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__54_once, _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___closed__54);
+v___x_167_ = l_Fin_cases___redArg(v_toOne_165_, v___f_166_, v_a_162_);
+return v___x_167_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators___boxed(lean_object* v_a_168_){
+_start:
+{
+lean_object* v_res_169_; 
+v_res_169_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(v_a_168_);
+lean_dec(v_a_168_);
+return v_res_169_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerator(lean_object* v_bits_170_){
+_start:
+{
+lean_object* v___x_171_; 
+v___x_171_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(v_bits_170_);
+return v___x_171_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerator___boxed(lean_object* v_bits_172_){
+_start:
+{
+lean_object* v_res_173_; 
+v_res_173_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerator(v_bits_172_);
+lean_dec(v_bits_172_);
+return v_res_173_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___redArg(lean_object* v_bits_174_){
+_start:
+{
+lean_object* v___x_175_; 
+v___x_175_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(v_bits_174_);
+return v___x_175_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___redArg___boxed(lean_object* v_bits_176_){
+_start:
+{
+lean_object* v_res_177_; 
+v_res_177_ = lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___redArg(v_bits_176_);
+lean_dec(v_bits_176_);
+return v_res_177_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator(lean_object* v_bits_178_, lean_object* v_h_179_){
+_start:
+{
+lean_object* v___x_180_; 
+v___x_180_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(v_bits_178_);
+return v___x_180_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator___boxed(lean_object* v_bits_181_, lean_object* v_h_182_){
+_start:
+{
+lean_object* v_res_183_; 
+v_res_183_ = lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupGenerator(v_bits_181_, v_h_182_);
+lean_dec(v_bits_181_);
+return v_res_183_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___redArg(lean_object* v_bits_184_, lean_object* v_i_185_){
+_start:
+{
+lean_object* v___x_186_; lean_object* v_toSemiring_187_; lean_object* v_toMonoid_188_; lean_object* v_toNPow_189_; lean_object* v___x_190_; lean_object* v___x_191_; 
+v___x_186_ = lean_obj_once(&lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0, &lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0_once, _init_lp_swirl_x2dfv_Nat_cast___at___00Fundamentals_BabyBear_babyBearGenerator_spec__0___closed__0);
+v_toSemiring_187_ = lean_ctor_get(v___x_186_, 0);
+v_toMonoid_188_ = lean_ctor_get(v_toSemiring_187_, 1);
+v_toNPow_189_ = lean_ctor_get(v_toMonoid_188_, 2);
+v___x_190_ = lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicGenerators(v_bits_184_);
+lean_inc(v_toNPow_189_);
+v___x_191_ = lean_apply_2(v_toNPow_189_, v_i_185_, v___x_190_);
+return v___x_191_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___redArg___boxed(lean_object* v_bits_192_, lean_object* v_i_193_){
+_start:
+{
+lean_object* v_res_194_; 
+v_res_194_ = lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___redArg(v_bits_192_, v_i_193_);
+lean_dec(v_bits_192_);
+return v_res_194_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint(lean_object* v_bits_195_, lean_object* v_h_196_, lean_object* v_i_197_){
+_start:
+{
+lean_object* v___x_198_; 
+v___x_198_ = lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___redArg(v_bits_195_, v_i_197_);
+return v___x_198_;
+}
+}
+LEAN_EXPORT lean_object* lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint___boxed(lean_object* v_bits_199_, lean_object* v_h_200_, lean_object* v_i_201_){
+_start:
+{
+lean_object* v_res_202_; 
+v_res_202_ = lp_swirl_x2dfv_Fundamentals_BabyBear_canonicalSubgroupPoint(v_bits_199_, v_h_200_, v_i_201_);
+lean_dec(v_bits_199_);
+return v_res_202_;
+}
+}
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_mathlib_Mathlib_Data_ZMod_Basic(uint8_t builtin);
+lean_object* initialize_mathlib_Mathlib_Data_Fin_VecNotation(uint8_t builtin);
+lean_object* initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear_Raw(uint8_t builtin);
+void lean_initialize();
+static bool _G_initialized = false;
+LEAN_EXPORT lean_object* initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear(uint8_t builtin) {
+lean_object * res;
+if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_initialized = true;
+lean_initialize();
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_mathlib_Mathlib_Data_ZMod_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_mathlib_Mathlib_Data_Fin_VecNotation(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear_Raw(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+lp_swirl_x2dfv_Fundamentals_BabyBear_BB__prime = _init_lp_swirl_x2dfv_Fundamentals_BabyBear_BB__prime();
+lean_mark_persistent(lp_swirl_x2dfv_Fundamentals_BabyBear_BB__prime);
+lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator = _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator();
+lean_mark_persistent(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearGenerator);
+lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicity = _init_lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicity();
+lean_mark_persistent(lp_swirl_x2dfv_Fundamentals_BabyBear_babyBearTwoAdicity);
+return lean_io_result_mk_ok(lean_box(0));
+}
+#ifdef __cplusplus
+}
+#endif

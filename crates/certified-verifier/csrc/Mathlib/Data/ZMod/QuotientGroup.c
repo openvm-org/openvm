@@ -1,0 +1,746 @@
+// Lean compiler output
+// Module: Mathlib.Data.ZMod.QuotientGroup
+// Imports: public import Init public meta import Init public import Mathlib.Algebra.Group.Subgroup.ZPowers.Lemmas public import Mathlib.Data.ZMod.Basic
+#include <lean/lean.h>
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-label"
+#elif defined(__GNUC__) && !defined(__CLANG__)
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-label"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
+lean_object* lp_mathlib_ZMod_commRing(lean_object*);
+lean_object* lp_mathlib_Ring_toAddGroupWithOne___redArg(lean_object*);
+lean_object* lp_mathlib_Equiv_trans___redArg(lean_object*, lean_object*);
+lean_object* lean_nat_abs(lean_object*);
+lean_object* lp_mathlib_Equiv_symm___redArg(lean_object*);
+uint8_t lean_nat_dec_eq(lean_object*, lean_object*);
+lean_object* lean_nat_sub(lean_object*, lean_object*);
+lean_object* lean_nat_add(lean_object*, lean_object*);
+lean_object* lp_mathlib_ZMod_val(lean_object*, lean_object*);
+lean_object* lean_nat_to_int(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Nat_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__0(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_zmultiples___at___00Int_quotientZMultiplesNatEquivZMod_spec__1(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_zmultiples___at___00Int_quotientZMultiplesNatEquivZMod_spec__1___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_symm___at___00Int_quotientZMultiplesNatEquivZMod_spec__5___redArg(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_symm___at___00Int_quotientZMultiplesNatEquivZMod_spec__5(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod___lam__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod___lam__0___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17_spec__20(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17_spec__20___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___redArg___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_con___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__16(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___redArg(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___redArg___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__0(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__0___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__1(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___lam__0(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___lam__0___boxed(lean_object*);
+static const lean_closure_object lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_closure_object) + sizeof(void*)*0, .m_other = 0, .m_tag = 245}, .m_fun = (void*)lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___lam__0___boxed, .m_arity = 1, .m_num_fixed = 0, .m_objs = {} };
+static const lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__0 = (const lean_object*)&lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__0_value;
+static const lean_ctor_object lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = sizeof(lean_ctor_object) + sizeof(void*)*2 + 0, .m_other = 2, .m_tag = 0}, .m_objs = {((lean_object*)&lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__0_value),((lean_object*)&lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__0_value)}};
+static const lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__1 = (const lean_object*)&lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__1_value;
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_cast___at___00Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2_spec__2(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2___lam__0(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4_spec__7(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4_spec__7___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___redArg___boxed(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3___boxed(lean_object*, lean_object*);
+static lean_once_cell_t lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__0_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__0;
+static lean_once_cell_t lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1_once = LEAN_ONCE_CELL_INITIALIZER;
+static lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1;
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__9(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__9___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Nat_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__10(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___boxed(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___boxed(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Quotient_liftOn_x27___at___00AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19_spec__22___redArg(lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Quotient_liftOn_x27___at___00AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19_spec__22(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19___redArg(lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesEquivZMod(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesEquivZMod___boxed(lean_object*);
+LEAN_EXPORT lean_object* lp_mathlib_Nat_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__0(lean_object* v_a_1_){
+_start:
+{
+lean_object* v___x_2_; 
+v___x_2_ = lean_nat_to_int(v_a_1_);
+return v___x_2_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_zmultiples___at___00Int_quotientZMultiplesNatEquivZMod_spec__1(lean_object* v_g_3_){
+_start:
+{
+lean_object* v___x_4_; 
+v___x_4_ = lean_box(0);
+return v___x_4_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_zmultiples___at___00Int_quotientZMultiplesNatEquivZMod_spec__1___boxed(lean_object* v_g_5_){
+_start:
+{
+lean_object* v_res_6_; 
+v_res_6_ = lp_mathlib_AddSubgroup_zmultiples___at___00Int_quotientZMultiplesNatEquivZMod_spec__1(v_g_5_);
+lean_dec(v_g_5_);
+return v_res_6_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_symm___at___00Int_quotientZMultiplesNatEquivZMod_spec__5___redArg(lean_object* v_h_7_){
+_start:
+{
+lean_object* v___x_8_; 
+v___x_8_ = lp_mathlib_Equiv_symm___redArg(v_h_7_);
+return v___x_8_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_symm___at___00Int_quotientZMultiplesNatEquivZMod_spec__5(lean_object* v___x_9_, lean_object* v___x_10_, lean_object* v_h_11_){
+_start:
+{
+lean_object* v___x_12_; 
+v___x_12_ = lp_mathlib_Equiv_symm___redArg(v_h_11_);
+return v___x_12_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8___redArg(lean_object* v_h1_13_, lean_object* v_h2_14_){
+_start:
+{
+lean_object* v___x_15_; 
+v___x_15_ = lp_mathlib_Equiv_trans___redArg(v_h1_13_, v_h2_14_);
+return v___x_15_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8(lean_object* v___x_16_, lean_object* v___x_17_, lean_object* v_n_18_, lean_object* v_h1_19_, lean_object* v_h2_20_){
+_start:
+{
+lean_object* v___x_21_; 
+v___x_21_ = lp_mathlib_Equiv_trans___redArg(v_h1_19_, v_h2_20_);
+return v___x_21_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8___boxed(lean_object* v___x_22_, lean_object* v___x_23_, lean_object* v_n_24_, lean_object* v_h1_25_, lean_object* v_h2_26_){
+_start:
+{
+lean_object* v_res_27_; 
+v_res_27_ = lp_mathlib_AddEquiv_trans___at___00Int_quotientZMultiplesNatEquivZMod_spec__8(v___x_22_, v___x_23_, v_n_24_, v_h1_25_, v_h2_26_);
+lean_dec(v_n_24_);
+return v_res_27_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6(lean_object* v_x_28_, lean_object* v_a_29_){
+_start:
+{
+lean_object* v_zero_30_; uint8_t v_isZero_31_; 
+v_zero_30_ = lean_unsigned_to_nat(0u);
+v_isZero_31_ = lean_nat_dec_eq(v_x_28_, v_zero_30_);
+if (v_isZero_31_ == 1)
+{
+lean_inc(v_a_29_);
+return v_a_29_;
+}
+else
+{
+lean_object* v_one_32_; lean_object* v_n_33_; lean_object* v___x_34_; lean_object* v___x_35_; lean_object* v___x_36_; 
+v_one_32_ = lean_unsigned_to_nat(1u);
+v_n_33_ = lean_nat_sub(v_x_28_, v_one_32_);
+v___x_34_ = lean_nat_add(v_n_33_, v_one_32_);
+lean_dec(v_n_33_);
+v___x_35_ = lp_mathlib_ZMod_val(v___x_34_, v_a_29_);
+lean_dec(v___x_34_);
+v___x_36_ = lean_nat_to_int(v___x_35_);
+return v___x_36_;
+}
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6___boxed(lean_object* v_x_37_, lean_object* v_a_38_){
+_start:
+{
+lean_object* v_res_39_; 
+v_res_39_ = lp_mathlib_ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6(v_x_37_, v_a_38_);
+lean_dec(v_a_38_);
+lean_dec(v_x_37_);
+return v_res_39_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod___lam__0(lean_object* v_n_40_, lean_object* v___y_41_){
+_start:
+{
+lean_object* v___x_42_; 
+v___x_42_ = lp_mathlib_ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6(v_n_40_, v___y_41_);
+return v___x_42_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod___lam__0___boxed(lean_object* v_n_43_, lean_object* v___y_44_){
+_start:
+{
+lean_object* v_res_45_; 
+v_res_45_ = lp_mathlib_Int_quotientZMultiplesNatEquivZMod___lam__0(v_n_43_, v___y_44_);
+lean_dec(v___y_44_);
+lean_dec(v_n_43_);
+return v_res_45_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17_spec__20(lean_object* v_n_46_, lean_object* v_mc_47_, lean_object* v_f_48_, lean_object* v_S_49_){
+_start:
+{
+lean_object* v___x_50_; 
+v___x_50_ = lean_box(0);
+return v___x_50_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17_spec__20___boxed(lean_object* v_n_51_, lean_object* v_mc_52_, lean_object* v_f_53_, lean_object* v_S_54_){
+_start:
+{
+lean_object* v_res_55_; 
+v_res_55_ = lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17_spec__20(v_n_51_, v_mc_52_, v_f_53_, v_S_54_);
+lean_dec(v_f_53_);
+lean_dec(v_n_51_);
+return v_res_55_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___redArg(lean_object* v_n_56_, lean_object* v_f_57_){
+_start:
+{
+lean_object* v___x_58_; 
+v___x_58_ = lean_box(0);
+return v___x_58_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___redArg___boxed(lean_object* v_n_59_, lean_object* v_f_60_){
+_start:
+{
+lean_object* v_res_61_; 
+v_res_61_ = lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___redArg(v_n_59_, v_f_60_);
+lean_dec(v_f_60_);
+lean_dec(v_n_59_);
+return v_res_61_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13(lean_object* v_n_62_, lean_object* v_f_63_){
+_start:
+{
+lean_object* v___x_64_; 
+v___x_64_ = lean_box(0);
+return v___x_64_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13___boxed(lean_object* v_n_65_, lean_object* v_f_66_){
+_start:
+{
+lean_object* v_res_67_; 
+v_res_67_ = lp_mathlib_AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13(v_n_65_, v_f_66_);
+lean_dec(v_f_66_);
+lean_dec(v_n_65_);
+return v_res_67_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_con___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__16(lean_object* v_N_68_, lean_object* v_nN_69_){
+_start:
+{
+lean_object* v___x_70_; 
+v___x_70_ = lean_box(0);
+return v___x_70_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0(lean_object* v_f_71_, lean_object* v_x_72_){
+_start:
+{
+lean_object* v___x_73_; 
+v___x_73_ = lean_apply_1(v_f_71_, v_x_72_);
+return v___x_73_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg(lean_object* v_c_74_, lean_object* v_f_75_){
+_start:
+{
+lean_object* v___f_76_; 
+v___f_76_ = lean_alloc_closure((void*)(lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0), 2, 1);
+lean_closure_set(v___f_76_, 0, v_f_75_);
+return v___f_76_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___redArg(lean_object* v_n_77_, lean_object* v_N_78_, lean_object* v_00_u03c6_79_){
+_start:
+{
+lean_object* v___f_80_; 
+v___f_80_ = lean_alloc_closure((void*)(lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0), 2, 1);
+lean_closure_set(v___f_80_, 0, v_00_u03c6_79_);
+return v___f_80_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___redArg___boxed(lean_object* v_n_81_, lean_object* v_N_82_, lean_object* v_00_u03c6_83_){
+_start:
+{
+lean_object* v_res_84_; 
+v_res_84_ = lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___redArg(v_n_81_, v_N_82_, v_00_u03c6_83_);
+lean_dec(v_n_81_);
+return v_res_84_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12(lean_object* v_n_85_, lean_object* v_00_u03c6_86_){
+_start:
+{
+lean_object* v___f_87_; 
+v___f_87_ = lean_alloc_closure((void*)(lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0), 2, 1);
+lean_closure_set(v___f_87_, 0, v_00_u03c6_86_);
+return v___f_87_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12___boxed(lean_object* v_n_88_, lean_object* v_00_u03c6_89_){
+_start:
+{
+lean_object* v_res_90_; 
+v_res_90_ = lp_mathlib_QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12(v_n_88_, v_00_u03c6_89_);
+lean_dec(v_n_88_);
+return v_res_90_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__0(lean_object* v_n_91_, lean_object* v_00_u03c6_92_, lean_object* v___y_93_){
+_start:
+{
+lean_object* v___x_94_; 
+v___x_94_ = lean_apply_1(v_00_u03c6_92_, v___y_93_);
+return v___x_94_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__0___boxed(lean_object* v_n_95_, lean_object* v_00_u03c6_96_, lean_object* v___y_97_){
+_start:
+{
+lean_object* v_res_98_; 
+v_res_98_ = lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__0(v_n_95_, v_00_u03c6_96_, v___y_97_);
+lean_dec(v_n_95_);
+return v_res_98_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__1(lean_object* v_00_u03c8_99_, lean_object* v___y_100_){
+_start:
+{
+lean_object* v___x_101_; 
+v___x_101_ = lean_apply_1(v_00_u03c8_99_, v___y_100_);
+return v___x_101_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg(lean_object* v_n_102_, lean_object* v_00_u03c6_103_, lean_object* v_00_u03c8_104_){
+_start:
+{
+lean_object* v___f_105_; lean_object* v___f_106_; lean_object* v___x_107_; 
+v___f_105_ = lean_alloc_closure((void*)(lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__0___boxed), 3, 2);
+lean_closure_set(v___f_105_, 0, v_n_102_);
+lean_closure_set(v___f_105_, 1, v_00_u03c6_103_);
+v___f_106_ = lean_alloc_closure((void*)(lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg___lam__1), 2, 1);
+lean_closure_set(v___f_106_, 0, v_00_u03c8_104_);
+v___x_107_ = lean_alloc_ctor(0, 2, 0);
+lean_ctor_set(v___x_107_, 0, v___f_105_);
+lean_ctor_set(v___x_107_, 1, v___f_106_);
+return v___x_107_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___lam__0(lean_object* v___y_108_){
+_start:
+{
+lean_inc(v___y_108_);
+return v___y_108_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___lam__0___boxed(lean_object* v___y_109_){
+_start:
+{
+lean_object* v_res_110_; 
+v_res_110_ = lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___lam__0(v___y_109_);
+lean_dec(v___y_109_);
+return v_res_110_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6(lean_object* v_s_114_, lean_object* v_t_115_, lean_object* v_h_116_){
+_start:
+{
+lean_object* v___x_117_; 
+v___x_117_ = ((lean_object*)(lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6___closed__1));
+return v___x_117_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_cast___at___00Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2_spec__2(lean_object* v_n_118_, lean_object* v_a_119_){
+_start:
+{
+lean_object* v___x_120_; lean_object* v___x_121_; lean_object* v_toIntCast_122_; lean_object* v___x_123_; 
+v___x_120_ = lp_mathlib_ZMod_commRing(v_n_118_);
+v___x_121_ = lp_mathlib_Ring_toAddGroupWithOne___redArg(v___x_120_);
+v_toIntCast_122_ = lean_ctor_get(v___x_121_, 0);
+lean_inc(v_toIntCast_122_);
+lean_dec_ref(v___x_121_);
+v___x_123_ = lean_apply_1(v_toIntCast_122_, v_a_119_);
+return v___x_123_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2___lam__0(lean_object* v_n_124_, lean_object* v___y_125_){
+_start:
+{
+lean_object* v___x_126_; 
+v___x_126_ = lp_mathlib_Int_cast___at___00Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2_spec__2(v_n_124_, v___y_125_);
+return v___x_126_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2(lean_object* v_n_127_){
+_start:
+{
+lean_object* v___f_128_; 
+v___f_128_ = lean_alloc_closure((void*)(lp_mathlib_Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2___lam__0), 2, 1);
+lean_closure_set(v___f_128_, 0, v_n_127_);
+return v___f_128_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4_spec__7(lean_object* v_n_129_, lean_object* v_mc_130_, lean_object* v_f_131_, lean_object* v_S_132_){
+_start:
+{
+lean_object* v___x_133_; 
+v___x_133_ = lean_box(0);
+return v___x_133_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4_spec__7___boxed(lean_object* v_n_134_, lean_object* v_mc_135_, lean_object* v_f_136_, lean_object* v_S_137_){
+_start:
+{
+lean_object* v_res_138_; 
+v_res_138_ = lp_mathlib_AddSubmonoid_comap___at___00AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4_spec__7(v_n_134_, v_mc_135_, v_f_136_, v_S_137_);
+lean_dec(v_f_136_);
+lean_dec(v_n_134_);
+return v_res_138_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___redArg(lean_object* v_n_139_, lean_object* v_f_140_){
+_start:
+{
+lean_object* v___x_141_; 
+v___x_141_ = lean_box(0);
+return v___x_141_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___redArg___boxed(lean_object* v_n_142_, lean_object* v_f_143_){
+_start:
+{
+lean_object* v_res_144_; 
+v_res_144_ = lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___redArg(v_n_142_, v_f_143_);
+lean_dec(v_f_143_);
+lean_dec(v_n_142_);
+return v_res_144_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3(lean_object* v_n_145_, lean_object* v_f_146_){
+_start:
+{
+lean_object* v___x_147_; 
+v___x_147_ = lean_box(0);
+return v___x_147_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3___boxed(lean_object* v_n_148_, lean_object* v_f_149_){
+_start:
+{
+lean_object* v_res_150_; 
+v_res_150_ = lp_mathlib_AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3(v_n_148_, v_f_149_);
+lean_dec(v_f_149_);
+lean_dec(v_n_148_);
+return v_res_150_;
+}
+}
+static lean_object* _init_lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__0(void){
+_start:
+{
+lean_object* v___x_151_; lean_object* v___x_152_; 
+v___x_151_ = lean_box(0);
+v___x_152_ = lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6(v___x_151_, v___x_151_, lean_box(0));
+return v___x_152_;
+}
+}
+static lean_object* _init_lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1(void){
+_start:
+{
+lean_object* v___x_153_; lean_object* v___x_154_; 
+v___x_153_ = lean_obj_once(&lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__0, &lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__0_once, _init_lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__0);
+v___x_154_ = lp_mathlib_Equiv_symm___redArg(v___x_153_);
+return v___x_154_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesNatEquivZMod(lean_object* v_n_155_){
+_start:
+{
+lean_object* v___f_156_; lean_object* v___f_157_; lean_object* v___x_158_; lean_object* v___x_159_; lean_object* v___x_160_; 
+lean_inc_n(v_n_155_, 2);
+v___f_156_ = lean_alloc_closure((void*)(lp_mathlib_Int_quotientZMultiplesNatEquivZMod___lam__0___boxed), 2, 1);
+lean_closure_set(v___f_156_, 0, v_n_155_);
+v___f_157_ = lean_alloc_closure((void*)(lp_mathlib_Int_castAddHom___at___00Int_quotientZMultiplesNatEquivZMod_spec__2___lam__0), 2, 1);
+lean_closure_set(v___f_157_, 0, v_n_155_);
+v___x_158_ = lean_obj_once(&lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1, &lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1_once, _init_lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1);
+v___x_159_ = lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg(v_n_155_, v___f_157_, v___f_156_);
+v___x_160_ = lp_mathlib_Equiv_trans___redArg(v___x_158_, v___x_159_);
+return v___x_160_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4___redArg(lean_object* v_M_161_, lean_object* v_N_162_){
+_start:
+{
+lean_object* v___x_163_; 
+v___x_163_ = lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6(v_M_161_, v_N_162_, lean_box(0));
+return v___x_163_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4(lean_object* v_M_164_, lean_object* v_N_165_, lean_object* v_inst_166_, lean_object* v_inst_167_, lean_object* v_h_168_){
+_start:
+{
+lean_object* v___x_169_; 
+v___x_169_ = lp_mathlib_AddSubgroup_quotientEquivOfEq___at___00QuotientAddGroup_quotientAddEquivOfEq___at___00Int_quotientZMultiplesNatEquivZMod_spec__4_spec__6(v_M_164_, v_N_165_, lean_box(0));
+return v___x_169_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__9(lean_object* v_a_170_){
+_start:
+{
+lean_inc(v_a_170_);
+return v_a_170_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__9___boxed(lean_object* v_a_171_){
+_start:
+{
+lean_object* v_res_172_; 
+v_res_172_ = lp_mathlib_Int_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__9(v_a_171_);
+lean_dec(v_a_171_);
+return v_res_172_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7(lean_object* v_n_173_, lean_object* v_00_u03c6_174_, lean_object* v_00_u03c8_175_, lean_object* v_h_u03c6_176_){
+_start:
+{
+lean_object* v___x_177_; 
+v___x_177_ = lp_mathlib_QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7___redArg(v_n_173_, v_00_u03c6_174_, v_00_u03c8_175_);
+return v___x_177_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4(lean_object* v_n_178_, lean_object* v_mc_179_, lean_object* v_f_180_){
+_start:
+{
+lean_object* v___x_181_; 
+v___x_181_ = lean_box(0);
+return v___x_181_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4___boxed(lean_object* v_n_182_, lean_object* v_mc_183_, lean_object* v_f_184_){
+_start:
+{
+lean_object* v_res_185_; 
+v_res_185_ = lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00Int_quotientZMultiplesNatEquivZMod_spec__3_spec__4(v_n_182_, v_mc_183_, v_f_184_);
+lean_dec(v_f_184_);
+lean_dec(v_n_182_);
+return v_res_185_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Nat_cast___at___00ZMod_cast___at___00Int_quotientZMultiplesNatEquivZMod_spec__6_spec__10(lean_object* v_a_186_){
+_start:
+{
+lean_object* v___x_187_; 
+v___x_187_ = lean_nat_to_int(v_a_186_);
+return v___x_187_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15(lean_object* v_n_188_, lean_object* v_N_189_, lean_object* v_nN_190_, lean_object* v_00_u03c6_191_, lean_object* v_HN_192_){
+_start:
+{
+lean_object* v___f_193_; 
+v___f_193_ = lean_alloc_closure((void*)(lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0), 2, 1);
+lean_closure_set(v___f_193_, 0, v_00_u03c6_191_);
+return v___f_193_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15___boxed(lean_object* v_n_194_, lean_object* v_N_195_, lean_object* v_nN_196_, lean_object* v_00_u03c6_197_, lean_object* v_HN_198_){
+_start:
+{
+lean_object* v_res_199_; 
+v_res_199_ = lp_mathlib_QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15(v_n_194_, v_N_195_, v_nN_196_, v_00_u03c6_197_, v_HN_198_);
+lean_dec(v_n_194_);
+return v_res_199_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17(lean_object* v_n_200_, lean_object* v_mc_201_, lean_object* v_f_202_){
+_start:
+{
+lean_object* v___x_203_; 
+v___x_203_ = lean_box(0);
+return v___x_203_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17___boxed(lean_object* v_n_204_, lean_object* v_mc_205_, lean_object* v_f_206_){
+_start:
+{
+lean_object* v_res_207_; 
+v_res_207_ = lp_mathlib_AddMonoidHom_mker___at___00AddMonoidHom_ker___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__13_spec__17(v_n_204_, v_mc_205_, v_f_206_);
+lean_dec(v_f_206_);
+lean_dec(v_n_204_);
+return v_res_207_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17(lean_object* v_n_208_, lean_object* v_c_209_, lean_object* v_f_210_, lean_object* v_H_211_){
+_start:
+{
+lean_object* v___f_212_; 
+v___f_212_ = lean_alloc_closure((void*)(lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___redArg___lam__0), 2, 1);
+lean_closure_set(v___f_212_, 0, v_f_210_);
+return v___f_212_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17___boxed(lean_object* v_n_213_, lean_object* v_c_214_, lean_object* v_f_215_, lean_object* v_H_216_){
+_start:
+{
+lean_object* v_res_217_; 
+v_res_217_ = lp_mathlib_AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17(v_n_213_, v_c_214_, v_f_215_, v_H_216_);
+lean_dec(v_n_213_);
+return v_res_217_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Quotient_liftOn_x27___at___00AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19_spec__22___redArg(lean_object* v_q_218_, lean_object* v_f_219_){
+_start:
+{
+lean_object* v___x_220_; 
+v___x_220_ = lean_apply_1(v_f_219_, v_q_218_);
+return v___x_220_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Quotient_liftOn_x27___at___00AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19_spec__22(lean_object* v_c_221_, lean_object* v_00_u03c6_222_, lean_object* v_q_223_, lean_object* v_f_224_, lean_object* v_h_225_){
+_start:
+{
+lean_object* v___x_226_; 
+v___x_226_ = lean_apply_1(v_f_224_, v_q_223_);
+return v___x_226_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19___redArg(lean_object* v_c_227_, lean_object* v_q_228_, lean_object* v_f_229_){
+_start:
+{
+lean_object* v___x_230_; 
+v___x_230_ = lean_apply_1(v_f_229_, v_q_228_);
+return v___x_230_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_AddCon_liftOn___at___00AddCon_lift___at___00QuotientAddGroup_lift___at___00QuotientAddGroup_kerLift___at___00QuotientAddGroup_quotientKerEquivOfRightInverse___at___00Int_quotientZMultiplesNatEquivZMod_spec__7_spec__12_spec__15_spec__17_spec__19(lean_object* v_00_u03b2_231_, lean_object* v_c_232_, lean_object* v_q_233_, lean_object* v_f_234_, lean_object* v_h_235_){
+_start:
+{
+lean_object* v___x_236_; 
+v___x_236_ = lean_apply_1(v_f_234_, v_q_233_);
+return v___x_236_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesEquivZMod(lean_object* v_a_237_){
+_start:
+{
+lean_object* v___x_238_; lean_object* v___x_239_; lean_object* v___x_240_; lean_object* v___x_241_; 
+v___x_238_ = lean_nat_abs(v_a_237_);
+v___x_239_ = lean_obj_once(&lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1, &lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1_once, _init_lp_mathlib_Int_quotientZMultiplesNatEquivZMod___closed__1);
+v___x_240_ = lp_mathlib_Int_quotientZMultiplesNatEquivZMod(v___x_238_);
+v___x_241_ = lp_mathlib_Equiv_trans___redArg(v___x_239_, v___x_240_);
+return v___x_241_;
+}
+}
+LEAN_EXPORT lean_object* lp_mathlib_Int_quotientZMultiplesEquivZMod___boxed(lean_object* v_a_242_){
+_start:
+{
+lean_object* v_res_243_; 
+v_res_243_ = lp_mathlib_Int_quotientZMultiplesEquivZMod(v_a_242_);
+lean_dec(v_a_242_);
+return v_res_243_;
+}
+}
+lean_object* runtime_initialize_Init(uint8_t builtin);
+lean_object* runtime_initialize_mathlib_Mathlib_Algebra_Group_Subgroup_ZPowers_Lemmas(uint8_t builtin);
+lean_object* runtime_initialize_mathlib_Mathlib_Data_ZMod_Basic(uint8_t builtin);
+void lean_initialize();
+static bool _G_runtime_initialized = false;
+LEAN_EXPORT lean_object* runtime_initialize_mathlib_Mathlib_Data_ZMod_QuotientGroup(uint8_t builtin) {
+lean_object * res;
+if (_G_runtime_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_runtime_initialized = true;
+lean_initialize();
+res = runtime_initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_mathlib_Mathlib_Algebra_Group_Subgroup_ZPowers_Lemmas(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_mathlib_Mathlib_Data_ZMod_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return lean_io_result_mk_ok(lean_box(0));
+}
+lean_object* runtime_initialize_Init(uint8_t builtin);
+static bool _G_meta_initialized = false;
+LEAN_EXPORT lean_object* meta_initialize_mathlib_Mathlib_Data_ZMod_QuotientGroup(uint8_t builtin) {
+lean_object * res;
+if (_G_meta_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_meta_initialized = true;
+res = runtime_initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return lean_io_result_mk_ok(lean_box(0));
+}
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_Init(uint8_t builtin);
+lean_object* initialize_mathlib_Mathlib_Algebra_Group_Subgroup_ZPowers_Lemmas(uint8_t builtin);
+lean_object* initialize_mathlib_Mathlib_Data_ZMod_Basic(uint8_t builtin);
+static bool _G_initialized = false;
+LEAN_EXPORT lean_object* initialize_mathlib_Mathlib_Data_ZMod_QuotientGroup(uint8_t builtin) {
+lean_object * res;
+if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
+_G_initialized = true;
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_Init(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_mathlib_Mathlib_Algebra_Group_Subgroup_ZPowers_Lemmas(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = initialize_mathlib_Mathlib_Data_ZMod_Basic(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = runtime_initialize_mathlib_Mathlib_Data_ZMod_QuotientGroup(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+res = meta_initialize_mathlib_Mathlib_Data_ZMod_QuotientGroup(builtin);
+if (lean_io_result_is_error(res)) return res;
+lean_dec_ref(res);
+return initialize_mathlib_Mathlib_Data_ZMod_QuotientGroup(builtin);
+}
+#ifdef __cplusplus
+}
+#endif
