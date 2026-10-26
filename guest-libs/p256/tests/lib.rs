@@ -315,4 +315,20 @@ mod host_tests {
             panic!();
         }
     }
+
+    #[test]
+    fn test_host_scalar_invert_zero() {
+        use elliptic_curve::{ff::Field, ops::Invert};
+
+        let zero = <P256Scalar as Field>::ZERO;
+        let one = <P256Scalar as Field>::ONE;
+        assert!(bool::from(<P256Scalar as Field>::invert(&zero).is_none()));
+        assert!(bool::from(<P256Scalar as Invert>::invert(&zero).is_none()));
+        let (is_square, _) = <P256Scalar as Field>::sqrt_ratio(&one, &zero);
+        assert!(!bool::from(is_square));
+
+        let two = <P256Scalar as Field>::double(&one);
+        let two_inv = <P256Scalar as Field>::invert(&two).unwrap();
+        assert_eq!(two * two_inv, one);
+    }
 }

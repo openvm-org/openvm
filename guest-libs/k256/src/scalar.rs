@@ -89,10 +89,13 @@ impl Field for Secp256k1Scalar {
         // needs to be in canonical form for ct_eq
         self.assert_reduced();
         let is_zero = self.ct_eq(&<Self as IntMod>::ZERO);
-        CtOption::new(
-            <Secp256k1Scalar as openvm_algebra_guest::Field>::invert(self),
-            !is_zero,
-        )
+        // `CtOption::new` evaluates its value eagerly, and zero has no inverse.
+        let inverse = if bool::from(is_zero) {
+            <Self as IntMod>::ZERO
+        } else {
+            <Secp256k1Scalar as openvm_algebra_guest::Field>::invert(self)
+        };
+        CtOption::new(inverse, !is_zero)
     }
 
     #[allow(clippy::many_single_char_names)]
