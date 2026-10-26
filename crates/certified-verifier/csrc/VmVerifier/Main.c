@@ -16,28 +16,28 @@ extern "C" {
 lean_object* lean_get_stdin();
 lean_object* lean_get_stderr();
 lean_object* l_IO_FS_Stream_readBinToEnd(lean_object*);
-lean_object* lp_workspace_VmVerifier_Spec_Wire_parseFiveBlobs(lean_object*);
+lean_object* lp_openvm_x2dfv_VmVerifier_Spec_Wire_parseFiveBlobs(lean_object*);
 lean_object* lean_byte_array_size(lean_object*);
 lean_object* l_Nat_reprFast(lean_object*);
 lean_object* lean_string_append(lean_object*, lean_object*);
 lean_object* l_IO_FS_Stream_putStrLn(lean_object*, lean_object*);
-lean_object* lp_workspace_VmVerifier_verifyVmStarkProof(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
+lean_object* lp_openvm_x2dfv_VmVerifier_verifyVmStarkProof(lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
 lean_object* lean_uint32_to_nat(uint32_t);
-static const lean_string_object lp_workspace_VmVerifier_Executable_main___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 42, .m_capacity = 42, .m_length = 41, .m_data = "vm_verify: stdin framing error (received "};
-static const lean_object* lp_workspace_VmVerifier_Executable_main___closed__0 = (const lean_object*)&lp_workspace_VmVerifier_Executable_main___closed__0_value;
-static const lean_string_object lp_workspace_VmVerifier_Executable_main___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = " bytes)"};
-static const lean_object* lp_workspace_VmVerifier_Executable_main___closed__1 = (const lean_object*)&lp_workspace_VmVerifier_Executable_main___closed__1_value;
-static const lean_string_object lp_workspace_VmVerifier_Executable_main___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 38, .m_capacity = 38, .m_length = 37, .m_data = "vm_verify: verification failed (exit "};
-static const lean_object* lp_workspace_VmVerifier_Executable_main___closed__2 = (const lean_object*)&lp_workspace_VmVerifier_Executable_main___closed__2_value;
-static const lean_string_object lp_workspace_VmVerifier_Executable_main___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ")"};
-static const lean_object* lp_workspace_VmVerifier_Executable_main___closed__3 = (const lean_object*)&lp_workspace_VmVerifier_Executable_main___closed__3_value;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Executable_main___boxed__const__1;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Executable_main___boxed__const__2;
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Executable_main();
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Executable_main___boxed(lean_object*);
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_Executable_main___closed__0_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 42, .m_capacity = 42, .m_length = 41, .m_data = "vm_verify: stdin framing error (received "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___closed__0 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_Executable_main___closed__0_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_Executable_main___closed__1_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 8, .m_capacity = 8, .m_length = 7, .m_data = " bytes)"};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___closed__1 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_Executable_main___closed__1_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_Executable_main___closed__2_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 38, .m_capacity = 38, .m_length = 37, .m_data = "vm_verify: verification failed (exit "};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___closed__2 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_Executable_main___closed__2_value;
+static const lean_string_object lp_openvm_x2dfv_VmVerifier_Executable_main___closed__3_value = {.m_header = {.m_rc = 0, .m_cs_sz = 0, .m_other = 0, .m_tag = 249}, .m_size = 2, .m_capacity = 2, .m_length = 1, .m_data = ")"};
+static const lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___closed__3 = (const lean_object*)&lp_openvm_x2dfv_VmVerifier_Executable_main___closed__3_value;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__1;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__2;
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main();
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___boxed(lean_object*);
 LEAN_EXPORT lean_object* _lean_main();
-LEAN_EXPORT lean_object* lp_workspace_main___boxed(lean_object*);
-static lean_object* _init_lp_workspace_VmVerifier_Executable_main___boxed__const__1(void){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_main___boxed(lean_object*);
+static lean_object* _init_lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__1(void){
 _start:
 {
 uint32_t v___x_5_; lean_object* v___x_6_; 
@@ -46,7 +46,7 @@ v___x_6_ = lean_box_uint32(v___x_5_);
 return v___x_6_;
 }
 }
-static lean_object* _init_lp_workspace_VmVerifier_Executable_main___boxed__const__2(void){
+static lean_object* _init_lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__2(void){
 _start:
 {
 uint32_t v___x_7_; lean_object* v___x_8_; 
@@ -55,7 +55,7 @@ v___x_8_ = lean_box_uint32(v___x_7_);
 return v___x_8_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Executable_main(){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main(){
 _start:
 {
 lean_object* v___x_10_; lean_object* v___x_11_; lean_object* v___x_12_; 
@@ -84,18 +84,18 @@ goto v_resetjp_14_;
 v_resetjp_14_:
 {
 lean_object* v___x_17_; 
-v___x_17_ = lp_workspace_VmVerifier_Spec_Wire_parseFiveBlobs(v_a_13_);
+v___x_17_ = lp_openvm_x2dfv_VmVerifier_Spec_Wire_parseFiveBlobs(v_a_13_);
 if (lean_obj_tag(v___x_17_) == 0)
 {
 lean_object* v___x_18_; lean_object* v___x_19_; lean_object* v___x_20_; lean_object* v___x_21_; lean_object* v___x_22_; lean_object* v___x_23_; lean_object* v___x_24_; 
 lean_del_object(v___x_15_);
-v___x_18_ = ((lean_object*)(lp_workspace_VmVerifier_Executable_main___closed__0));
+v___x_18_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_Executable_main___closed__0));
 v___x_19_ = lean_byte_array_size(v_a_13_);
 lean_dec(v_a_13_);
 v___x_20_ = l_Nat_reprFast(v___x_19_);
 v___x_21_ = lean_string_append(v___x_18_, v___x_20_);
 lean_dec_ref(v___x_20_);
-v___x_22_ = ((lean_object*)(lp_workspace_VmVerifier_Executable_main___closed__1));
+v___x_22_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_Executable_main___closed__1));
 v___x_23_ = lean_string_append(v___x_21_, v___x_22_);
 v___x_24_ = l_IO_FS_Stream_putStrLn(v___x_11_, v___x_23_);
 if (lean_obj_tag(v___x_24_) == 0)
@@ -121,7 +121,7 @@ goto v_resetjp_25_;
 v_resetjp_25_:
 {
 lean_object* v___x_28_; lean_object* v___x_30_; 
-v___x_28_ = lp_workspace_VmVerifier_Executable_main___boxed__const__1;
+v___x_28_ = lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__1;
 if (v_isShared_27_ == 0)
 {
 lean_ctor_set(v___x_26_, 0, v___x_28_);
@@ -211,7 +211,7 @@ lean_inc(v_fst_49_);
 v_snd_50_ = lean_ctor_get(v_snd_45_, 1);
 lean_inc(v_snd_50_);
 lean_dec(v_snd_45_);
-v___x_51_ = lp_workspace_VmVerifier_verifyVmStarkProof(v_fst_46_, v_fst_47_, v_fst_48_, v_fst_49_, v_snd_50_);
+v___x_51_ = lp_openvm_x2dfv_VmVerifier_verifyVmStarkProof(v_fst_46_, v_fst_47_, v_fst_48_, v_fst_49_, v_snd_50_);
 if (lean_obj_tag(v___x_51_) == 0)
 {
 lean_object* v_a_52_; lean_object* v___x_53_; uint32_t v___x_54_; lean_object* v___x_55_; lean_object* v___x_56_; lean_object* v___x_57_; lean_object* v___x_58_; lean_object* v___x_59_; lean_object* v___x_60_; 
@@ -219,13 +219,13 @@ lean_del_object(v___x_15_);
 v_a_52_ = lean_ctor_get(v___x_51_, 0);
 lean_inc(v_a_52_);
 lean_dec_ref_known(v___x_51_, 1);
-v___x_53_ = ((lean_object*)(lp_workspace_VmVerifier_Executable_main___closed__2));
+v___x_53_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_Executable_main___closed__2));
 v___x_54_ = lean_unbox_uint32(v_a_52_);
 v___x_55_ = lean_uint32_to_nat(v___x_54_);
 v___x_56_ = l_Nat_reprFast(v___x_55_);
 v___x_57_ = lean_string_append(v___x_53_, v___x_56_);
 lean_dec_ref(v___x_56_);
-v___x_58_ = ((lean_object*)(lp_workspace_VmVerifier_Executable_main___closed__3));
+v___x_58_ = ((lean_object*)(lp_openvm_x2dfv_VmVerifier_Executable_main___closed__3));
 v___x_59_ = lean_string_append(v___x_57_, v___x_58_);
 v___x_60_ = l_IO_FS_Stream_putStrLn(v___x_11_, v___x_59_);
 if (lean_obj_tag(v___x_60_) == 0)
@@ -319,7 +319,7 @@ else
 lean_object* v___x_77_; lean_object* v___x_79_; 
 lean_dec_ref_known(v___x_51_, 1);
 lean_dec_ref(v___x_11_);
-v___x_77_ = lp_workspace_VmVerifier_Executable_main___boxed__const__2;
+v___x_77_ = lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__2;
 if (v_isShared_16_ == 0)
 {
 lean_ctor_set(v___x_15_, 0, v___x_77_);
@@ -386,11 +386,11 @@ return v___x_87_;
 }
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_VmVerifier_Executable_main___boxed(lean_object* v_a_90_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_VmVerifier_Executable_main___boxed(lean_object* v_a_90_){
 _start:
 {
 lean_object* v_res_91_; 
-v_res_91_ = lp_workspace_VmVerifier_Executable_main();
+v_res_91_ = lp_openvm_x2dfv_VmVerifier_Executable_main();
 return v_res_91_;
 }
 }
@@ -398,11 +398,11 @@ LEAN_EXPORT lean_object* _lean_main(){
 _start:
 {
 lean_object* v___x_93_; 
-v___x_93_ = lp_workspace_VmVerifier_Executable_main();
+v___x_93_ = lp_openvm_x2dfv_VmVerifier_Executable_main();
 return v___x_93_;
 }
 }
-LEAN_EXPORT lean_object* lp_workspace_main___boxed(lean_object* v_a_94_){
+LEAN_EXPORT lean_object* lp_openvm_x2dfv_main___boxed(lean_object* v_a_94_){
 _start:
 {
 lean_object* v_res_95_; 
@@ -412,10 +412,10 @@ return v_res_95_;
 }
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_workspace_VmVerifier_Spec_Runtime(uint8_t builtin);
+lean_object* initialize_openvm_x2dfv_VmVerifier_Spec_Runtime(uint8_t builtin);
 void lean_initialize_runtime_module();
 static bool _G_initialized = false;
-LEAN_EXPORT lean_object* initialize_workspace_VmVerifier_Main(uint8_t builtin) {
+LEAN_EXPORT lean_object* initialize_openvm_x2dfv_VmVerifier_Main(uint8_t builtin) {
 lean_object * res;
 if (_G_initialized) return lean_io_result_mk_ok(lean_box(0));
 _G_initialized = true;
@@ -426,13 +426,13 @@ lean_dec_ref(res);
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_workspace_VmVerifier_Spec_Runtime(builtin);
+res = initialize_openvm_x2dfv_VmVerifier_Spec_Runtime(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-lp_workspace_VmVerifier_Executable_main___boxed__const__1 = _init_lp_workspace_VmVerifier_Executable_main___boxed__const__1();
-lean_mark_persistent(lp_workspace_VmVerifier_Executable_main___boxed__const__1);
-lp_workspace_VmVerifier_Executable_main___boxed__const__2 = _init_lp_workspace_VmVerifier_Executable_main___boxed__const__2();
-lean_mark_persistent(lp_workspace_VmVerifier_Executable_main___boxed__const__2);
+lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__1 = _init_lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__1();
+lean_mark_persistent(lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__1);
+lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__2 = _init_lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__2();
+lean_mark_persistent(lp_openvm_x2dfv_VmVerifier_Executable_main___boxed__const__2);
 return lean_io_result_mk_ok(lean_box(0));
 }
 char ** lean_setup_args(int argc, char ** argv);
@@ -449,7 +449,7 @@ int main(int argc, char ** argv) {
 #endif
   lean_object* res;
   argv = lean_setup_args(argc, argv);
-  res = initialize_workspace_VmVerifier_Main(1 /* builtin */);
+  res = initialize_openvm_x2dfv_VmVerifier_Main(1 /* builtin */);
   lean_io_mark_end_initialization();
   if (lean_io_result_is_ok(res)) {
     lean_dec_ref(res);
