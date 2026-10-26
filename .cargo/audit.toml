@@ -7,4 +7,8 @@
   # TODO: remove these ignores once inferno is updated to a fixed quick-xml range.
   "RUSTSEC-2026-0194",
   "RUSTSEC-2026-0195",
+  # crypto-bigint 0.5.5 is pulled in by elliptic-curve 0.13 (k256/p256 0.13) and aws-sigv4; the fix is only in crypto-bigint >=0.7.6,
+  # which requires an invasive update to the openvm k256/p256 patches. The patches do not support secret key signing in openvm guest programs and are not affected by the CVE.
+  # TODO: remove this ignore once the elliptic-curve dependencies are upgraded.
+  "RUSTSEC-2026-0387",
   ]
