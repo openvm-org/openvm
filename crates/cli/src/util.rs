@@ -200,16 +200,40 @@ pub fn resolve_proof_path(proof: &Option<PathBuf>, extension: &str) -> Result<Pa
 
 pub fn get_files_with_ext(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
     let dir = dir.canonicalize()?;
+    let suffix = format!(".{extension}");
     let mut files = Vec::new();
     for entry in read_dir(dir)? {
         let path = entry?.path();
         if path.is_file()
             && path
-                .to_str()
-                .is_some_and(|path_str| path_str.ends_with(extension))
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(&suffix))
         {
             files.push(path);
         }
     }
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::write;
+
+    use tempfile::tempdir;
+
+    use super::get_files_with_ext;
+    use crate::default::APP_PROOF_EXT;
+
+    #[test]
+    fn get_files_with_ext_requires_extension_separator() {
+        let dir = tempdir().unwrap();
+        let proof = dir.path().join("guest").with_extension(APP_PROOF_EXT);
+        write(&proof, []).unwrap();
+        write(dir.path().join("zapp.proof"), []).unwrap();
+
+        let files = get_files_with_ext(dir.path(), APP_PROOF_EXT).unwrap();
+
+        assert_eq!(files, vec![proof.canonicalize().unwrap()]);
+    }
 }
