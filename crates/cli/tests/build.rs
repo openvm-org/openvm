@@ -198,3 +198,29 @@ fn test_output_dir_copy() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_root_package_transpile_default() -> Result<()> {
+    // Use a nested target dir so the sibling openvm/ output dir is also inside the temp dir.
+    let temp_dir = tempfile::tempdir()?;
+    let target_dir = temp_dir.path().join("target");
+
+    let mut build_args = default_build_test_args("root-package");
+    let mut cargo_args = default_cargo_test_args("root-package");
+    build_args.no_transpile = false;
+    cargo_args.manifest.target_dir = Some(target_dir);
+
+    // Cargo only builds the root package of a non-virtual workspace by default.
+    build(&build_args, &cargo_args)?;
+
+    let release_dir = temp_dir.path().join("openvm").join("release");
+    assert!(release_dir.join("openvm-cli-example-root.vmexe").exists());
+    assert!(!release_dir.join("openvm-cli-example-member.vmexe").exists());
+
+    // Selecting the member with --package transpiles it.
+    cargo_args.package = vec!["openvm-cli-example-member".to_string()];
+    build(&build_args, &cargo_args)?;
+    assert!(release_dir.join("openvm-cli-example-member.vmexe").exists());
+
+    Ok(())
+}

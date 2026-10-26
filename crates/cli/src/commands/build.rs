@@ -7,9 +7,7 @@ use std::{
 use clap::Parser;
 use eyre::{Context, Result};
 use itertools::izip;
-use openvm_build::{
-    build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
-};
+use openvm_build::{build_generic, get_in_scope_packages, get_workspace_packages, GuestOptions};
 use openvm_circuit::arch::{instructions::exe::VmExe, InitFileGenerator};
 use openvm_sdk::fs::write_object_to_file;
 use openvm_sdk_config::TranspilerConfig;
@@ -341,9 +339,9 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         return Ok(elf_target_dir);
     }
 
-    // Get all built packages
-    let workspace_root = get_workspace_root(&manifest_path);
-    let packages = if cargo_args.workspace || manifest_dir == workspace_root {
+    // Get all built packages. Without --workspace or --package, cargo builds only the
+    // package at the manifest, or every member if the manifest is a virtual workspace.
+    let packages = if cargo_args.workspace || !cargo_args.package.is_empty() {
         get_workspace_packages(manifest_dir)
             .into_iter()
             .filter(|pkg| {
@@ -352,7 +350,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
             })
             .collect()
     } else {
-        vec![get_package(manifest_dir)]
+        get_in_scope_packages(manifest_dir)
     };
 
     // Find elf paths of all targets for all built packages
