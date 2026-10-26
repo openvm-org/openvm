@@ -340,4 +340,24 @@ mod host_tests {
             panic!();
         }
     }
+
+    #[test]
+    fn test_host_scalar_invert_zero() {
+        use elliptic_curve::{ff::Field, ops::Invert};
+
+        let zero = <Secp256k1Scalar as Field>::ZERO;
+        let one = <Secp256k1Scalar as Field>::ONE;
+        assert!(bool::from(
+            <Secp256k1Scalar as Field>::invert(&zero).is_none()
+        ));
+        assert!(bool::from(
+            <Secp256k1Scalar as Invert>::invert(&zero).is_none()
+        ));
+        let (is_square, _) = <Secp256k1Scalar as Field>::sqrt_ratio(&one, &zero);
+        assert!(!bool::from(is_square));
+
+        let two = <Secp256k1Scalar as Field>::double(&one);
+        let two_inv = <Secp256k1Scalar as Field>::invert(&two).unwrap();
+        assert_eq!(two * two_inv, one);
+    }
 }
