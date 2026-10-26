@@ -1,6 +1,6 @@
 // Lean compiler output
 // Module: Recursion.Spec.Common.VerifierPublicValues
-// Imports: public import Init public meta import Init public import Recursion.Spec.Common.RawCarrier public import Recursion.Spec.Common.VmSegmentPublicValues public import Recursion.Spec.VerifierAirId
+// Imports: public import Init public meta import Init public import Fundamentals.Spec.BabyBear.Raw public import Recursion.Spec.Common.VmSegmentPublicValues public import Recursion.Spec.VerifierAirId
 #include <lean/lean.h>
 #if defined(__clang__)
 #pragma clang diagnostic ignored "-Wunused-parameter"
@@ -18,7 +18,6 @@ lean_object* l_List_drop___redArg(lean_object*, lean_object*);
 lean_object* l_Array_ofFn___redArg(lean_object*, lean_object*);
 lean_object* lean_nat_add(lean_object*, lean_object*);
 uint8_t l_Array_instDecidableEqImpl___redArg(lean_object*, lean_object*, lean_object*);
-lean_object* lean_array_to_list(lean_object*);
 lean_object* l_List_lengthTR___redArg(lean_object*);
 uint8_t lean_nat_dec_eq(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_maxRecursionDepth;
@@ -46,9 +45,6 @@ LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_from
 LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg___boxed(lean_object*, lean_object*);
 LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromList_x3f(lean_object*, lean_object*, lean_object*);
 LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromList_x3f___boxed(lean_object*, lean_object*, lean_object*);
-LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f___redArg(lean_object*, lean_object*);
-LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f(lean_object*, lean_object*, lean_object*, lean_object*);
-LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f___boxed(lean_object*, lean_object*, lean_object*, lean_object*);
 static lean_object* _init_lp_openvm_x2dfv_Recursion_Spec_maxRecursionDepth(void){
 _start:
 {
@@ -358,36 +354,9 @@ lean_dec(v_values_123_);
 return v_res_124_;
 }
 }
-LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f___redArg(lean_object* v_zero_125_, lean_object* v_values_126_){
-_start:
-{
-lean_object* v___x_127_; lean_object* v___x_128_; 
-v___x_127_ = lean_array_to_list(v_values_126_);
-v___x_128_ = lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromList_x3f___redArg(v_zero_125_, v___x_127_);
-lean_dec(v___x_127_);
-return v___x_128_;
-}
-}
-LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f(lean_object* v_F_129_, lean_object* v_n_130_, lean_object* v_zero_131_, lean_object* v_values_132_){
-_start:
-{
-lean_object* v___x_133_; 
-v___x_133_ = lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f___redArg(v_zero_131_, v_values_132_);
-return v___x_133_;
-}
-}
-LEAN_EXPORT lean_object* lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f___boxed(lean_object* v_F_134_, lean_object* v_n_135_, lean_object* v_zero_136_, lean_object* v_values_137_){
-_start:
-{
-lean_object* v_res_138_; 
-v_res_138_ = lp_openvm_x2dfv_Recursion_Spec_VerifierBasePvsData_fromVector_x3f(v_F_134_, v_n_135_, v_zero_136_, v_values_137_);
-lean_dec(v_n_135_);
-return v_res_138_;
-}
-}
 lean_object* initialize_Init(uint8_t builtin);
 lean_object* initialize_Init(uint8_t builtin);
-lean_object* initialize_openvm_x2dfv_Recursion_Spec_Common_RawCarrier(uint8_t builtin);
+lean_object* initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear_Raw(uint8_t builtin);
 lean_object* initialize_openvm_x2dfv_Recursion_Spec_Common_VmSegmentPublicValues(uint8_t builtin);
 lean_object* initialize_openvm_x2dfv_Recursion_Spec_VerifierAirId(uint8_t builtin);
 void lean_initialize_runtime_module();
@@ -403,7 +372,7 @@ lean_dec_ref(res);
 res = initialize_Init(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
-res = initialize_openvm_x2dfv_Recursion_Spec_Common_RawCarrier(builtin);
+res = initialize_swirl_x2dfv_Fundamentals_Spec_BabyBear_Raw(builtin);
 if (lean_io_result_is_error(res)) return res;
 lean_dec_ref(res);
 res = initialize_openvm_x2dfv_Recursion_Spec_Common_VmSegmentPublicValues(builtin);
