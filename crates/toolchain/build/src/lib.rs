@@ -72,8 +72,8 @@ pub fn get_workspace_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
     get_workspace_member_packages(manifest_meta)
 }
 
-/// Returns a single package if the manifest path matches exactly, otherwise returns all
-/// workspace packages.
+/// Returns the packages cargo builds by default (without `--package` or `--workspace`): the
+/// package at the manifest if there is one, otherwise the workspace's default members.
 pub fn get_in_scope_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
     let manifest_path = manifest_dir
         .as_ref()
@@ -81,17 +81,11 @@ pub fn get_in_scope_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
         .canonicalize()
         .unwrap();
     let manifest_meta = get_metadata(&manifest_path);
-
-    // Check if any package has this exact manifest path
-    let matching = find_matching_packages(&manifest_meta, &manifest_path);
-
-    // If we found a package with this exact manifest path, return it
-    if !matching.is_empty() {
-        return matching;
-    }
-
-    // Otherwise return all workspace members
-    get_workspace_member_packages(manifest_meta)
+    manifest_meta
+        .workspace_default_packages()
+        .into_iter()
+        .cloned()
+        .collect()
 }
 
 /// Helper function to get cargo metadata for a manifest path
