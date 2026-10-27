@@ -13,6 +13,7 @@ use tracing::instrument;
 use crate::{
     arch::{hasher::Hasher, MemoryCellType, ADDR_SPACE_OFFSET},
     system::memory::{dimensions::MemoryDimensions, online::LinearMemory, MemoryImage},
+    utils::decode_len,
 };
 
 pub const PUBLIC_VALUES_AS: u32 = 3;
@@ -142,8 +143,19 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
     pub fn decode<SC: DecodableConfig<F = F, Digest = [F; CHUNK]>, R: io::Read>(
         reader: &mut R,
     ) -> io::Result<Self> {
-        let proof = SC::decode_digest_vec(reader)?;
-        let public_values = SC::decode_base_field_vec(reader)?;
+        Self::decode_with_limits::<SC, _>(reader, usize::MAX, usize::MAX)
+    }
+
+    /// Decode with upper bounds on the lengths of `proof` and `public_values`.
+    pub fn decode_with_limits<SC: DecodableConfig<F = F, Digest = [F; CHUNK]>, R: io::Read>(
+        reader: &mut R,
+        max_proof_len: usize,
+        max_public_values_len: usize,
+    ) -> io::Result<Self> {
+        let proof_len = decode_len(reader, max_proof_len)?;
+        let proof = SC::decode_digest_n(reader, proof_len)?;
+        let public_values_len = decode_len(reader, max_public_values_len)?;
+        let public_values = SC::decode_base_field_n(reader, public_values_len)?;
         let public_values_commit = SC::decode_digest(reader)?;
         Ok(Self {
             proof,

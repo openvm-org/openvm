@@ -5,11 +5,7 @@ use openvm_circuit::{
     arch::{hasher::poseidon2::vm_poseidon2_hasher, ExitCode},
     system::memory::merkle::public_values::UserPublicValuesProof,
 };
-use openvm_stark_backend::{
-    codec::{Decode, Encode},
-    proof::Proof,
-    StarkEngine,
-};
+use openvm_stark_backend::{proof::Proof, StarkEngine};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2Config as SC, BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
 };
@@ -26,6 +22,7 @@ use crate::{
     vk::VmStarkVerifyingKey,
 };
 
+pub mod codec;
 pub mod deferral;
 pub mod error;
 pub mod pvs;
@@ -41,43 +38,14 @@ pub struct VmStarkProof {
     pub deferral_merkle_proofs: Option<DeferralMerkleProofs<F>>,
 }
 
-impl Encode for VmStarkProof {
-    fn encode<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        self.inner.encode(writer)?;
-        self.user_pvs_proof.encode::<SC, _>(writer)?;
-        (self.deferral_merkle_proofs.is_some() as u8).encode(writer)?;
-        if let Some(ref proofs) = self.deferral_merkle_proofs {
-            proofs.encode(writer)?;
-        }
-        Ok(())
-    }
-}
-
-impl Decode for VmStarkProof {
-    fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let inner = Proof::<SC>::decode(reader)?;
-        let user_pvs_proof = UserPublicValuesProof::decode::<SC, _>(reader)?;
-        let deferral_merkle_proofs = if u8::decode(reader)? != 0 {
-            Some(DeferralMerkleProofs::decode(reader)?)
-        } else {
-            None
-        };
-        Ok(Self {
-            inner,
-            user_pvs_proof,
-            deferral_merkle_proofs,
-        })
-    }
-}
-
 /// Verifies a non-root VM STARK proof (as a byte stream) given the internal-recursive
 /// layer verifying key and VM- and exe-specific baseline artifacts.
 pub fn verify_vm_stark_proof(
     vk: &VmStarkVerifyingKey,
     encoded_proof: &[u8],
 ) -> Result<(), VerifyStarkError> {
-    let decompressed = zstd::decode_all(encoded_proof)?;
-    verify_vm_stark_proof_decoded(vk, &VmStarkProof::decode_from_bytes(&decompressed)?)
+    let proof = VmStarkProof::decode_compressed_using_vk(vk, encoded_proof)?;
+    verify_vm_stark_proof_decoded(vk, &proof)
 }
 
 /// Verifies a non-root VM STARK proof given the internal-recursive layer verifying

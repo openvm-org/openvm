@@ -10,6 +10,7 @@ use openvm_circuit::{
 use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
     codec::{Decode, Encode},
+    keygen::types::MultiStarkVerifyingKey,
     proof::Proof,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
@@ -352,19 +353,20 @@ impl VersionedVmStarkProof {
                 .transpose()?,
         })
     }
-}
 
-impl TryFrom<VersionedVmStarkProof> for VmStarkProof {
-    type Error = std::io::Error;
-    fn try_from(proof: VersionedVmStarkProof) -> Result<Self, std::io::Error> {
+    /// Decodes into a [VmStarkProof], bounding the proof shape by the verifying key.
+    pub fn decode_using_vk(
+        self,
+        mvk: &MultiStarkVerifyingKey<crate::SC>,
+    ) -> Result<VmStarkProof, std::io::Error> {
         let VersionedVmStarkProof {
             proof,
             user_pvs_proof,
             deferral_merkle_proofs,
             ..
-        } = proof;
-        Ok(Self {
-            inner: Proof::<crate::SC>::decode_from_bytes(&proof)?,
+        } = self;
+        Ok(VmStarkProof {
+            inner: Proof::<crate::SC>::decode_from_bytes_using_vk(&mvk.inner, &proof)?,
             user_pvs_proof: UserPublicValuesProof::decode::<crate::SC, _>(
                 &mut std::io::Cursor::new(&user_pvs_proof),
             )?,
