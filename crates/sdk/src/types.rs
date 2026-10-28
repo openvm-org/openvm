@@ -4,18 +4,21 @@ use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_circuit::{
-    arch::instructions::exe::VmExe,
-    system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
+    arch::instructions::exe::VmExe, system::memory::dimensions::MemoryDimensions,
 };
 use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
     codec::{Decode, Encode},
+    keygen::types::MultiStarkVerifyingKey,
     proof::Proof,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use openvm_transpiler::elf::Elf;
 use openvm_verify_stark_host::{
-    deferral::DeferralMerkleProofs, pvs::VkCommit, vk::VerificationBaseline, VmStarkProof,
+    codec::{decode_deferral_merkle_proofs, decode_user_pvs_proof},
+    pvs::VkCommit,
+    vk::VerificationBaseline,
+    VmStarkProof,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -352,24 +355,24 @@ impl VersionedVmStarkProof {
                 .transpose()?,
         })
     }
-}
 
-impl TryFrom<VersionedVmStarkProof> for VmStarkProof {
-    type Error = std::io::Error;
-    fn try_from(proof: VersionedVmStarkProof) -> Result<Self, std::io::Error> {
+    /// Decodes into a [VmStarkProof], bounding the proof shape by the vk and baseline.
+    pub fn decode_using_vk(
+        self,
+        mvk: &MultiStarkVerifyingKey<crate::SC>,
+        baseline: &VerificationBaseline,
+    ) -> Result<VmStarkProof, std::io::Error> {
         let VersionedVmStarkProof {
             proof,
             user_pvs_proof,
             deferral_merkle_proofs,
             ..
-        } = proof;
-        Ok(Self {
-            inner: Proof::<crate::SC>::decode_from_bytes(&proof)?,
-            user_pvs_proof: UserPublicValuesProof::decode::<crate::SC, _>(
-                &mut std::io::Cursor::new(&user_pvs_proof),
-            )?,
+        } = self;
+        Ok(VmStarkProof {
+            inner: Proof::<crate::SC>::decode_from_bytes_using_vk(&mvk.inner, &proof)?,
+            user_pvs_proof: decode_user_pvs_proof(&mut user_pvs_proof.as_slice(), baseline)?,
             deferral_merkle_proofs: deferral_merkle_proofs
-                .map(|bytes| DeferralMerkleProofs::decode(&mut std::io::Cursor::new(&bytes)))
+                .map(|bytes| decode_deferral_merkle_proofs(&mut bytes.as_slice(), baseline))
                 .transpose()?,
         })
     }

@@ -66,3 +66,15 @@ pub unsafe fn slice_as_bytes<T>(slice: &[T]) -> &[u8] {
     // SAFETY: length and alignment are correct.
     unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
 }
+
+/// Decodes a length prefix, rejecting values greater than `max`.
+pub fn decode_len<R: std::io::Read>(reader: &mut R, max: usize) -> std::io::Result<usize> {
+    let len = <usize as openvm_stark_backend::codec::Decode>::decode(reader)?;
+    if len > max {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("length {len} exceeds maximum {max}"),
+        ));
+    }
+    Ok(len)
+}

@@ -1,5 +1,6 @@
 use openvm_circuit::{
     arch::instructions::DEFERRAL_AS, system::memory::dimensions::MemoryDimensions,
+    utils::decode_len,
 };
 use openvm_stark_backend::codec::{DecodableConfig, EncodableConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
@@ -28,8 +29,18 @@ impl DeferralMerkleProofs<F> {
     }
 
     pub fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let initial_merkle_proof = SC::decode_digest_vec(reader)?;
-        let final_merkle_proof = SC::decode_digest_vec(reader)?;
+        Self::decode_with_limit(reader, usize::MAX)
+    }
+
+    /// Decode with an upper bound on the length of each Merkle proof.
+    pub fn decode_with_limit<R: std::io::Read>(
+        reader: &mut R,
+        max_len: usize,
+    ) -> std::io::Result<Self> {
+        let initial_len = decode_len(reader, max_len)?;
+        let initial_merkle_proof = SC::decode_digest_n(reader, initial_len)?;
+        let final_len = decode_len(reader, max_len)?;
+        let final_merkle_proof = SC::decode_digest_n(reader, final_len)?;
         Ok(Self {
             initial_merkle_proof,
             final_merkle_proof,
