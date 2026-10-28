@@ -44,7 +44,7 @@ pub fn verify_vm_stark_proof(
     vk: &VmStarkVerifyingKey,
     encoded_proof: &[u8],
 ) -> Result<(), VerifyStarkError> {
-    let proof = VmStarkProof::decode_compressed_using_vk(vk, encoded_proof)?;
+    let proof = VmStarkProof::decode_compressed_using_vk(&vk.mvk, &vk.baseline, encoded_proof)?;
     verify_vm_stark_proof_decoded(vk, &proof)
 }
 

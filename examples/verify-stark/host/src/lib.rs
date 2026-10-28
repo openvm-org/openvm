@@ -190,7 +190,7 @@ pub fn prove(
     let verify_stark_cached_commit = verify_stark_cached_commits.pop().unwrap();
 
     let (stdin, def_inputs) = verify_stark_guest_inputs(
-        &input_proof.decode_using_vk(&child_agg_vk)?,
+        &input_proof.decode_using_vk(&child_agg_vk, &child_baseline)?,
         child_agg_vk.as_ref().clone(),
         child_baseline,
         verify_stark_cached_commit.into(),

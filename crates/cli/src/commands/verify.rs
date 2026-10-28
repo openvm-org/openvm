@@ -237,7 +237,7 @@ impl VerifyCmd {
                 if stark_proof.version != format!("v{OPENVM_VERSION}") {
                     eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", stark_proof.version);
                 }
-                let vm_stark_proof = stark_proof.decode_using_vk(&agg_vk)?;
+                let vm_stark_proof = stark_proof.decode_using_vk(&agg_vk, &expected_baseline)?;
                 Sdk::verify_proof(agg_vk, expected_baseline.clone(), &vm_stark_proof)?;
                 if *certified {
                     #[cfg(feature = "certified-verifier")]
