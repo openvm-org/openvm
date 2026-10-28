@@ -340,7 +340,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     }
 
     // Get all built packages. Without --workspace or --package, cargo builds only the
-    // package at the manifest, or every member if the manifest is a virtual workspace.
+    // package at the manifest, or the default members if the manifest is a virtual workspace.
     let packages = if cargo_args.workspace || !cargo_args.package.is_empty() {
         get_workspace_packages(manifest_dir)
             .into_iter()
