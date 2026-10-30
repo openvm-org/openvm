@@ -72,6 +72,7 @@ impl ProgramChipGPU {
                 &records,
                 program.pc_base,
                 DEFAULT_PC_STEP,
+                program.len() as u32,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
                 device_ctx.stream.as_raw(),
             )
