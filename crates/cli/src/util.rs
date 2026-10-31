@@ -68,7 +68,12 @@ pub fn get_manifest_path_and_dir(manifest_path: &Option<PathBuf>) -> Result<(Pat
                 "manifest_path must be a path to a Cargo.toml file"
             ));
         }
-        manifest_path.parent().unwrap().canonicalize()?
+        // A bare `Cargo.toml` has an empty parent, which cannot be canonicalized.
+        manifest_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or(Path::new("."))
+            .canonicalize()?
     } else {
         find_manifest_dir(PathBuf::from("."))?
     };
@@ -218,11 +223,11 @@ pub fn get_files_with_ext(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::write;
+    use std::{fs::write, path::PathBuf};
 
     use tempfile::tempdir;
 
-    use super::get_files_with_ext;
+    use super::{get_files_with_ext, get_manifest_path_and_dir};
     use crate::default::APP_PROOF_EXT;
 
     #[test]
@@ -235,5 +240,14 @@ mod tests {
         let files = get_files_with_ext(dir.path(), APP_PROOF_EXT).unwrap();
 
         assert_eq!(files, vec![proof.canonicalize().unwrap()]);
+    }
+
+    #[test]
+    fn manifest_path_without_parent_dir() {
+        // Unit tests run with the crate root as the working directory.
+        let (manifest_path, manifest_dir) =
+            get_manifest_path_and_dir(&Some(PathBuf::from("Cargo.toml"))).unwrap();
+        assert_eq!(manifest_dir, PathBuf::from(".").canonicalize().unwrap());
+        assert_eq!(manifest_path, manifest_dir.join("Cargo.toml"));
     }
 }
