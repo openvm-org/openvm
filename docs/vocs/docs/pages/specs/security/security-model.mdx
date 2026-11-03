@@ -66,18 +66,18 @@ most `2^{l_skip + n_stack} * w_stack` cells.
 
 | Proof | `log_blowup` | `l_skip` | `n_stack` | `w_stack` | `k_whir` | `num_rounds` | `num_queries` by round | `mu_pow_bits` | `folding_pow_bits` | `query_phase_pow_bits` | `log_final_poly_len` | Proximity regime |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `app` | 1 | 4 | 20 | 2048 | 3 | 5 | `[193, 97, 84, 81, 81]` | 15 | 5 | 20 | 9 | unique decoding |
-| `leaf` | 2 | 4 | 17 | 2048 | 3 | 4 | `[118, 88, 82, 81]` | 13 | 4 | 20 | 9 | unique decoding |
-| `internal-for-leaf` | 3 | 2 | 17 | 512 | 3 | 3 | `[67, 37, 25]` | 20 | 18 | 20 | 10 | list decoding, `m = 2` |
-| `internal-recursive` | 3 | 2 | 17 | 512 | 3 | 3 | `[67, 37, 25]` | 20 | 18 | 20 | 10 | list decoding, `m = 2` |
-| `root` | 4 | 2 | 19 | 9 | 3 | 4 | `[47, 30, 22, 17]` | 20 | 20 | 20 | 9 | list decoding, `m = 2` |
+| `app` | 1 | 4 | 20 | 2048 | 4 | 4 | `[193, 88, 81, 81]` | 15 | 5 | 20 | 8 | unique decoding |
+| `leaf` | 2 | 4 | 17 | 2048 | 4 | 3 | `[118, 84, 81]` | 13 | 4 | 20 | 9 | unique decoding |
+| `internal-for-leaf` | 3 | 2 | 17 | 512 | 4 | 3 | `[68, 30, 20]` | 20 | 18 | 20 | 7 | list decoding, `m = 2` |
+| `internal-recursive` | 3 | 2 | 17 | 512 | 4 | 3 | `[68, 30, 20]` | 20 | 18 | 20 | 7 | list decoding, `m = 2` |
+| `root` | 4 | 2 | 18 | 18 | 4 | 3 | `[61, 30, 20]` | 15 | 15 | 15 | 8 | list decoding, `m = 1` |
 
-Additional shared defaults:
+Additional defaults:
 
-- `log_up_pow_bits = 18` (number of proof-of-work grinding bits in LogUp)
+- `log_up_pow_bits`: 19 for internal layers, 18 otherwise (number of proof-of-work grinding bits in LogUp)
 - `log_max_message_length = 7` (base-2 log)
 - `max_interaction_count = 2^31 - 2^27 + 1` (the BabyBear field modulus)
-- `max_constraint_degree = 4`
+- `max_constraint_degree`: 3 for `app`, 4 for aggregation circuits
 
 The `app` row above is the default SDK configuration, which uses
 `MAX_APP_LOG_STACKED_HEIGHT = 24`, so `n_stack = 24 - l_skip = 20`. The
@@ -85,9 +85,9 @@ The `app` row above is the default SDK configuration, which uses
 default production parameter set.
 
 These values are the default production settings configured in
-[stark-backend](https://github.com/openvm-org/stark-backend/blob/v2.0.0/crates/stark-sdk/src/config/mod.rs#L121),
+[stark-backend](https://github.com/openvm-org/stark-backend/blob/v2.1.0/crates/stark-sdk/src/config/mod.rs#L121),
 which also includes a
-[soundness calculator](https://github.com/openvm-org/stark-backend/blob/v2.0.0/crates/stark-backend/src/soundness/calculator.rs#L25)
+[soundness calculator](https://github.com/openvm-org/stark-backend/blob/v2.1.0/crates/stark-backend/src/soundness/calculator.rs#L25)
 that computes the provable security level from a given set of parameters.
 
 ## EVM Proofs

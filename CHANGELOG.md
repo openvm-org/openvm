@@ -7,7 +7,14 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v2.1.0 (2026-11-04)
+
+### Added
+- (Verifier/SDK/CLI) Added optional STARK proof verification with the certified Swirl verifier extracted from its Lean formalization to the SDK and CLI.
+
 ### Changed
+- (Recursion/Continuations) Updated recursion and continuation circuit interactions and constraints for formal verification.
+- (Verifier) Marked all verifier circuit AIRs as required during key generation.
 - (Guest Library/Algebra) Assert reduction before modular and point byte access and Serde serialization. Native checks panic on noncanonical values.
 - (Guest Library/Algebra) Require `IntMod` and `WeierstrassPoint` implementers to provide `*_unchecked` byte accessors, and point coordinates to implement `CanonicalRepr`.
 - (Guest Library/ECC) Assert reduction of the selected root before testing parity during point decompression.
@@ -17,15 +24,6 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 - (Transpiler) Reject unsupported SYSTEM/CSR instructions, including LLVM's `UNIMP` trap.
 - (Toolchain) Treat nonzero return statuses from Rust's `std` main wrapper as failures, including `Err` and nonzero `ExitCode` returns.
 - (Prover) Fix program-trace padding PC collisions in sparse programs on CPU and CUDA by placing padding after the original program slots.
-
-## v2.1.0 (2026-08-25)
-
-### Added
-- Added optional STARK proof verification with the certified Swirl verifier extracted from its Lean formalization to the SDK and CLI.
-
-### Changed
-- Updated recursion and continuation circuit interactions and constraints for formal verification.
-- Marked all verifier circuit AIRs as required during key generation.
 
 ## v2.0.2 (2026-08-07)
 
