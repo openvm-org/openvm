@@ -11,7 +11,11 @@ pub mod tests;
 #[derive(Copy, Clone, Debug, new)]
 pub struct IsZeroIo<T> {
     pub x: T,
-    /// The boolean output, constrained to equal (x == 0) when `condition != 0`..
+    /// The boolean output, constrained to equal (x == 0) when `condition != 0`.
+    ///
+    /// When `condition == 0` and `x == 0`, `out` is unconstrained (it need not even be boolean).
+    /// Do not use `out` on such rows, for example in an interaction count, without gating it by
+    /// `condition` or constraining it separately.
     pub out: T,
     /// Constraints only hold when `condition != 0`. When `condition == 0`, setting all trace
     /// values to zero still passes the constraints.
