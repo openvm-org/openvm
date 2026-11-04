@@ -224,3 +224,26 @@ fn test_root_package_transpile_default() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_output_dir_copy_example() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let target_dir = temp_dir.path();
+
+    let temp_dir_2 = tempfile::tempdir()?;
+    let output_dir = temp_dir_2.path();
+
+    let mut build_args = default_build_test_args("multi");
+    let mut cargo_args = default_cargo_test_args("multi");
+    build_args.openvm_config.output_dir = Some(output_dir.to_path_buf());
+    build_args.no_transpile = false;
+    cargo_args.manifest.target_dir = Some(target_dir.to_path_buf());
+    cargo_args.example = vec!["fibonacci".to_string()];
+
+    build(&build_args, &cargo_args)?;
+
+    let copied_target = output_dir.join("examples").join("fibonacci.vmexe");
+    assert!(copied_target.exists());
+
+    Ok(())
+}
