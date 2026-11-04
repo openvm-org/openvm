@@ -1,3 +1,4 @@
+#[cfg(any(unix, windows))]
 use abi_stable::std_types::RVec;
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
@@ -5,6 +6,15 @@ use crate::{
     arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
     system::memory::{dimensions::MemoryDimensions, CHUNK},
 };
+
+// The AOT assembly reads the first word of `addr_space_access_count` as its buffer pointer, which
+// `RVec`'s `repr(C)` layout guarantees. `abi_stable` needs `libloading::Library`, which libloading
+// only defines on unix and windows, so other targets (wasm32-unknown-unknown, WASI) use a plain
+// `Vec`. AOT needs `libloading::Library` as well, so it never runs on those targets.
+#[cfg(any(unix, windows))]
+type AddrSpaceAccessCounts = RVec<u32>;
+#[cfg(not(any(unix, windows)))]
+type AddrSpaceAccessCounts = Vec<u32>;
 
 /// CHUNK granularity (merkle leaf size) for page fault tracking.
 /// Must match the CHUNK used to compute `MemoryDimensions::address_height`.
@@ -112,7 +122,7 @@ impl BitSet {
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     memory_dimensions: MemoryDimensions,
     pub page_indices: BitSet,
-    pub addr_space_access_count: RVec<u32>,
+    pub addr_space_access_count: AddrSpaceAccessCounts,
     pub page_indices_since_checkpoint: Box<[u32]>,
     pub page_indices_since_checkpoint_len: usize,
 }
@@ -129,7 +139,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         Self {
             memory_dimensions,
             page_indices: BitSet::new(bitset_size),
-            addr_space_access_count: vec![0; addr_space_size].into(),
+            addr_space_access_count: std::iter::repeat_n(0, addr_space_size).collect(),
             page_indices_since_checkpoint: vec![0; checkpoint_capacity].into_boxed_slice(),
             page_indices_since_checkpoint_len: 0,
         }
