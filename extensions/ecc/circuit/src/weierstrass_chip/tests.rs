@@ -545,6 +545,53 @@ mod ec_addne_tests {
         assert_eq!(r[1], SampleEcPoints[4].0);
         assert_eq!(r[2], SampleEcPoints[4].1);
     }
+
+    // Curves over a built-in scalar field, such as Grumpkin over the BN254 scalar field, have no
+    // native implementation and must use the generic executor.
+    #[test]
+    fn ec_addne_pre_compute_scalar_field_modulus() {
+        use halo2curves_axiom::{bn256, ff::PrimeField};
+        use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpreterExecutor};
+
+        let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let config = ExprBuilderConfig {
+            modulus: BigUint::from_str_radix(&bn256::Fr::MODULUS[2..], 16).unwrap(),
+            num_limbs: NUM_LIMBS_32,
+            limb_bits: LIMB_BITS,
+        };
+        let executor = get_ec_addne_executor::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+            config,
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            Rv32WeierstrassOpcode::CLASS_OFFSET,
+        );
+
+        for opcode in [
+            Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
+            Rv32WeierstrassOpcode::EC_ADD_NE,
+        ] {
+            let instruction = Instruction::<F>::from_usize(
+                opcode.global_opcode(),
+                [0, 4, 8, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
+            );
+            let mut data = vec![0u8; InterpreterExecutor::<F>::pre_compute_size(&executor)];
+            #[cfg(not(feature = "tco"))]
+            let result = InterpreterExecutor::<F>::pre_compute::<ExecutionCtx>(
+                &executor,
+                0,
+                &instruction,
+                &mut data,
+            );
+            #[cfg(feature = "tco")]
+            let result = InterpreterExecutor::<F>::handler::<ExecutionCtx>(
+                &executor,
+                0,
+                &instruction,
+                &mut data,
+            );
+            assert!(result.is_ok());
+        }
+    }
 }
 
 mod ec_double_tests {
