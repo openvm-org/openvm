@@ -224,3 +224,40 @@ fn test_root_package_transpile_default() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_required_features_transpile_default() -> Result<()> {
+    // Use a nested target dir so the sibling openvm/ output dir is also inside the temp dir.
+    let temp_dir = tempfile::tempdir()?;
+    let target_dir = temp_dir.path().join("target");
+
+    let mut build_args = default_build_test_args("required-features");
+    let mut cargo_args = default_cargo_test_args("required-features");
+    build_args.no_transpile = false;
+    cargo_args.manifest.target_dir = Some(target_dir);
+
+    let release_dir = temp_dir.path().join("openvm").join("release");
+    let main_exe = release_dir.join("openvm-cli-example-required-features.vmexe");
+    let extra_exe = release_dir.join("openvm-cli-example-extra.vmexe");
+
+    // Cargo skips a bin whose required features are not enabled, so only the other bin is
+    // transpiled.
+    build(&build_args, &cargo_args)?;
+    assert!(main_exe.exists());
+    assert!(!extra_exe.exists());
+
+    // Enabling the feature builds and transpiles both bins.
+    cargo_args.features = vec!["extra".to_string()];
+    build(&build_args, &cargo_args)?;
+    assert!(main_exe.exists());
+    assert!(extra_exe.exists());
+    std::fs::remove_dir_all(&release_dir)?;
+
+    // Without the feature, the ELF left by the previous build is not transpiled again.
+    cargo_args.features = vec![];
+    build(&build_args, &cargo_args)?;
+    assert!(main_exe.exists());
+    assert!(!extra_exe.exists());
+
+    Ok(())
+}

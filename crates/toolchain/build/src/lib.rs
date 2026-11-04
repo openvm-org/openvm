@@ -375,6 +375,15 @@ pub fn build_guest_package(
 
 /// Generic wrapper call to cargo build
 pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> {
+    build_generic_with_executables(guest_opts).map(|(target_dir, _)| target_dir)
+}
+
+/// Like [build_generic], but also returns the paths of the executables (bin and example targets)
+/// that cargo reports for this build, taken from its `compiler-artifact` messages. Targets cargo
+/// skipped, e.g. because their `required-features` are not enabled, are not included.
+pub fn build_generic_with_executables(
+    guest_opts: &GuestOptions,
+) -> Result<(PathBuf, Vec<PathBuf>), Option<i32>> {
     if is_skip_build() || guest_opts.target_dir.is_none() {
         eprintln!("Skipping build");
         return Err(None);
@@ -406,6 +415,8 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
     cmd.args(["--profile", profile]);
 
     cmd.args(&guest_opts.options);
+    // Report built targets as JSON on stdout; diagnostics are still rendered on stderr.
+    cmd.arg("--message-format=json-render-diagnostics");
 
     let command_string = format!(
         "{} {}",
@@ -418,11 +429,24 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
     tty_println(&format!("cargo command: {command_string}"));
 
     let mut child = cmd
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("CARGO_TERM_COLOR", "always")
         .spawn()
         .expect("cargo build failed");
     let stderr = child.stderr.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    // Read stdout on another thread so that neither pipe can fill up and block cargo.
+    let executables = std::thread::spawn(move || {
+        cargo_metadata::Message::parse_stream(BufReader::new(stdout))
+            .filter_map(|message| match message {
+                Ok(cargo_metadata::Message::CompilerArtifact(artifact)) => {
+                    artifact.executable.map(PathBuf::from)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    });
 
     tty_println(&format!("openvm build: Starting build for {RUSTC_TARGET}"));
 
@@ -430,11 +454,17 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
         tty_println(&format!("openvm build: {}", line.unwrap()));
     }
 
+    let executables = executables
+        .join()
+        .expect("failed to read cargo build output");
     let res = child.wait().expect("Guest 'cargo build' failed");
     if !res.success() {
         Err(res.code())
     } else {
-        Ok(get_dir_with_profile(target_dir, profile, false))
+        Ok((
+            get_dir_with_profile(target_dir, profile, false),
+            executables,
+        ))
     }
 }
 
