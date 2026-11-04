@@ -200,10 +200,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             .eval(builder, is_start.clone());
 
         // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS
-        // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
+        // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [8, 16)
         debug_assert!(
             (8..16).contains(&MAX_HINT_BUFFER_WORDS_BITS),
-            "MAX_HINT_BUFFER_WORDS_BITS must be in [16, 23] for these constraints to work"
+            "MAX_HINT_BUFFER_WORDS_BITS must be in [8, 16) for these constraints to work"
         );
         // For MAX_HINT_BUFFER_WORDS_BITS = 10, this requires:
         // - limbs[3] = 0 (since 2^10 < 2^24)
