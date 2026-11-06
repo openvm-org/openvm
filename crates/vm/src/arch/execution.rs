@@ -95,6 +95,11 @@ pub enum StaticProgramError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
+    #[error("at pc {pc}, phantom sub-instruction not found for discriminant {}", .discriminant.0)]
+    PhantomNotFound {
+        pc: u32,
+        discriminant: PhantomDiscriminant,
+    },
     #[error("Failed to create temporary file: {err}")]
     FailToCreateTemporaryFile { err: String },
     #[error("Failed to write into temporary file: {err}")]
