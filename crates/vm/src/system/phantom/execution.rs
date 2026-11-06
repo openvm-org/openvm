@@ -53,7 +53,7 @@ where
     #[inline(always)]
     fn pre_compute<Ctx>(
         &self,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
@@ -61,14 +61,14 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut PhantomPreCompute<F> = data.borrow_mut();
-        self.pre_compute_impl(inst, data);
+        self.pre_compute_impl(pc, inst, data)?;
         Ok(execute_e1_handler)
     }
 
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
@@ -76,7 +76,7 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut PhantomPreCompute<F> = data.borrow_mut();
-        self.pre_compute_impl(inst, data);
+        self.pre_compute_impl(pc, inst, data)?;
         Ok(execute_e1_handler)
     }
 }
@@ -96,8 +96,14 @@ where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn pre_compute_impl(&self, inst: &Instruction<F>, data: &mut PhantomPreCompute<F>) {
+    fn pre_compute_impl(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut PhantomPreCompute<F>,
+    ) -> Result<(), StaticProgramError> {
         let c = inst.c.as_canonical_u32();
+        let discriminant = PhantomDiscriminant(c as u16);
         *data = PhantomPreCompute {
             operands: PhantomOperands {
                 a: inst.a.as_canonical_u32(),
@@ -106,10 +112,11 @@ where
             },
             sub_executor: self
                 .phantom_executors
-                .get(&PhantomDiscriminant(c as u16))
-                .unwrap_or_else(|| panic!("Phantom executor not found for insn {inst:?}"))
+                .get(&discriminant)
+                .ok_or(StaticProgramError::PhantomNotFound { pc, discriminant })?
                 .as_ref(),
         };
+        Ok(())
     }
 }
 
@@ -125,7 +132,7 @@ where
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
@@ -134,7 +141,7 @@ where
     {
         let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
         e2_data.chip_idx = chip_idx as u32;
-        self.pre_compute_impl(inst, &mut e2_data.data);
+        self.pre_compute_impl(pc, inst, &mut e2_data.data)?;
         Ok(execute_e2_handler)
     }
 
@@ -142,7 +149,7 @@ where
     fn metered_handler<Ctx>(
         &self,
         chip_idx: usize,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
@@ -151,7 +158,7 @@ where
     {
         let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
         e2_data.chip_idx = chip_idx as u32;
-        self.pre_compute_impl(inst, &mut e2_data.data);
+        self.pre_compute_impl(pc, inst, &mut e2_data.data)?;
         Ok(execute_e2_handler)
     }
 }
