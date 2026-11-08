@@ -173,6 +173,17 @@ pub struct PreflightExecutionOutput<F, RA> {
     pub to_state: VmState<F, GuestMemory>,
 }
 
+/// Output of [`VirtualMachine::prove_segment`].
+pub struct SegmentProofOutput<SC: StarkProtocolConfig> {
+    /// Proof of the segment.
+    pub proof: Proof<SC>,
+    /// VM state at the end of the segment. If the segment was suspended, this is the starting
+    /// state of the next segment.
+    pub to_state: VmState<Val<SC>, GuestMemory>,
+    /// Exit code if the segment terminated, `None` if it was suspended.
+    pub exit_code: Option<u32>,
+}
+
 impl<F, VC> VmExecutor<F, VC>
 where
     VC: VmExecutionConfig<F>,
@@ -785,6 +796,35 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
+        let SegmentProofOutput {
+            proof,
+            to_state,
+            exit_code,
+        } = self.prove_segment(interpreter, state, num_insns, trace_heights)?;
+        // drop final memory unless this is a terminal segment and the exit code is success
+        let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
+
+        Ok((proof, final_memory))
+    }
+
+    /// Same as [`prove`](Self::prove), but always returns the VM state at the end of the segment
+    /// together with the exit code. Pass `to_state` as the starting state of the next segment to
+    /// prove consecutive segments.
+    ///
+    /// **Note**: The cached program trace must be loaded via [`load_program`](Self::load_program)
+    /// before calling this function.
+    pub fn prove_segment(
+        &mut self,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        state: VmState<Val<E::SC>, GuestMemory>,
+        num_insns: Option<u64>,
+        trace_heights: &[u32],
+    ) -> Result<SegmentProofOutput<E::SC>, VirtualMachineError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
         self.transport_init_memory_to_device(&state.memory);
 
         let PreflightExecutionOutput {
@@ -792,13 +832,15 @@ where
             record_arenas,
             to_state,
         } = self.execute_preflight(interpreter, state, num_insns, trace_heights)?;
-        // drop final memory unless this is a terminal segment and the exit code is success
-        let final_memory =
-            (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
+        let exit_code = system_records.exit_code;
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
         let proof = self.engine.prove(&self.pk, ctx).unwrap();
 
-        Ok((proof, final_memory))
+        Ok(SegmentProofOutput {
+            proof,
+            to_state,
+            exit_code,
+        })
     }
 
     /// Transforms the program into a cached trace and commits it _on device_ using the proof system

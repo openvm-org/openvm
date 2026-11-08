@@ -2,7 +2,13 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-use openvm_circuit::arch::instructions::exe::VmExe;
+use openvm_circuit::{
+    arch::{instructions::exe::VmExe, verify_segments, ExitCode},
+    system::{
+        memory::merkle::public_values::extract_public_values,
+        program::trace::compute_exe_commit_from_mem_config,
+    },
+};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
@@ -33,7 +39,10 @@ use crate::{
         AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig,
         DEFAULT_APP_L_SKIP,
     },
-    prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
+    prover::{
+        vm::new_local_prover, DeferralAggProver, DeferralHookCommits, DeferralProof,
+        MultiDeferralCircuitProver,
+    },
     DeferralInput, Sdk, StdIn, F,
 };
 
@@ -664,6 +673,67 @@ fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     assert_eq!(
         active_sdk.agg_vk().as_ref().pre_hash,
         aware_sdk.agg_vk().as_ref().pre_hash
+    );
+    Ok(())
+}
+
+/// Proves every segment with `VirtualMachine::prove_segment`, starting each segment from the end
+/// state of the previous one, and checks that the segment proofs verify as one execution.
+#[test]
+fn test_prove_segment_chains_segments() -> Result<()> {
+    setup_tracing();
+    let n_stack = 15;
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let sdk = Sdk::builder()
+        .app_config(AppConfig::riscv32(app_params))
+        .agg_params(AggregationSystemParams::default())
+        .build()?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let mut stdin = StdIn::default();
+    stdin.write(&(1u64 << 17));
+
+    let app_vm_pk = &sdk.app_pk().app_vm_pk;
+    let mut instance = new_local_prover::<E, _>(*sdk.app_vm_builder(), app_vm_pk, exe.clone())?;
+    let program_commitment = *instance.program_commitment();
+    let vm = &mut instance.vm;
+    let (segments, _) = vm
+        .metered_interpreter(&exe)?
+        .execute_metered(stdin.clone(), vm.build_metered_ctx(&exe))?;
+    assert!(segments.len() >= 2, "expected >= 2 segments");
+
+    let mut state = vm.create_initial_state(&exe, stdin.clone());
+    let mut proofs = Vec::with_capacity(segments.len());
+    let mut exit_code = None;
+    for segment in &segments {
+        let output = vm.prove_segment(
+            &mut instance.interpreter,
+            state,
+            Some(segment.num_insns),
+            &segment.trace_heights,
+        )?;
+        proofs.push(output.proof);
+        state = output.to_state;
+        exit_code = output.exit_code;
+    }
+    assert_eq!(exit_code, Some(ExitCode::Success as u32));
+
+    let vk = app_vm_pk.vm_pk.get_vk();
+    let payload = verify_segments(&vm.engine, &vk, &proofs)
+        .map_err(|e| eyre::eyre!("segment proofs should verify: {e}"))?;
+    let memory_config = &vm.config().as_ref().memory_config;
+    assert_eq!(
+        payload.exe_commit,
+        compute_exe_commit_from_mem_config(&program_commitment, &exe, memory_config)
+    );
+    let num_public_values = vm.config().as_ref().num_public_values;
+    assert_eq!(
+        extract_public_values(num_public_values, &state.memory.memory),
+        sdk.execute(exe, stdin)?
     );
     Ok(())
 }
