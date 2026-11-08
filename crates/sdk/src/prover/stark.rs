@@ -6,7 +6,10 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, Executor,
         MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
     },
-    system::{memory::merkle::MerkleTree, program::trace::compute_initial_memory_commit},
+    system::{
+        memory::{merkle::MerkleTree, AddressMap},
+        program::trace::compute_initial_memory_commit,
+    },
 };
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -80,19 +83,16 @@ where
         let has_deferrals = self.deferral_setup.hook_commit().is_some();
         let memory_dimensions = self.app_prover.memory_dimensions();
 
-        // Build the initial memory merkle tree before proving (needed for deferral proofs).
+        // Build the initial memory merkle tree (needed for deferral proofs) from the executable's
+        // initial memory image. The instance state can't be used: it is reset only inside
+        // `app_prover.prove`, so after an earlier call it still holds that run's final memory.
         let initial_merkle_tree = if has_deferrals {
             let hasher = vm_poseidon2_hasher();
-            let initial_memory = &self
-                .app_prover
-                .instance()
-                .state()
-                .as_ref()
-                .expect("initial state should exist before proving")
-                .memory
-                .memory;
+            let memory_config = &self.app_prover.vm_config().as_ref().memory_config;
+            let mut initial_memory = AddressMap::from_mem_config(memory_config);
+            initial_memory.set_from_sparse(&self.app_prover.instance().exe().init_memory);
             Some(MerkleTree::from_memory(
-                initial_memory,
+                &initial_memory,
                 &memory_dimensions,
                 &hasher,
             ))

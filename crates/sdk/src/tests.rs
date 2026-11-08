@@ -668,6 +668,40 @@ fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     Ok(())
 }
 
+/// Proves twice with one deferral-aware `StarkProver`. The deferral Merkle proofs of the second
+/// proof must be built against the executable's initial memory, not the first run's final memory.
+#[test]
+fn test_deferral_aware_stark_prover_reuse() -> Result<()> {
+    setup_tracing();
+    let n_stack = 19;
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let agg_params = AggregationSystemParams::default();
+    let hook_commits =
+        DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
+    let sdk = Sdk::builder()
+        .app_config(AppConfig::riscv32(app_params))
+        .agg_params(agg_params)
+        .deferral_hook_commits(hook_commits)
+        .build()?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = sdk.convert_to_exe(elf)?;
+    let mut prover = sdk.prover(app_exe)?;
+    let baseline = prover.generate_baseline();
+    let agg_vk = (*sdk.agg_vk()).clone();
+
+    for n in [100u64, 1000] {
+        let mut stdin = StdIn::default();
+        stdin.write(&n);
+        let (proof, _) = prover.prove(stdin, &[])?;
+        Sdk::verify_proof(agg_vk.clone(), baseline.clone(), &proof)?;
+    }
+    Ok(())
+}
+
 #[test]
 fn test_app_exe_commit_matches_baseline() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
