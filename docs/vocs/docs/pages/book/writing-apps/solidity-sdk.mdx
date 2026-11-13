@@ -49,6 +49,10 @@ contract MyContract {
 The arguments to the `verify` function are the fields in the [EVM Proof JSON Format](/book/writing-apps/verifying-proofs#evm-proof-json-format).
 Since the builds use the default aggregation VM config, the number of public values is fixed to 32.
 
+:::warning
+**We strongly recommend against using the verifier's `fallback` function directly.** Use the `IOpenVmHalo2Verifier.verify` interface instead to avoid footguns such as those described in [Scroll's report](https://forum.scroll.io/t/report-scroll-mainnet-emergency-upgrade-on-2026-11-10/1586).
+:::
+
 If you want to import the verifier contract into your own repository for testing purposes, note that it is locked to Solidity version `0.8.19`. If your project uses a different version, the import may not compile. As a workaround, you can compile the contract separately and use `vm.etch()` to inject the raw bytecode into your tests.
 
 ## Deployment
