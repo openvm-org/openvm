@@ -33,7 +33,10 @@ use crate::{
         AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig,
         DEFAULT_APP_L_SKIP,
     },
-    prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
+    prover::{
+        verify_app_proof_with_expected_exe_commit, AppProver, DeferralAggProver,
+        DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver,
+    },
     DeferralInput, Sdk, StdIn, F,
 };
 
@@ -665,6 +668,29 @@ fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
         active_sdk.agg_vk().as_ref().pre_hash,
         aware_sdk.agg_vk().as_ref().pre_hash
     );
+    Ok(())
+}
+
+/// The `VmInstance` taken out of an `AppProver` builds a new prover that proves the same
+/// executable.
+#[test]
+fn test_app_prover_into_instance_round_trip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = sdk.convert_to_exe(elf)?;
+    let app_prover = sdk.app_prover(app_exe)?;
+    let exe_commit = app_prover.app_exe_commit();
+    let app_vm_vk = app_prover.app_vm_vk().clone();
+
+    let mut app_prover = AppProver::new_from_instance(app_prover.into_instance(), app_vm_vk);
+    assert_eq!(app_prover.app_exe_commit(), exe_commit);
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+    let proof = app_prover.prove(stdin)?;
+    verify_app_proof_with_expected_exe_commit::<E>(&sdk.app_vk(), &proof, Some(exe_commit))?;
     Ok(())
 }
 

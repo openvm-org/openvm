@@ -76,6 +76,21 @@ where
         }
     }
 
+    /// Mutable access to the underlying [VmInstance], for example to change prover settings on
+    /// `instance_mut().vm.engine` before proving.
+    ///
+    /// Changing the VM config through this reference is not supported, since values derived from
+    /// it (such as [`Self::app_exe_commit`]) may already be cached.
+    pub fn instance_mut(&mut self) -> &mut VmInstance<E, VB> {
+        &mut self.instance
+    }
+
+    /// Consumes the prover and returns the underlying [VmInstance], with its proving key and
+    /// committed program still on device. [`Self::new_from_instance`] builds a new prover from it.
+    pub fn into_instance(self) -> VmInstance<E, VB> {
+        self.instance
+    }
+
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.program_name = Some(program_name.as_ref().to_string());
         self
