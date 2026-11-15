@@ -163,7 +163,10 @@ macro_rules! dispatch {
                     { FieldType::BLS12_381Coordinate as u8 },
                     false,
                 >),
-                _ => panic!("Unsupported field type"),
+                // Scalar fields are not used for ECC point coordinates, so a curve over one
+                // (e.g. Grumpkin over the BN254 scalar field) uses the generic path.
+                (true, _) => Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>),
+                (false, _) => Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>),
             }
         } else if $is_setup {
             Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
