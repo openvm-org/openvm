@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     env::var,
     fs::{copy, create_dir_all, read},
     path::PathBuf,
@@ -7,7 +8,9 @@ use std::{
 use clap::Parser;
 use eyre::{Context, Result};
 use itertools::izip;
-use openvm_build::{build_generic, get_in_scope_packages, get_workspace_packages, GuestOptions};
+use openvm_build::{
+    build_generic_with_executables, get_in_scope_packages, get_workspace_packages, GuestOptions,
+};
 use openvm_circuit::arch::{instructions::exe::VmExe, InitFileGenerator};
 use openvm_sdk::fs::write_object_to_file;
 use openvm_sdk_config::TranspilerConfig;
@@ -320,8 +323,8 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     )?;
 
     // Build (allowing passed options to decide what gets built)
-    let elf_target_dir = match build_generic(&guest_options) {
-        Ok(raw_target_dir) => raw_target_dir,
+    let (elf_target_dir, built_executables) = match build_generic_with_executables(&guest_options) {
+        Ok(output) => output,
         Err(None) => {
             return Err(eyre::eyre!("Failed to build guest"));
         }
@@ -375,17 +378,29 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
             }
         })
         .collect::<Vec<_>>();
-    let elf_paths = elf_targets
+    // Only transpile what cargo actually built in this run. Cargo skips targets whose
+    // `required-features` are not enabled (after unifying features across the packages it
+    // builds), and an ELF left in the target directory by an earlier build must not be reused.
+    let built_executables: HashSet<PathBuf> = built_executables
         .iter()
+        .map(|path| path.canonicalize().unwrap_or_else(|_| path.clone()))
+        .collect();
+    let (elf_paths, elf_targets): (Vec<_>, Vec<_>) = elf_targets
+        .into_iter()
         .map(|target| {
-            if target.is_example() {
+            let elf_path = if target.is_example() {
                 elf_target_dir.join("examples")
             } else {
                 elf_target_dir.clone()
             }
-            .join(&target.name)
+            .join(&target.name);
+            (elf_path, target)
         })
-        .collect::<Vec<_>>();
+        .filter(|(elf_path, _)| {
+            built_executables
+                .contains(&elf_path.canonicalize().unwrap_or_else(|_| elf_path.clone()))
+        })
+        .unzip();
 
     // Transpile, storing in ${openvm_dir}/${profile} by default
     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);

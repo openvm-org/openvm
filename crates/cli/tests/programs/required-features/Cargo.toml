@@ -1,0 +1,16 @@
+[workspace]
+[package]
+name = "openvm-cli-example-required-features"
+version = "0.0.0"
+edition = "2021"
+
+[features]
+extra = []
+
+[dependencies]
+openvm = { path = "../../../../toolchain/openvm" }
+
+[[bin]]
+name = "openvm-cli-example-extra"
+path = "src/bin/extra.rs"
+required-features = ["extra"]
