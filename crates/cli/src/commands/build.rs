@@ -410,9 +410,13 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
 
         write_object_to_file(&file_path, exe)?;
         if let Some(output_dir) = &build_args.openvm_config.output_dir {
-            create_dir_all(output_dir)
-                .with_context(|| format!("failed to create directory {}", output_dir.display()))?;
-            copy(&file_path, output_dir.join(&file_name)).with_context(|| {
+            // Examples are copied to `examples/` under the output directory.
+            let output_path = output_dir.join(&file_name);
+            let output_parent = output_path.parent().unwrap_or(output_dir);
+            create_dir_all(output_parent).with_context(|| {
+                format!("failed to create directory {}", output_parent.display())
+            })?;
+            copy(&file_path, &output_path).with_context(|| {
                 format!(
                     "failed to copy {} to {}",
                     file_name.display(),
