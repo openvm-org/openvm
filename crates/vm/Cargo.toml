@@ -43,7 +43,6 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
-abi_stable.workspace = true
 bytesize.workspace = true
 
 [build-dependencies]
@@ -51,6 +50,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2.workspace = true
+abi_stable.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 libc.workspace = true
 
