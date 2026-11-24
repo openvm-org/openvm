@@ -2,6 +2,9 @@
 
 This chip outputs a boolean value `out` that equals 1 if and only if array `x` is lexicographically less than array `y`.
 
+Index 0 is the most significant element: the comparison looks at `x[0]` and `y[0]` first. A caller whose limbs are
+little-endian (least significant limb first) must reverse them before the call.
+
 **Assumptions:**
 - Input array elements `x[i]` and `y[i]` have a maximum bit length of `max_bits`
 - `max_bits` ≤ 29
@@ -54,6 +57,9 @@ There are two cases to consider:
    - Since all $`x_i = y_i`$, constraint (2) is satisfied for all indices.
    - Constraint (3) ensures all $`m_i = 0`$.
    - Constraint (5) then forces $`\texttt{out} = 0`$ when $`s \neq 0`$.
+   - `diff_inv` is unconstrained in this case: with every $`m_i = 0`$, constraint (3) does not involve it. `out` is
+     still exact, but the witness is not unique. A caller that needs a unique witness can add
+     $`\left(1 - \sum_i m_i\right) \cdot \texttt{diff\_inv} = 0`$.
 
 2. When $`x \neq y`$ (arrays differ):
    - Let $`k`$ be the first index where $`x_k \neq y_k`$.

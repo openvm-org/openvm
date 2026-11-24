@@ -33,4 +33,9 @@ Two cases to consider:
 
 When $`s = 0`$, constraint (2) is inactive, and constraint (1) can be satisfied by setting all trace values to zero.
 
+> **Warning:** when $`s = 0`$ and $`x = 0`$, `out` is not constrained at all: constraint (1) holds for any value of
+> `out`, and constraint (2) is inactive. So on such rows `out` need not be boolean. A caller must not rely on `out`
+> on rows where $`s = 0`$, for example by using it in an interaction count or multiplicity, unless it gates that use
+> by $`s`$ or constrains `out` separately.
+
 The constraints effectively implement the logic for a zero-check operation: $`\texttt{out} = (x == 0) ? 1 : 0`$ when $s$ is active.

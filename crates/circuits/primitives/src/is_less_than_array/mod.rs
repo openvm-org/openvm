@@ -23,6 +23,9 @@ pub struct IsLtArrayIo<T, const NUM: usize> {
     pub y: [T; NUM],
     /// The boolean output, constrained to equal (x < y) when `condition != 0`. The less than
     /// comparison is done lexicographically.
+    ///
+    /// Index 0 is the most significant element (it is compared first); reverse little-endian limbs
+    /// before the call.
     pub out: T,
     /// Constraints only hold when `count != 0`. When `count == 0`, setting all trace values
     /// to zero still passes the constraints.
@@ -37,6 +40,8 @@ pub struct IsLtArrayAuxCols<T, const NUM: usize, const AUX_LEN: usize> {
     // `x[i] != y[i]`. If such an `i` exists then it is constrained that `diff_inv = inv(y[i] -
     // x[i])`.
     pub diff_marker: [T; NUM],
+    /// Unconstrained when `x == y` (every marker is 0): the output is still exact, but the
+    /// witness is not unique.
     pub diff_inv: T,
     pub lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
