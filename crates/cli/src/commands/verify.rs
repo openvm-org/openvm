@@ -201,9 +201,6 @@ impl VerifyCmd {
                 certified,
                 cargo_args,
             } => {
-                let (manifest_path, _) =
-                    get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
-                let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
                 let agg_vk_path = agg_vk
                     .clone()
                     .unwrap_or_else(|| crate::default::default_internal_recursive_vk_path().into());
@@ -213,18 +210,7 @@ impl VerifyCmd {
                         agg_vk_path.display()
                     )
                 })?;
-                let baseline_path = if let Some(app_baseline) = app_baseline {
-                    app_baseline.to_path_buf()
-                } else {
-                    let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
-                    let target_name = get_single_target_name_raw(
-                        &cargo_args.bin,
-                        &cargo_args.example,
-                        &cargo_args.manifest.manifest_path,
-                        &cargo_args.package,
-                    )?;
-                    get_app_baseline_path(&target_output_dir, target_name)
-                };
+                let baseline_path = resolve_app_baseline_path(app_baseline, cargo_args)?;
                 let baseline_json: VerificationBaselineJson = read_from_file_json(baseline_path)?;
                 let expected_baseline: VerificationBaseline = baseline_json.into();
 
@@ -329,4 +315,49 @@ fn read_app_commit(
         )
     })?;
     Ok(Some(app_commit))
+}
+
+/// Returns the explicit `--app-baseline` path, or the default baseline path for the target. Only
+/// the default needs the Cargo project, so an explicit path also works outside one.
+fn resolve_app_baseline_path(
+    app_baseline: &Option<PathBuf>,
+    cargo_args: &SingleTargetCargoArgs,
+) -> Result<PathBuf> {
+    if let Some(app_baseline) = app_baseline {
+        return Ok(app_baseline.clone());
+    }
+    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+    let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
+    let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
+    let target_name = get_single_target_name_raw(
+        &cargo_args.bin,
+        &cargo_args.example,
+        &cargo_args.manifest.manifest_path,
+        &cargo_args.package,
+    )?;
+    Ok(get_app_baseline_path(&target_output_dir, target_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    #[test]
+    fn explicit_app_baseline_does_not_need_a_cargo_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing_manifest = dir.path().join("Cargo.toml");
+        let cargo_args = SingleTargetCargoArgs::parse_from([
+            "verify",
+            "--manifest-path",
+            missing_manifest.to_str().unwrap(),
+        ]);
+        let baseline = dir.path().join("guest.baseline.json");
+
+        assert_eq!(
+            resolve_app_baseline_path(&Some(baseline.clone()), &cargo_args).unwrap(),
+            baseline
+        );
+    }
 }
